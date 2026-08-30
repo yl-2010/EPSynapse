@@ -2,7 +2,122 @@
 
 Frontier Cascadia · September 12, 2026 · UW Foster · 12 hours
 
-One idea. Built to win grand prize by being something nobody else in the room can reasonably attempt.
+Candidates. Attribution is under each heading: **human-made** vs **cursor-generated**.
+
+---
+
+## EPSurvey
+
+_Source: human-made_
+
+Student sentiment for schools. Built first for Eastside Prep (EPS). Other schools can run the same product with their own topics and login.
+
+Students answer short, anonymous (or school-account) surveys. Adults see aggregates, not a pile of raw callouts. The point is to stop guessing what people want from LPC, EBC, classes, and teachers, and start counting.
+
+### Topics already on the table (human-made)
+
+- **LPC** — cafeteria offerings: what to keep, drop, add, dietary gaps, wait times.
+- **EBC** — the week-long spring-break trip: which locations students actually want, cost sensitivity, who feels locked out.
+- **Class offerings** — what to add next year, what is oversubscribed, what is a paper class.
+- **Teacher rankings** — RateMyProfessor-style for EPS: useful if it is structured (workload, clarity, would take again) and not a roast wall.
+
+### Extra topic ideas (cursor-generated)
+
+- Nightly homework load by class, not vibes
+- Advisory / community-time format
+- Lunch length vs passing period
+- Clubs and sports: add, drop, or move the meeting time
+- Assembly and all-school meeting topics
+- Library and quiet study space (hours, noise, enough seats)
+- Phone policy as actually lived, not as written
+- College counseling access and wait
+- Facilities: bathrooms, lockers, gym, theater
+- Pickup, parking, and late-start communication
+- Arts vs STEM seat pressure (who cannot get into the class)
+
+### What it has to be, or it is a Google Form
+
+A school-branded survey app with a live admin board (counts, breakdown by grade if opted in, trend vs last pulse). One topic at a time so it does not become a 40-question climate survey nobody finishes. Export for whoever already decides LPC menus and EBC sites.
+
+RateMyProfessor only works with a rubric and a floor on n. A named-teacher leaderboard on day one will get the project killed by adults, which is the actual user.
+
+### Fine-tune / research (cursor-generated)
+
+Optional, same NoteLMs loop: free-text comments go through a small sentiment/topic model (fine-tuned on school comments) plus a general LLM. Live student writes feed the research set. Admin board shows theme clusters, not every comment. Do not put identifiable free text on a public demo wall.
+
+---
+
+## Unc
+
+_Source: cursor-generated_
+
+Paste the caption, comment, or bio before you post. A small fine-tuned model votes **human / brand / uncle**: does this sound like a person, like a social intern using the same words, or like an adult performing the internet.
+
+Lilac (or another frontier API) is the fluent third voter. Base BERT is the encyclopedia baseline. You tap posted / rewrote / that was the joke. Those taps are the research set.
+
+The joke is the name and the third class. The useful job is a pre-post register check, not a slang dictionary. Do not scrape TikTok. Paste from a phone. Do not put raw captions on a public research page.
+
+**Why it is in this file:** strongest pop-culture hook from the slang pass, and the research question is real. Frontier models can define a word and still write it like a press release. A DistilBERT trained on who is speaking should disagree with them in a pattern you can plot.
+
+**Demo:** a real FYP comment next to a brand caption using the same slang. Fine-tune splits them. Gemma compliments both. A judge hits "that was the joke." The research count ticks.
+
+**Dies if:** the team authors the slang examples. Use their phones. Or if the homepage is a glossary.
+
+---
+
+## Group chat to a plan
+
+_Source: cursor-generated_
+
+Paste a hang thread (iMessage, Instagram, Discord: paste only). The model labels **vapor / time proposed / locked / dead**. If it is vapor, you get one copyable message with a time, a place, and "reply only if you can."
+
+The laugh is a count of "I'm down" next to an empty calendar. The job is that the weekend stops dying in maybe.
+
+Fine-tune DistilBERT on thread snippets. Lilac drafts the lock text after the small model says a lock text is needed. Later you tap went / nobody showed / still nothing. That outcome is the research label.
+
+**Demo:** 15-line "we should hang" with no Tuesday in it. Fine-tune says vapor and offers the one message. Then a second thread that already has a time, shown as a block.
+
+**Dies if:** the pitch is about slang. Pitch "this thread had no Tuesday, now it does."
+
+---
+
+## When to leave
+
+_Source: cursor-generated_
+
+Paste a messy time and place (`practice 4:30 Robinswood`, a Canvas due, a schedule screenshot). One number: **leave at 3:51**. Fine-tune extracts what / where / when. Travel time can be a dummy pad. Afterward: on time / late / skipped.
+
+The laugh is one line if you are clearly not walking. The screenshot is the clock.
+
+**Demo:** "work 5, bus from U District," then the real 5:30 submission deadline and the walk from the table to the atrium.
+
+**Dies if:** the parse is wrong. Fake transit is fine. Fake event times are not.
+
+---
+
+## Buried question
+
+_Source: cursor-generated_
+
+Paste a long message or email. The ramble collapses. The ask is huge (`pick up your sister at 4:15`) plus reply chips you can copy. If there is no question, it says so. Same three-model vote as NoteLMs. User edits to the extracted question are gold labels.
+
+The laugh is an on-read timer. Strip it and the app still works. This is the closest to a tool you keep.
+
+**Demo:** parent paragraph that buries 4:15. Fine-tune surfaces the time. A second paste that is only venting refuses chips.
+
+**Dies if:** it becomes a summarizer. One field plus a reply tap, or it is the same as half the room.
+
+---
+
+## Recurring spend
+
+_Source: cursor-generated_
+
+Photo or paste of a Venmo / Apple Cash / card week. No bank login. OCR, then a small model on merchant strings: recurring vs one-off, plus a food total for the week. Tap to fix "that was a gift." Public research page does not show amounts.
+
+The laugh is four subscriptions showing up. The list is the product. Do not build cancel or Plaid.
+
+**Demo:** fake week with streaming, Apple, DoorDash. Fine-tune lists recurrings and food. Judge marks one row not recurring. Chart ticks.
 
 ---
 
