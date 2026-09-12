@@ -40,3 +40,13 @@ vercel.env
 
 # Student profiles and sessions (tokens live here)
 server/data/
+
+# Xcode
+ios/**/xcuserdata/
+ios/**/DerivedData/
+ios/**/*.xcuserstate
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM

@@ -1,0 +1,92 @@
+name: EPSynapse
+options:
+  bundleIdPrefix: com.jype
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+  defaultConfig: Debug
+  groupSortPosition: top
+
+settings:
+  base:
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: 1
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    DEVELOPMENT_TEAM: 9KM694AP8A
+    CODE_SIGN_STYLE: Automatic
+    INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.education
+
+targets:
+  EPSynapse:
+    type: application
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: EPSynapse
+        excludes:
+          - Info.plist
+          - Assets.xcassets
+          - LaunchScreen.storyboard
+    resources:
+      - path: EPSynapse/Assets.xcassets
+      - path: EPSynapse/LaunchScreen.storyboard
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jype.epsynapse
+        PRODUCT_NAME: EPSynapse
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_FILE: EPSynapse/Info.plist
+        INFOPLIST_KEY_CFBundleDisplayName: EPSynapse
+        INFOPLIST_KEY_UILaunchStoryboardName: LaunchScreen
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        TARGETED_DEVICE_FAMILY: "1,2"
+        DEVELOPMENT_TEAM: 9KM694AP8A
+        CODE_SIGN_STYLE: Automatic
+        SWIFT_VERSION: "5.0"
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: 1
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.education
+    info:
+      path: EPSynapse/Info.plist
+      properties:
+        CFBundleDisplayName: EPSynapse
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        UILaunchStoryboardName: LaunchScreen
+        UIRequiresFullScreen: false
+        ITSAppUsesNonExemptEncryption: false
+        LSApplicationQueriesSchemes:
+          - canvas-courses
+        EPSApiBaseURL: https://api.epsynapse.com
+        EPSLocalApiBaseURL: http://127.0.0.1:3006
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSAppTransportSecurity:
+          NSExceptionDomains:
+            localhost:
+              NSExceptionAllowsInsecureHTTPLoads: true
+            127.0.0.1:
+              NSExceptionAllowsInsecureHTTPLoads: true
+
+schemes:
+  EPSynapse:
+    build:
+      targets:
+        EPSynapse: all
+    run:
+      config: Debug
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release

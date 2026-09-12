@@ -1,0 +1,238 @@
+import Foundation
+
+struct APIError: LocalizedError {
+  var status: Int
+  var message: String
+
+  var errorDescription: String? { message }
+}
+
+struct APIClient {
+  static let shared = APIClient()
+
+  static let productionBase = "https://api.epsynapse.com"
+  static let localBase = "http://127.0.0.1:3006"
+  static let useLocalFlag = "eps.useLocalAPI"
+
+  let encoder: JSONEncoder
+  let decoder: JSONDecoder
+  let session: URLSession
+
+  init(session: URLSession = .shared) {
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = []
+    self.encoder = encoder
+    self.decoder = JSONDecoder()
+    self.session = session
+  }
+
+  var baseURL: URL {
+    let production = Self.plistString("EPSApiBaseURL") ?? Self.productionBase
+    let local = Self.plistString("EPSLocalApiBaseURL") ?? Self.localBase
+    #if DEBUG
+    let useLocal = UserDefaults.standard.bool(forKey: Self.useLocalFlag) || Self.isSimulator
+    if useLocal, let url = URL(string: local) {
+      return url
+    }
+    #endif
+    return URL(string: production) ?? URL(string: Self.productionBase)!
+  }
+
+  func request<T: Decodable>(
+    _ path: String,
+    method: String = "GET",
+    body: (any Encodable)? = nil,
+    sessionId: String,
+    timeout: TimeInterval = 20
+  ) async throws -> T {
+    let data = try await perform(path, method: method, body: body, sessionId: sessionId, timeout: timeout)
+    do {
+      return try decoder.decode(T.self, from: data)
+    } catch {
+      throw APIError(status: 0, message: "Could not read the server response.")
+    }
+  }
+
+  func requestRaw(
+    _ path: String,
+    method: String = "GET",
+    body: (any Encodable)? = nil,
+    sessionId: String,
+    timeout: TimeInterval = 20
+  ) async throws -> (data: Data, json: [String: Any]) {
+    let data = try await perform(path, method: method, body: body, sessionId: sessionId, timeout: timeout)
+    let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+    return (data, json)
+  }
+
+  func streamChat(
+    provider: String,
+    messages: [[String: String]],
+    sessionId: String,
+    apiKey: String,
+    onDelta: (_ content: String, _ reasoning: String) -> Void
+  ) async throws {
+    var request = try makeRequest(
+      "/v1/agent/chat",
+      method: "POST",
+      body: ChatRequestBody(provider: provider, messages: messages),
+      sessionId: sessionId,
+      timeout: 90
+    )
+    request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+    if !apiKey.isEmpty {
+      request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+    }
+
+    let (bytes, response) = try await session.bytes(for: request)
+    let http = try httpResponse(response)
+    if !(200 ... 299).contains(http.statusCode) {
+      var collected = Data()
+      for try await byte in bytes {
+        collected.append(byte)
+      }
+      throw apiError(status: http.statusCode, data: collected)
+    }
+
+    var payload = ""
+    for try await line in bytes.lines {
+      let trimmed = line.trimmingCharacters(in: CharacterSet(charactersIn: "\r"))
+      if trimmed.hasPrefix("data:") {
+        let chunk = trimmed.dropFirst(5).trimmingCharacters(in: .whitespaces)
+        payload += chunk
+      } else if trimmed.isEmpty {
+        emitChatDelta(payload, onDelta: onDelta)
+        payload = ""
+      }
+    }
+    emitChatDelta(payload, onDelta: onDelta)
+  }
+
+  private func perform(
+    _ path: String,
+    method: String,
+    body: (any Encodable)?,
+    sessionId: String,
+    timeout: TimeInterval
+  ) async throws -> Data {
+    let request = try makeRequest(path, method: method, body: body, sessionId: sessionId, timeout: timeout)
+    let (data, response): (Data, URLResponse)
+    do {
+      (data, response) = try await session.data(for: request)
+    } catch {
+      throw APIError(status: 0, message: "Could not reach api.epsynapse.com.")
+    }
+    let http = try httpResponse(response)
+    if !(200 ... 299).contains(http.statusCode) {
+      throw apiError(status: http.statusCode, data: data)
+    }
+    return data
+  }
+
+  private func makeRequest(
+    _ path: String,
+    method: String,
+    body: (any Encodable)?,
+    sessionId: String,
+    timeout: TimeInterval
+  ) throws -> URLRequest {
+    guard let url = URL(string: path, relativeTo: baseURL) else {
+      throw APIError(status: 0, message: "Bad API path.")
+    }
+    var request = URLRequest(url: url)
+    request.httpMethod = method
+    request.timeoutInterval = timeout
+    request.setValue("application/json", forHTTPHeaderField: "Accept")
+    if !sessionId.isEmpty {
+      request.setValue(sessionId, forHTTPHeaderField: "X-EPSynapse-Session")
+    }
+    if let body {
+      request.httpBody = try encoder.encode(AnyEncodable(body))
+      request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    }
+    return request
+  }
+
+  private func httpResponse(_ response: URLResponse) throws -> HTTPURLResponse {
+    guard let http = response as? HTTPURLResponse else {
+      throw APIError(status: 0, message: "Could not reach api.epsynapse.com.")
+    }
+    return http
+  }
+
+  private func apiError(status: Int, data: Data) -> APIError {
+    if let parsed = try? decoder.decode(ServerErrorBody.self, from: data),
+       let message = parsed.error, !message.isEmpty
+    {
+      return APIError(status: status, message: message)
+    }
+    if let text = String(data: data, encoding: .utf8) {
+      let clipped = text.trimmingCharacters(in: .whitespacesAndNewlines)
+      if !clipped.isEmpty {
+        return APIError(status: status, message: String(clipped.prefix(200)))
+      }
+    }
+    return APIError(status: status, message: "Request failed (\(status))")
+  }
+
+  private func emitChatDelta(
+    _ raw: String,
+    onDelta: (_ content: String, _ reasoning: String) -> Void
+  ) {
+    let event = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !event.isEmpty, event != "[DONE]" else { return }
+    guard let data = event.data(using: .utf8),
+          let chunk = try? decoder.decode(ChatStreamChunk.self, from: data),
+          let delta = chunk.choices.first?.delta
+    else { return }
+    let content = delta.content ?? ""
+    let reasoning = delta.reasoning ?? delta.reasoning_content ?? ""
+    if !content.isEmpty || !reasoning.isEmpty {
+      onDelta(content, reasoning)
+    }
+  }
+
+  private static func plistString(_ key: String) -> String? {
+    guard let raw = Bundle.main.object(forInfoDictionaryKey: key) as? String else { return nil }
+    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
+  }
+
+  private static var isSimulator: Bool {
+    #if targetEnvironment(simulator)
+    return true
+    #else
+    return false
+    #endif
+  }
+}
+
+private struct AnyEncodable: Encodable {
+  let wrapped: any Encodable
+
+  init(_ wrapped: any Encodable) {
+    self.wrapped = wrapped
+  }
+
+  func encode(to encoder: Encoder) throws {
+    try wrapped.encode(to: encoder)
+  }
+}
+
+private struct ServerErrorBody: Decodable {
+  var error: String?
+}
+
+private struct ChatStreamChunk: Decodable {
+  struct Choice: Decodable {
+    struct Delta: Decodable {
+      var content: String?
+      var reasoning: String?
+      var reasoning_content: String?
+    }
+
+    var delta: Delta?
+  }
+
+  var choices: [Choice] = []
+}
