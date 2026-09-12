@@ -89,11 +89,28 @@
   function applyAuthGate() {
     const on = signedInViaGoogle();
     document.documentElement.dataset.auth = on ? "in" : "out";
-    if (on) return;
+    const out = document.getElementById("stage-out");
+    if (on) {
+      if (out) out.hidden = true;
+      return;
+    }
     closeSheet();
     closeChatOverlay();
     if (loading) loading.hidden = true;
     if (stage) stage.hidden = true;
+    if (out) out.hidden = false;
+  }
+
+  function setOutStatus(text) {
+    const el = document.getElementById("stage-out-status");
+    if (!el) return;
+    if (text) {
+      el.hidden = false;
+      el.textContent = text;
+    } else {
+      el.hidden = true;
+      el.textContent = "";
+    }
   }
 
   function accountStatusText() {
@@ -123,13 +140,10 @@
   }
 
   function paintAccount() {
-    const slot = document.getElementById("google-signin-slot");
     const homeWrap = document.getElementById("home-google");
-    const homeSlot = document.getElementById("home-google-btn");
     const profile = document.getElementById("google-profile");
     const outRow = document.getElementById("google-signout-row");
     const homeChip = document.getElementById("home-google-chip");
-    const fallback = document.getElementById("home-google-fallback");
     const redirectBtn = document.getElementById("google-redirect");
     const pic = document.getElementById("google-picture");
     const nameEl = document.getElementById("google-name");
@@ -138,9 +152,6 @@
     const inGoogle = signedInViaGoogle();
 
     if (inGoogle) {
-      if (slot) slot.hidden = true;
-      if (homeSlot) homeSlot.hidden = true;
-      if (fallback) fallback.hidden = true;
       if (redirectBtn) {
         redirectBtn.hidden = true;
         redirectBtn.style.display = "none";
@@ -175,29 +186,14 @@
       if (profile) profile.hidden = true;
       if (outRow) outRow.hidden = true;
       if (homeChip) homeChip.hidden = true;
-      const showGis = Boolean(gisInitialized && googleClientId);
-      if (slot) slot.hidden = !showGis;
-      if (homeSlot) homeSlot.hidden = !showGis;
-      if (fallback) {
-        fallback.hidden = showGis;
-        fallback.textContent = "Sign in with Google";
-        fallback.classList.remove("home-google-fallback--text");
-        if (showGis) fallback.removeAttribute("data-liquid-glass");
-        else fallback.setAttribute("data-liquid-glass", "rounded");
-      }
       if (redirectBtn) {
-        redirectBtn.hidden = showGis;
-        redirectBtn.style.display = showGis ? "none" : "";
-        redirectBtn.textContent = "Sign in with Google";
+        redirectBtn.hidden = false;
+        redirectBtn.style.display = "";
       }
     }
-    if (homeWrap) {
-      homeWrap.classList.toggle("is-in", inGoogle);
-      homeWrap.classList.toggle("is-gis", !inGoogle && Boolean(gisInitialized && googleClientId));
-    }
+    if (homeWrap) homeWrap.classList.toggle("is-in", inGoogle);
     setStatus(statusEl, accountStatusText());
     applyAuthGate();
-    renderGoogleButtons();
   }
 
   function waitForGis(ms) {
@@ -220,36 +216,6 @@
     });
   }
 
-  function renderGoogleButtons() {
-    if (!window.google?.accounts?.id || !googleClientId || signedInViaGoogle()) return;
-    const settingsSlot = document.getElementById("google-signin-slot");
-    const homeSlot = document.getElementById("home-google-btn");
-    if (settingsSlot && !settingsSlot.hidden) {
-      settingsSlot.innerHTML = "";
-      window.google.accounts.id.renderButton(settingsSlot, {
-        type: "standard",
-        theme: "outline",
-        size: "large",
-        text: "signin_with",
-        shape: "pill",
-        width: 280,
-        logo_alignment: "left",
-      });
-    }
-    if (homeSlot && !homeSlot.hidden) {
-      homeSlot.innerHTML = "";
-      window.google.accounts.id.renderButton(homeSlot, {
-        type: "standard",
-        theme: "outline",
-        size: "large",
-        text: "signin_with",
-        shape: "pill",
-        logo_alignment: "left",
-      });
-    }
-    queueMicrotask(() => window.reinitLiquidGlass?.());
-  }
-
   function googleRedirectUri() {
     const path = location.pathname || "/";
     if (path === "/") return location.origin;
@@ -262,19 +228,19 @@
         const cfg = await api("/v1/auth/google/config");
         googleClientId = String(cfg.clientId || "").trim();
       } catch (err) {
-        setStatus(
-          statusEl,
+        const msg =
           err.status === 404
             ? "Google sign-in is not on the API yet. Try again in a minute."
-            : err.message || "Could not load Google sign-in.",
-        );
-        openSheet();
+            : err.message || "Could not load Google sign-in.";
+        setStatus(statusEl, msg);
+        setOutStatus(msg);
         return;
       }
     }
     if (!googleClientId) {
-      setStatus(statusEl, gisConfigError || "Google sign-in has no client id from the API yet.");
-      openSheet();
+      const msg = gisConfigError || "Google sign-in has no client id from the API yet.";
+      setStatus(statusEl, msg);
+      setOutStatus(msg);
       return;
     }
     const nonce = crypto.randomUUID();
@@ -862,6 +828,9 @@
     closeSheet();
   });
   document.getElementById("home-google-fallback")?.addEventListener("click", () => {
+    startGoogleRedirect();
+  });
+  document.getElementById("stage-google")?.addEventListener("click", () => {
     startGoogleRedirect();
   });
   document.getElementById("google-redirect")?.addEventListener("click", () => {

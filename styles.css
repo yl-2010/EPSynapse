@@ -325,7 +325,10 @@ a {
   display: grid;
   place-items: center;
   color: var(--fg);
-  box-shadow: 0 6px var(--lg-outer-shadow-blur) var(--lg-outer-shadow);
+  cursor: pointer;
+  box-shadow:
+    0 6px var(--lg-outer-shadow-blur) var(--lg-outer-shadow),
+    0 0 0 1.5px color-mix(in srgb, var(--accent) 40%, transparent);
   transition: transform 0.3s var(--ease), box-shadow 0.4s var(--ease);
   will-change: transform;
 }
@@ -464,7 +467,7 @@ html[data-resolved-theme="dark"] .edu-check.lg-refraction::after {
   font-synthesis: none;
   letter-spacing: -0.06em;
   line-height: 1;
-  color: var(--accent);
+  color: inherit;
 }
 
 .corner.squircle {
