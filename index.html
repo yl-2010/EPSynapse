@@ -19,6 +19,7 @@
     <meta name="description" content="EPSynapse student dashboard" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/styles.css" />
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
       .od-code {
         margin: 0.35rem 0 0.5rem;
@@ -66,10 +67,9 @@
       id="home-open"
       aria-label="Home"
     >
-      <svg viewBox="0 0 24 24" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="currentColor" shape-rendering="geometricPrecision" aria-hidden="true">
         <path
-          fill="currentColor"
-          d="M10 20.4v-6h4v6h5.2v-8.1H22L12 3.1 2 12.3h2.8v8.1H10z"
+          d="M11.2 3.86C11.47 3.4 11.73 3.14 12 3.14c.27 0 .53.26.8.72l7.12 8.12c.35.4.08 1.02-.46 1.02h-.88v6.18c0 1.1-.9 2-2 2H7.42c-1.1 0-2-.9-2-2v-6.18h-.88c-.54 0-.81-.62-.46-1.02l7.12-8.12z"
         />
       </svg>
     </button>
@@ -91,14 +91,38 @@
       id="settings-open"
       aria-label="Open settings"
     >
-      <svg viewBox="0 0 24 24" aria-hidden="true">
+      <svg viewBox="0 0 24 24" aria-hidden="true" shape-rendering="geometricPrecision">
         <path
           fill="currentColor"
           fill-rule="evenodd"
-          d="M10.05 2.15h3.9l.38 2.2c.68.2 1.32.5 1.9.9l2.08-.82 1.95 3.38-1.72 1.38c.14.6.22 1.24.22 1.9s-.08 1.3-.22 1.9l1.72 1.38-1.95 3.38-2.08-.82c-.58.4-1.22.7-1.9.9l-.38 2.2h-3.9l-.38-2.2a7.2 7.2 0 0 1-1.9-.9l-2.08.82-1.95-3.38 1.72-1.38A7.3 7.3 0 0 1 4.15 12c0-.66.08-1.3.22-1.9L2.65 8.72l1.95-3.38 2.08.82c.58-.4 1.22-.7 1.9-.9l.47-2.11zM12 8.55a3.45 3.45 0 1 0 0 6.9 3.45 3.45 0 0 0 0-6.9z"
+          d="M10.12 2.4h3.76c.58 0 1.08.4 1.2.97l.26 1.36c.55.2 1.07.47 1.55.8l1.3-.48c.54-.2 1.14.04 1.4.55l1.88 3.26c.25.44.16 1-.22 1.33l-1.08.96c.07.4.1.8.1 1.22s-.03.83-.1 1.22l1.08.96c.38.34.47.89.22 1.33l-1.88 3.26c-.26.51-.86.75-1.4.55l-1.3-.48c-.48.33-1 .6-1.55.8l-.26 1.36c-.12.56-.62.97-1.2.97h-3.76c-.58 0-1.08-.4-1.2-.97l-.26-1.36a7.2 7.2 0 0 1-1.55-.8l-1.3.48c-.54.2-1.14-.04-1.4-.55L2.45 15.1c-.25-.44-.16-1 .22-1.33l1.08-.96A7.1 7.1 0 0 1 3.65 12c0-.41.03-.83.1-1.22l-1.08-.96a1.14 1.14 0 0 1-.22-1.33l1.88-3.26c.26-.51.86-.75 1.4-.55l1.3.48c.48-.33 1-.6 1.55-.8l.26-1.36c.12-.57.62-.97 1.2-.97zM12 8.85a3.15 3.15 0 1 0 0 6.3 3.15 3.15 0 0 0 0-6.3z"
         />
       </svg>
     </button>
+
+    <div id="home-google" class="home-google">
+      <button
+        type="button"
+        id="home-google-fallback"
+        class="home-google-fallback"
+        data-liquid-glass="rounded"
+        data-filter-id="lg-home-google-fb"
+      >
+        Sign in
+      </button>
+      <div id="home-google-btn" class="home-google-btn" hidden></div>
+      <button
+        type="button"
+        id="home-google-chip"
+        class="home-google-chip circle"
+        data-liquid-glass="circle"
+        data-filter-id="lg-home-google-chip"
+        hidden
+        aria-label="Account"
+      >
+        <img id="home-google-pic" alt="" />
+      </button>
+    </div>
 
     <div id="stage-loading" class="stage stage-loading" aria-live="polite">…</div>
 
@@ -123,11 +147,10 @@
             data-edu-chat-clear
             aria-label="New chat"
           >
-            <svg viewBox="0 0 24 24" aria-hidden="true" style="transform: rotate(45deg)">
-              <g fill="currentColor">
-                <rect x="10.35" y="4.5" width="3.3" height="15" rx="1.65" />
-                <rect x="4.5" y="10.35" width="15" height="3.3" rx="1.65" />
-              </g>
+            <svg viewBox="0 0 24 24" fill="currentColor" shape-rendering="geometricPrecision" aria-hidden="true">
+              <path
+                d="M10.725 5.55v12.9a1.275 1.275 0 0 0 2.55 0V5.55a1.275 1.275 0 0 0-2.55 0Zm-5.175 7.725h12.9a1.275 1.275 0 0 0 0-2.55H5.55a1.275 1.275 0 0 0 0 2.55Z"
+              />
             </svg>
           </button>
           <div class="yan-chat-messages" aria-live="polite"></div>
@@ -148,10 +171,10 @@
             aria-label="Hide chat"
             tabindex="-1"
           >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <g fill="currentColor">
-                <rect x="4.5" y="10.35" width="15" height="3.3" rx="1.65" />
-              </g>
+            <svg viewBox="0 0 24 24" fill="currentColor" shape-rendering="geometricPrecision" aria-hidden="true">
+              <path
+                d="M5.55 13.275h12.9a1.275 1.275 0 0 0 0-2.55H5.55a1.275 1.275 0 0 0 0 2.55Z"
+              />
             </svg>
           </button>
 
@@ -162,14 +185,10 @@
             aria-expanded="false"
             aria-controls="edu-chat-input"
           >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="currentColor" shape-rendering="geometricPrecision" aria-hidden="true">
               <path
-                fill="currentColor"
-                d="M4.4 3.4h15.2A2.4 2.4 0 0 1 22 5.8v8.5a2.4 2.4 0 0 1-2.4 2.4h-6.7L6.2 21.5v-4.8H4.4A2.4 2.4 0 0 1 2 14.3V5.8A2.4 2.4 0 0 1 4.4 3.4z"
+                d="M7.15 2.9h9.7A4.7 4.7 0 0 1 21.55 7.6v5.15A4.7 4.7 0 0 1 16.85 17.45H10.4L5.05 21.3a.95.95 0 0 1-1.52-.76v-3.1A4.7 4.7 0 0 1 2.45 12.75V7.6A4.7 4.7 0 0 1 7.15 2.9z"
               />
-              <circle cx="8.1" cy="10.15" r="1.2" fill="var(--bg-0, #eef2f7)" />
-              <circle cx="12" cy="10.15" r="1.2" fill="var(--bg-0, #eef2f7)" />
-              <circle cx="15.9" cy="10.15" r="1.2" fill="var(--bg-0, #eef2f7)" />
             </svg>
           </button>
 
@@ -218,26 +237,41 @@
             class="edu-sheet-close"
             aria-label="Close settings"
           >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <g fill="currentColor">
-                <rect x="4.5" y="10.35" width="15" height="3.3" rx="1.65" transform="rotate(45 12 12)" />
-                <rect x="4.5" y="10.35" width="15" height="3.3" rx="1.65" transform="rotate(-45 12 12)" />
-              </g>
+            <svg viewBox="0 0 24 24" fill="currentColor" shape-rendering="geometricPrecision" aria-hidden="true">
+              <path
+                d="M5.448 7.252 16.748 18.552a1.275 1.275 0 0 0 1.804-1.804L7.252 5.448a1.275 1.275 0 0 0-1.804 1.804Zm11.3-1.804L5.448 16.748a1.275 1.275 0 0 0 1.804 1.804L18.552 7.252a1.275 1.275 0 0 0-1.804-1.804Z"
+              />
             </svg>
           </button>
         </div>
         <div class="edu-sheet-body">
-        <p class="edu-empty" id="settings-status">School + student ID is your record. Honor system for the hackathon.</p>
+        <div class="edu-google-slot" id="google-signin-slot"></div>
+        <div class="edu-google-account" id="google-profile" hidden>
+          <img class="edu-google-pic" id="google-picture" alt="" hidden />
+          <div class="edu-google-who">
+            <p class="edu-google-name" id="google-name"></p>
+            <p class="edu-google-email" id="google-email"></p>
+          </div>
+        </div>
+        <div class="edu-sheet-actions" id="google-signout-row" hidden>
+          <button type="button" id="google-signout" class="edu-sheet-btn" data-liquid-glass="rounded" data-filter-id="lg-edu-google-out">Sign out</button>
+        </div>
+        <p class="edu-empty" id="settings-status">Sign in with Google. Then add school and student ID so the school can match you.</p>
 
-        <label for="school">School</label>
-        <div class="edu-sheet-field" data-liquid-glass="rounded" data-filter-id="lg-edu-school">
-          <input id="school" name="school" value="Eastside Prep" maxlength="80" />
+        <div class="edu-school-search">
+          <label for="school">School</label>
+          <div class="edu-sheet-field" data-liquid-glass="rounded" data-filter-id="lg-edu-school">
+            <input id="school" name="school" value="Eastside Prep" maxlength="80" autocomplete="off" />
+          </div>
+          <input type="hidden" id="schoolSlug" name="schoolSlug" value="" />
+          <ul id="school-results" class="edu-school-results" hidden role="listbox" aria-label="Schools"></ul>
         </div>
 
         <label for="studentId">Student ID</label>
         <div class="edu-sheet-field" data-liquid-glass="rounded" data-filter-id="lg-edu-sid">
-          <input id="studentId" name="studentId" required maxlength="80" />
+          <input id="studentId" name="studentId" maxlength="80" />
         </div>
+        <p class="edu-empty">Optional until you have it.</p>
 
         <label for="canvasHost">Canvas URL</label>
         <div class="edu-sheet-field" data-liquid-glass="rounded" data-filter-id="lg-edu-canvas-host">

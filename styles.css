@@ -419,8 +419,10 @@ html[data-resolved-theme="dark"] .edu-check.lg-refraction::after {
 .yan-chat-send svg {
   position: relative;
   z-index: 2;
-  width: 52%;
-  height: 52%;
+  width: 46%;
+  height: 46%;
+  overflow: visible;
+  shape-rendering: geometricPrecision;
 }
 
 .corner.squircle {
@@ -2718,4 +2720,177 @@ html.lg-chrome[data-resolved-theme="dark"] .edu-file-tile.lg-static.lg-refractio
 .edu-tag-MA {
   color: #e8eef4;
   background: #0b1f3a;
+}
+
+.home-google {
+  position: fixed;
+  z-index: 81;
+  left: calc(var(--corner-pad) + var(--corner-orb) + 0.65rem);
+  bottom: var(--corner-pad);
+  display: flex;
+  align-items: center;
+  min-height: var(--corner-orb);
+}
+
+.home-google-fallback {
+  --lg-filter: none;
+  margin: 0;
+  padding: 0.55rem 0.95rem;
+  border: 1.5px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  border-radius: 999px;
+  font: inherit;
+  font-size: var(--text-footnote);
+  font-weight: 650;
+  color: #0b1f3a;
+  background: #eba700;
+  box-shadow: 0 6px var(--lg-outer-shadow-blur) var(--lg-outer-shadow);
+  cursor: pointer;
+}
+
+.home-google-btn {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+}
+
+.home-google-btn[hidden],
+.home-google-fallback[hidden],
+.home-google-chip[hidden],
+.edu-google-slot[hidden],
+.edu-google-account[hidden] {
+  display: none !important;
+}
+
+.home-google-chip {
+  --lg-filter: none;
+  width: 3.1rem;
+  height: 3.1rem;
+  padding: 0;
+  border: 1.5px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  overflow: hidden;
+  background: color-mix(in srgb, #fff 70%, transparent);
+  box-shadow: 0 6px var(--lg-outer-shadow-blur) var(--lg-outer-shadow);
+  cursor: pointer;
+}
+
+html[data-resolved-theme="dark"] .home-google-chip {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-resolved-theme="light"]) .home-google-chip {
+    background: rgba(255, 255, 255, 0.1);
+  }
+}
+
+.home-google-chip img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.edu-google-slot {
+  margin: 0 0 0.85rem;
+  min-height: 2.5rem;
+}
+
+.edu-google-slot iframe {
+  max-width: 100%;
+}
+
+.edu-google-account {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0 0 0.75rem;
+}
+
+.edu-google-pic {
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1.5px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+  flex: 0 0 auto;
+}
+
+.edu-google-who {
+  min-width: 0;
+  flex: 1;
+}
+
+.edu-google-name {
+  margin: 0;
+  font-weight: 650;
+  font-size: var(--text-subhead);
+}
+
+.edu-google-email {
+  margin: 0.12rem 0 0;
+  font-size: var(--text-footnote);
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.edu-school-search {
+  position: relative;
+}
+
+.edu-school-results {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% - 0.65rem);
+  z-index: 8;
+  margin: 0;
+  padding: 0.35rem;
+  list-style: none;
+  border-radius: 14px;
+  background: #f4f7fb;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+  box-shadow: 0 10px 24px rgba(11, 31, 58, 0.16);
+  max-height: 12rem;
+  overflow: auto;
+}
+
+html[data-resolved-theme="dark"] .edu-school-results {
+  background: #0b1f3a;
+  border-color: color-mix(in srgb, var(--accent) 28%, rgba(255, 255, 255, 0.14));
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-resolved-theme="light"]) .edu-school-results {
+    background: #0b1f3a;
+    border-color: color-mix(in srgb, var(--accent) 28%, rgba(255, 255, 255, 0.14));
+  }
+}
+
+.edu-school-results[hidden] {
+  display: none !important;
+}
+
+.edu-school-results li {
+  padding: 0.55rem 0.7rem;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.edu-school-results li:hover,
+.edu-school-results li[aria-selected="true"] {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.edu-school-hit-name {
+  display: block;
+  font-weight: 650;
+}
+
+.edu-school-hit-meta {
+  display: block;
+  margin-top: 0.12rem;
+  font-size: var(--text-caption);
+  color: var(--muted);
 }

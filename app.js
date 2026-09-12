@@ -23,6 +23,12 @@
   let lastHome = { courses: [], assignments: [], files: [], messages: [] };
   let openMail = null;
   let mailBusy = false;
+  let googleClientId = "";
+  let gisConfigError = "";
+  let gisInitialized = false;
+  let schoolTimer = 0;
+  const DEFAULT_SCHOOL = "Eastside Prep";
+  const NEED_GOOGLE = "Sign in with Google first.";
 
   function escapeHtml(s) {
     return String(s || "")
@@ -76,15 +82,285 @@
     if (el) el.textContent = text || "";
   }
 
+  function signedInViaGoogle() {
+    return Boolean(me && (me.email || me.googleName));
+  }
+
+  function accountStatusText() {
+    if (!signedInViaGoogle()) {
+      return gisConfigError || "Sign in with Google. Then add school and student ID so the school can match you.";
+    }
+    let text = "Signed in with Google.";
+    if (me.rosterMatched && me.rosterName) text += ` Matched · ${me.rosterName}`;
+    else if (me.rosterName) text += ` ${me.rosterName}`;
+    return text;
+  }
+
+  function fillFormFromMe() {
+    form.school.value = (me && me.school) || DEFAULT_SCHOOL;
+    form.studentId.value = (me && me.studentId) || "";
+    form.canvasHost.value = (me && me.canvasHost) || "https://eastsideprep.instructure.com";
+    const slugEl = document.getElementById("schoolSlug");
+    if (slugEl) slugEl.value = (me && me.schoolSlug) || slugEl.value || "";
+  }
+
+  function hideSchoolResults() {
+    const box = document.getElementById("school-results");
+    if (box) {
+      box.hidden = true;
+      box.innerHTML = "";
+    }
+  }
+
+  function paintAccount() {
+    const slot = document.getElementById("google-signin-slot");
+    const homeSlot = document.getElementById("home-google-btn");
+    const profile = document.getElementById("google-profile");
+    const outRow = document.getElementById("google-signout-row");
+    const homeChip = document.getElementById("home-google-chip");
+    const fallback = document.getElementById("home-google-fallback");
+    const pic = document.getElementById("google-picture");
+    const nameEl = document.getElementById("google-name");
+    const emailEl = document.getElementById("google-email");
+    const homePic = document.getElementById("home-google-pic");
+    const inGoogle = signedInViaGoogle();
+
+    if (inGoogle) {
+      if (slot) slot.hidden = true;
+      if (homeSlot) homeSlot.hidden = true;
+      if (fallback) fallback.hidden = true;
+      if (profile) profile.hidden = false;
+      if (outRow) outRow.hidden = false;
+      if (homeChip) {
+        homeChip.hidden = false;
+        homeChip.setAttribute("aria-label", me.googleName || me.email || "Account");
+      }
+      if (pic) {
+        if (me.picture) {
+          pic.src = me.picture;
+          pic.hidden = false;
+        } else {
+          pic.removeAttribute("src");
+          pic.hidden = true;
+        }
+      }
+      if (homePic) {
+        if (me.picture) {
+          homePic.src = me.picture;
+          homePic.hidden = false;
+        } else {
+          homePic.removeAttribute("src");
+          homePic.hidden = true;
+        }
+      }
+      if (nameEl) nameEl.textContent = me.googleName || me.displayName || "Signed in";
+      if (emailEl) emailEl.textContent = me.email || "";
+    } else {
+      if (profile) profile.hidden = true;
+      if (outRow) outRow.hidden = true;
+      if (homeChip) homeChip.hidden = true;
+      if (slot) slot.hidden = false;
+      const showGis = Boolean(gisInitialized && googleClientId);
+      if (homeSlot) homeSlot.hidden = !showGis;
+      if (fallback) fallback.hidden = showGis;
+    }
+    setStatus(statusEl, accountStatusText());
+    renderGoogleButtons();
+  }
+
+  function waitForGis(ms) {
+    const limit = Number.isFinite(ms) ? ms : 8000;
+    return new Promise((resolve) => {
+      if (window.google?.accounts?.id) {
+        resolve(true);
+        return;
+      }
+      const start = Date.now();
+      const timer = setInterval(() => {
+        if (window.google?.accounts?.id) {
+          clearInterval(timer);
+          resolve(true);
+        } else if (Date.now() - start > limit) {
+          clearInterval(timer);
+          resolve(false);
+        }
+      }, 80);
+    });
+  }
+
+  function renderGoogleButtons() {
+    if (!window.google?.accounts?.id || !googleClientId || signedInViaGoogle()) return;
+    const settingsSlot = document.getElementById("google-signin-slot");
+    const homeSlot = document.getElementById("home-google-btn");
+    if (settingsSlot && !settingsSlot.hidden) {
+      settingsSlot.innerHTML = "";
+      window.google.accounts.id.renderButton(settingsSlot, {
+        type: "standard",
+        theme: "outline",
+        size: "large",
+        text: "signin_with",
+        shape: "pill",
+        width: 280,
+        logo_alignment: "left",
+      });
+    }
+    if (homeSlot && !homeSlot.hidden) {
+      homeSlot.innerHTML = "";
+      window.google.accounts.id.renderButton(homeSlot, {
+        type: "standard",
+        theme: "outline",
+        size: "medium",
+        text: "signin_with",
+        shape: "pill",
+        logo_alignment: "left",
+      });
+    }
+    queueMicrotask(() => window.reinitLiquidGlass?.());
+  }
+
+  async function onGoogleCredential(resp) {
+    const idToken = resp && resp.credential;
+    if (!idToken) {
+      setStatus(statusEl, "Google did not return a sign-in token.");
+      return;
+    }
+    setStatus(statusEl, "Signing in…");
+    try {
+      me = await api("/v1/auth/google", {
+        method: "POST",
+        body: JSON.stringify({ idToken }),
+      });
+      fillFormFromMe();
+      paintAccount();
+      paintOnedrive();
+      paintOutlook();
+      await loadDashboard();
+    } catch (err) {
+      const msg =
+        err.status === 404
+          ? "Google sign-in is not on the API yet."
+          : err.message || "Google sign-in failed.";
+      setStatus(statusEl, msg);
+    }
+  }
+
+  async function initGoogle() {
+    try {
+      const cfg = await api("/v1/auth/google/config");
+      googleClientId = String(cfg.clientId || "").trim();
+      if (!googleClientId) {
+        gisConfigError = "Google sign-in has no client id from the API yet.";
+        paintAccount();
+        return;
+      }
+    } catch (err) {
+      gisConfigError =
+        err.status === 404
+          ? "Google sign-in is not on the API yet. Try again in a minute."
+          : err.message || "Could not load Google sign-in.";
+      paintAccount();
+      return;
+    }
+
+    const ok = await waitForGis();
+    if (!ok) {
+      gisConfigError = "Google sign-in script did not load.";
+      paintAccount();
+      return;
+    }
+
+    window.google.accounts.id.initialize({
+      client_id: googleClientId,
+      callback: onGoogleCredential,
+      ux_mode: "popup",
+      use_fedcm_for_prompt: true,
+      auto_select: false,
+      context: "signin",
+    });
+    gisInitialized = true;
+    gisConfigError = "";
+    paintAccount();
+    if (!signedInViaGoogle()) {
+      try {
+        window.google.accounts.id.prompt();
+      } catch {
+        /* One Tap is optional */
+      }
+    }
+  }
+
+  async function searchSchools(q) {
+    const box = document.getElementById("school-results");
+    if (!box) return;
+    try {
+      const data = await api(`/v1/schools?q=${encodeURIComponent(String(q || "").trim())}`);
+      const schools = data.schools || [];
+      if (!schools.length) {
+        hideSchoolResults();
+        return;
+      }
+      box.innerHTML = schools
+        .map((s) => {
+          const name = s.name || s.shortName || s.slug || "";
+          const extra = [s.shortName && s.shortName !== name ? s.shortName : "", s.domain || ""]
+            .filter(Boolean)
+            .join(" · ");
+          return `<li role="option" data-slug="${escapeHtml(s.slug || "")}" data-name="${escapeHtml(name)}" data-host="${escapeHtml(s.canvasHost || "")}">
+        <span class="edu-school-hit-name">${escapeHtml(name)}</span>
+        ${extra ? `<span class="edu-school-hit-meta">${escapeHtml(extra)}</span>` : ""}
+      </li>`;
+        })
+        .join("");
+      box.hidden = false;
+    } catch {
+      hideSchoolResults();
+    }
+  }
+
+  function pickSchool(li) {
+    if (!li) return;
+    const name = li.getAttribute("data-name") || DEFAULT_SCHOOL;
+    const slug = li.getAttribute("data-slug") || "";
+    const host = li.getAttribute("data-host") || "";
+    form.school.value = name;
+    const slugEl = document.getElementById("schoolSlug");
+    if (slugEl) slugEl.value = slug;
+    if (host && form.canvasHost) {
+      form.canvasHost.value = /^https?:\/\//i.test(host) ? host : `https://${host}`;
+    }
+    hideSchoolResults();
+  }
+
+  async function signOutGoogle() {
+    try {
+      await api("/v1/me/logout", { method: "POST", body: "{}" });
+    } catch {
+      /* still clear local session */
+    }
+    localStorage.removeItem(LS_SID);
+    me = null;
+    lastHome = { courses: [], assignments: [], files: [], messages: [] };
+    if (window.google?.accounts?.id) {
+      try {
+        window.google.accounts.id.disableAutoSelect();
+      } catch {
+        /* ignore */
+      }
+    }
+    gisInitialized = Boolean(window.google?.accounts?.id && googleClientId);
+    fillFormFromMe();
+    paintAccount();
+    paintOnedrive();
+    paintOutlook();
+    renderHome(lastHome);
+  }
+
   function openSheet() {
     sheet.hidden = false;
     document.querySelector(".edu-sheet-body")?.scrollTo(0, 0);
     form.scrollTop = 0;
-    if (me) {
-      form.school.value = me.school || "Eastside Prep";
-      form.studentId.value = me.studentId || "";
-      form.canvasHost.value = me.canvasHost || "https://eastsideprep.instructure.com";
-    }
+    fillFormFromMe();
+    paintAccount();
     refreshKeyStatus();
     paintOnedrive();
     paintOutlook();
@@ -92,6 +368,7 @@
   }
 
   function closeSheet() {
+    hideSchoolResults();
     sheet.hidden = true;
   }
 
@@ -343,6 +620,11 @@
   }
 
   function paintOnedrive() {
+    if (!signedInViaGoogle()) {
+      setStatus(odStatus, NEED_GOOGLE);
+      showOnedriveCode("", "");
+      return;
+    }
     if (!me) {
       setStatus(odStatus, "School OneDrive. Tap Connect, then sign in with @eastsideprep.org.");
       showOnedriveCode("", "");
@@ -386,6 +668,11 @@
   }
 
   function paintOutlook() {
+    if (!signedInViaGoogle()) {
+      setStatus(olStatus, NEED_GOOGLE);
+      showOutlookCode("", "");
+      return;
+    }
     if (!me) {
       setStatus(olStatus, "School Outlook. Same Microsoft sign-in, mail only.");
       showOutlookCode("", "");
@@ -461,12 +748,18 @@
 
     try {
       me = await api("/v1/me");
+      fillFormFromMe();
       await loadDashboard();
     } catch {
+      me = null;
       loading.hidden = true;
       stage.hidden = false;
       renderHome({ courses: [], assignments: [], files: [], messages: [] });
     }
+    paintAccount();
+    paintOnedrive();
+    paintOutlook();
+    await initGoogle();
   }
 
   document.getElementById("home-open").addEventListener("click", goHome);
@@ -474,11 +767,55 @@
   document.getElementById("settings-close").addEventListener("click", () => {
     closeSheet();
   });
+  document.getElementById("home-google-fallback")?.addEventListener("click", openSheet);
+  document.getElementById("home-google-chip")?.addEventListener("click", openSheet);
+  document.getElementById("google-signout")?.addEventListener("click", () => {
+    signOutGoogle();
+  });
+  const schoolInput = form.school;
+  schoolInput.addEventListener("input", () => {
+    const slugEl = document.getElementById("schoolSlug");
+    if (slugEl) slugEl.value = "";
+    clearTimeout(schoolTimer);
+    schoolTimer = setTimeout(() => searchSchools(schoolInput.value), 220);
+  });
+  schoolInput.addEventListener("focus", () => {
+    searchSchools(schoolInput.value || DEFAULT_SCHOOL);
+  });
+  schoolInput.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape") {
+      hideSchoolResults();
+      return;
+    }
+    if (ev.key === "Enter") {
+      const first = document.querySelector("#school-results li");
+      const box = document.getElementById("school-results");
+      if (first && box && !box.hidden) {
+        ev.preventDefault();
+        pickSchool(first);
+      }
+    }
+  });
+  document.getElementById("school-results")?.addEventListener("click", (ev) => {
+    const li = ev.target.closest("li");
+    if (li) pickSchool(li);
+  });
+  document.addEventListener("click", (ev) => {
+    const wrap = ev.target.closest(".edu-school-search");
+    if (!wrap) hideSchoolResults();
+  });
   sheet.addEventListener("click", (ev) => {
     if (ev.target === sheet) closeSheet();
   });
   document.addEventListener("keydown", (ev) => {
-    if (ev.key === "Escape" && !sheet.hidden) closeSheet();
+    if (ev.key === "Escape" && !sheet.hidden) {
+      const box = document.getElementById("school-results");
+      if (box && !box.hidden) {
+        hideSchoolResults();
+        return;
+      }
+      closeSheet();
+    }
   });
   appEl.addEventListener("change", (ev) => {
     const input = ev.target.closest("input[data-filter]");
@@ -493,18 +830,19 @@
 
   form.addEventListener("submit", async (ev) => {
     ev.preventDefault();
-    const studentId = form.studentId.value.trim();
-    if (!studentId) {
-      setStatus(statusEl, "Student ID is required.");
-      form.studentId.focus();
+    if (!signedInViaGoogle()) {
+      setStatus(statusEl, NEED_GOOGLE);
       return;
     }
+    const studentId = form.studentId.value.trim();
     setStatus(statusEl, "Saving…");
     const payload = {
-      school: form.school.value.trim() || "Eastside Prep",
+      school: form.school.value.trim() || DEFAULT_SCHOOL,
       studentId,
       canvasHost: form.canvasHost.value.trim(),
     };
+    const slugEl = document.getElementById("schoolSlug");
+    if (slugEl && slugEl.value.trim()) payload.schoolSlug = slugEl.value.trim();
     const canvasToken = form.canvasToken.value.trim();
     if (canvasToken) payload.canvasToken = canvasToken;
     try {
@@ -513,20 +851,23 @@
         body: JSON.stringify(payload),
       });
       form.canvasToken.value = "";
-      setStatus(statusEl, me.displayName ? `Saved · ${me.displayName}` : "Saved.");
+      paintAccount();
       paintOnedrive();
       paintOutlook();
       await loadDashboard();
-      closeSheet();
     } catch (err) {
+      if (err.status === 401) {
+        setStatus(statusEl, NEED_GOOGLE);
+        return;
+      }
       setStatus(statusEl, err.message || "Could not save.");
     }
   });
 
   document.getElementById("onedrive-start").addEventListener("click", async () => {
     try {
-      if (!me) {
-        setStatus(odStatus, "Save school and student ID first.");
+      if (!signedInViaGoogle()) {
+        setStatus(odStatus, NEED_GOOGLE);
         return;
       }
       const started = await api("/v1/me/onedrive/start", { method: "POST", body: "{}" });
@@ -568,8 +909,8 @@
 
   document.getElementById("outlook-start").addEventListener("click", async () => {
     try {
-      if (!me) {
-        setStatus(olStatus, "Save school and student ID first.");
+      if (!signedInViaGoogle()) {
+        setStatus(olStatus, NEED_GOOGLE);
         return;
       }
       const started = await api("/v1/me/outlook/start", { method: "POST", body: "{}", timeoutMs: 20000 });
