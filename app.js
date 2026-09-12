@@ -58,11 +58,15 @@
     classFiles: [],
     classFilesFor: "",
     classFilesError: "",
+    todoFiles: [],
+    todoFilesFor: "",
+    todoFilesError: "",
   };
   let lastOdError = "";
   let lastOlError = "";
   let lastTmError = "";
   let classFilesInFlight = "";
+  let todoFilesInFlight = "";
   let openMail = null;
   let mailBusy = false;
   let googleClientId = "";
@@ -856,6 +860,8 @@
     if (classMatch) return { page: "class", id: decodeURIComponent(classMatch[1]) };
     const noteMatch = path.match(/^\/note\/([^/]+)$/);
     if (noteMatch) return { page: "note", id: decodeURIComponent(noteMatch[1]) };
+    const todoMatch = path.match(/^\/todo\/([^/]+)$/);
+    if (todoMatch) return { page: "todo", id: decodeURIComponent(todoMatch[1]) };
     if (path === "/grades") return { page: "grades" };
     return { page: "home" };
   }
@@ -880,6 +886,17 @@
       if (note?.subject) out.noteSubject = note.subject;
       if (note?.classId) out.classId = note.classId;
       if (note?.text) out.noteText = String(note.text).slice(0, 1500);
+    }
+    if (route.page === "todo") {
+      const todo = assignmentById(route.id);
+      out.todoId = route.id;
+      if (todo?.title) out.todoTitle = todo.title;
+      const classId = String(todo?.classId || todo?.courseId || "").trim();
+      if (classId) out.classId = classId;
+      if (todo?.courseName) out.className = todo.courseName;
+      const klass = classId ? findClass(classId) : null;
+      if (klass?.name) out.className = klass.name;
+      if (klass?.period) out.period = klass.period;
     }
     return out;
   }
@@ -1199,12 +1216,12 @@
     }, TODO_PRESS_MS);
 
     const dest = ensureCompletedList();
+    writeTodoComplete(id, item, true);
     if (!dest) {
       row.dataset.busy = "";
+      if (currentRoute().page === "todo") renderTodo(currentRoute().id);
       return;
     }
-
-    writeTodoComplete(id, item, true);
     window.setTimeout(() => {
       animateTodoMove(row, dest, insertTodoRowSorted);
     }, TODO_PRESS_MS + TODO_HOLD_MS);
@@ -1225,12 +1242,12 @@
     }, TODO_PRESS_MS);
 
     const dest = ensureTodoList();
+    writeTodoComplete(id, item, false);
     if (!dest) {
       row.dataset.busy = "";
+      if (currentRoute().page === "todo") renderTodo(currentRoute().id);
       return;
     }
-
-    writeTodoComplete(id, item, false);
     window.setTimeout(() => {
       animateTodoMove(row, dest, insertTodoRowSorted);
     }, TODO_PRESS_MS + TODO_HOLD_MS);
@@ -1555,11 +1572,12 @@
     const klass = t.courseName
       ? `<span class="edu-meta edu-course">${escapeHtml(prettyCourseName(t.courseName))}</span>`
       : "";
-    const href = canvasHref(t.canvasLink);
+    const id = t.id || t.canvasId || "";
+    const href = id ? `/todo/${encodeURIComponent(id)}` : "/";
     const day = todoDayKey(t);
-    return `<li class="edu-row edu-todo${t.done ? " is-done" : ""} ${toneClass(workTone(t))}" data-id="${escapeHtml(t.id || t.canvasId || "")}" data-tag="${escapeHtml(tag)}" data-due="${escapeHtml(t.due || "")}" data-due-date="${escapeHtml(day)}">
-      <button type="button" class="edu-check${t.done ? " is-checked" : ""}" data-liquid-glass="circle" data-filter-id="lg-check-${escapeHtml(t.id)}" data-todo-id="${escapeHtml(t.id || t.canvasId || "")}" aria-label="${t.done ? "Mark incomplete" : "Mark complete"}"><span class="edu-check-dot"></span></button>
-      <a class="edu-row-link" href="${escapeHtml(href)}" target="_blank" rel="noopener">
+    return `<li class="edu-row edu-todo${t.done ? " is-done" : ""} ${toneClass(workTone(t))}" data-id="${escapeHtml(id)}" data-tag="${escapeHtml(tag)}" data-due="${escapeHtml(t.due || "")}" data-due-date="${escapeHtml(day)}">
+      <button type="button" class="edu-check${t.done ? " is-checked" : ""}" data-liquid-glass="circle" data-filter-id="lg-check-${escapeHtml(t.id)}" data-todo-id="${escapeHtml(id)}" aria-label="${t.done ? "Mark incomplete" : "Mark complete"}"><span class="edu-check-dot"></span></button>
+      <a class="edu-row-link" data-route href="${escapeHtml(href)}">
         <span class="edu-name"><span class="edu-tag edu-tag-${escapeHtml(tag)}">${escapeHtml(tag)}</span> ${escapeHtml(t.title)}</span>
         ${klass}${due}
       </a>
@@ -1597,8 +1615,16 @@
 
   function fileHref(f) {
     if (f.dataUrl) return f.dataUrl;
+    const html = /\.html?$/i.test(f.name || "") || /html/i.test(f.contentType || "");
+    const todoFile = String(f.id || "").startsWith("todo:") || f.source === "todo";
+    if (todoFile && html && typeof f.text === "string" && f.text) {
+      return `data:text/html;charset=utf-8,${encodeURIComponent(f.text)}`;
+    }
     if (String(f.id || "").startsWith("class:")) {
       return `${apiBase}/v1/me/class-files/file?id=${encodeURIComponent(f.id)}`;
+    }
+    if (todoFile) {
+      return `${apiBase}/v1/me/todo-files/file?id=${encodeURIComponent(f.id)}`;
     }
     if (f.webUrl) return f.webUrl;
     if (String(f.id || "").startsWith("local:")) return "#";
@@ -1609,10 +1635,11 @@
     const href = fileHref(f);
     const vault = String(f.id || "").startsWith("vault:");
     const klass = String(f.id || "").startsWith("class:");
+    const todoFile = String(f.id || "").startsWith("todo:") || f.source === "todo";
     const html = /\.html?$/i.test(f.name || "") || /html/i.test(f.contentType || "");
     const vaultAttr = vault ? ` data-vault-id="${escapeHtml(f.id)}"` : "";
     const classAttr = klass ? ` data-class-file="${escapeHtml(f.id)}"` : "";
-    const htmlAttr = html && klass ? ` data-html-file="1"` : "";
+    const htmlAttr = html && (klass || todoFile) ? ` data-html-file="1"` : "";
     return `<a class="edu-file-tile" href="${escapeHtml(href)}" target="_blank" rel="noopener" data-filter-id="lg-file-${i}" title="${escapeHtml(f.name)}"${vaultAttr}${classAttr}${htmlAttr}><span class="edu-file-name">${escapeHtml(f.name)}</span></a>`;
   }
 
@@ -1948,6 +1975,67 @@
     refreshClassFiles(klass);
   }
 
+  function renderTodo(id) {
+    const t = assignmentById(id);
+    if (!t) {
+      appEl.classList.add("is-settled");
+      appEl.innerHTML = `
+        <p class="edu-home-mark"><a class="edu-home-research" data-route href="/">Back</a></p>
+        <p class="edu-empty">That todo is not on this account.</p>
+      `;
+      return;
+    }
+    const tag = t.tag || "HW";
+    const due = t.due ? formatDue(t.due) : "";
+    const className = t.courseName ? prettyCourseName(t.courseName) : "";
+    const status = t.done ? "Done" : "Open";
+    const canvas = canvasHref(t.canvasLink);
+    const canvasHtml =
+      canvas && canvas !== "#"
+        ? `<p class="edu-detail-meta"><a class="set-link" href="${escapeHtml(canvas)}" target="_blank" rel="noopener">Open in Canvas</a></p>`
+        : "";
+    const sub = [due, className].filter(Boolean).join(" · ");
+    const meta = [status, due, className].filter(Boolean).join(" · ");
+    const desc = String(t.description || "");
+    appEl.classList.add("is-settled");
+    appEl.innerHTML = `
+      <p class="edu-home-mark"><a class="edu-home-research" data-route href="/">Back</a></p>
+      <header class="edu-hero edu-hero--detail edu-hero--detail-canvas ${toneClass(workTone(t))}">
+        <div class="edu-hero-lead">
+          <h1 class="edu-hero-title"><span class="edu-tag edu-tag-${escapeHtml(tag)}">${escapeHtml(tag)}</span> ${escapeHtml(t.title || "Todo")}</h1>
+          <p class="edu-hero-sub">${escapeHtml(sub)}</p>
+        </div>
+        <div class="edu-detail-row edu-todo${t.done ? " is-done" : ""}" data-id="${escapeHtml(t.id || t.canvasId || "")}">
+          <button type="button" class="edu-check${t.done ? " is-checked" : ""}" data-liquid-glass="circle" data-filter-id="lg-check-todo-${escapeHtml(t.id)}" data-todo-id="${escapeHtml(t.id || t.canvasId || "")}" aria-label="${t.done ? "Mark incomplete" : "Mark complete"}"><span class="edu-check-dot"></span></button>
+          <span class="edu-detail-status">${escapeHtml(status)}</span>
+        </div>
+      </header>
+      <div class="edu-grid edu-grid--home">
+        <div class="edu-col edu-col--main">
+          ${panelHtml(
+            "Details",
+            `${meta ? `<p class="edu-detail-meta">${escapeHtml(meta)}</p>` : ""}<div class="edu-detail-desc">${escapeHtml(desc)}</div>${canvasHtml}`,
+            "lg-edu-todo-detail",
+            "edu-panel--desc"
+          )}
+        </div>
+        <div class="edu-col edu-col--side">
+          ${panelHtml(
+            "Files",
+            filesPanelBody(
+              (lastHome.todoFiles || []).map(fileTile).join(""),
+              "No files on this todo yet. Ask the agent to add one, including an HTML page.",
+              lastHome.todoFilesError
+            ),
+            "lg-edu-todo-files"
+          )}
+        </div>
+      </div>
+    `;
+    if (typeof window.reinitLiquidGlass === "function") window.reinitLiquidGlass();
+    refreshTodoFiles(t);
+  }
+
   function subjectOptions(selected) {
     const names = homeClasses()
       .map((c) => String(c.name || "").trim())
@@ -2138,6 +2226,10 @@
       renderNote(route.id);
       return;
     }
+    if (route.page === "todo") {
+      renderTodo(route.id);
+      return;
+    }
     if (route.page === "grades") {
       await renderGrades();
       return;
@@ -2201,6 +2293,9 @@
       classFiles: lastHome.classFiles || [],
       classFilesFor: "",
       classFilesError: lastHome.classFilesError || "",
+      todoFiles: lastHome.todoFiles || [],
+      todoFilesFor: "",
+      todoFilesError: lastHome.todoFilesError || "",
     };
     routeAndRender();
   }
@@ -2236,6 +2331,31 @@
     const route = currentRoute();
     if (route.page === "class" && String(route.id) === String(klass.id)) {
       renderClass(klass.id);
+    }
+  }
+
+  async function refreshTodoFiles(todo) {
+    const key = String(todo?.id || todo?.canvasId || "").trim();
+    if (!key) return;
+    if (lastHome.todoFilesFor === key || todoFilesInFlight === key) return;
+    todoFilesInFlight = key;
+    try {
+      const owned = await api(`/v1/me/todo-files?todoId=${encodeURIComponent(key)}&text=1`, {
+        timeoutMs: 20000,
+      }).catch(() => ({ files: [] }));
+      lastHome.todoFiles = Array.isArray(owned.files) ? owned.files : [];
+      lastHome.todoFilesError = owned.error || "";
+      lastHome.todoFilesFor = key;
+    } catch (err) {
+      lastHome.todoFiles = [];
+      lastHome.todoFilesError = err.message || "Could not load files.";
+      lastHome.todoFilesFor = key;
+    } finally {
+      todoFilesInFlight = "";
+    }
+    const route = currentRoute();
+    if (route.page === "todo" && String(route.id) === key) {
+      renderTodo(key);
     }
   }
 
@@ -2611,6 +2731,7 @@
     const check = ev.target.closest(".edu-check");
     if (!check) return;
     ev.preventDefault();
+    ev.stopPropagation();
     if (check.classList.contains("is-checked")) uncompleteTodoRow(check);
     else completeTodoRow(check);
   });
@@ -3128,6 +3249,7 @@
   });
 
   appEl.addEventListener("click", (ev) => {
+    if (ev.target.closest(".edu-check")) return;
     const a = ev.target.closest("a[data-route]");
     if (!a) return;
     const href = a.getAttribute("href");
@@ -3307,10 +3429,28 @@
 
   window.addEventListener("epsynapse-agent-mutation", () => {
     lastHome.classFilesFor = "";
+    lastHome.todoFilesFor = "";
     loadDashboard();
   });
   window.addEventListener("epsynapse-agent-navigate", (ev) => {
-    const href = ev.detail?.href;
+    const d = ev.detail || {};
+    if (d.todoId) {
+      goTo(`/todo/${encodeURIComponent(d.todoId)}`);
+      return;
+    }
+    if (d.view === "todo" && d.id) {
+      goTo(`/todo/${encodeURIComponent(d.id)}`);
+      return;
+    }
+    if (d.classId) {
+      goTo(`/class/${encodeURIComponent(d.classId)}`);
+      return;
+    }
+    if (d.noteId) {
+      goTo(`/note/${encodeURIComponent(d.noteId)}`);
+      return;
+    }
+    const href = d.href;
     if (href) goTo(href);
   });
 

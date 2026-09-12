@@ -6,6 +6,7 @@
   "rewrites": [
     { "source": "/class/:id", "destination": "/index" },
     { "source": "/note/:id", "destination": "/index" },
+    { "source": "/todo/:id", "destination": "/index" },
     { "source": "/grades", "destination": "/index" }
   ],
   "redirects": [
