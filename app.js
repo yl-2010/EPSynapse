@@ -1014,38 +1014,73 @@
     empty.hidden = visible;
   }
 
-  function animateFly(row, first) {
-    const last = row.getBoundingClientRect();
-    const dx = first.left - last.left;
-    const dy = first.top - last.top;
-    row.classList.add("is-flying");
-    row.style.transform = `translate(${dx}px, ${dy}px)`;
-    row.style.transition = "none";
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        row.style.transition = "transform 0.48s cubic-bezier(0.22, 1, 0.36, 1)";
-        row.style.transform = "translate(0, 0)";
-      });
-    });
-    const finish = () => {
-      if (row.dataset.busy !== "1") return;
-      row.classList.remove("is-flying");
-      row.style.transition = "";
-      row.style.transform = "";
+  const TODO_LEAVE_MS = 520;
+  const TODO_ENTER_MS = 460;
+
+  function prefersReducedMotion() {
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
+
+  function clearTodoMotion(row) {
+    row.classList.remove("is-leaving", "is-entering", "is-enter-from", "is-flying");
+    row.style.maxHeight = "";
+    row.style.overflow = "";
+    row.style.opacity = "";
+    row.style.transform = "";
+    row.style.paddingTop = "";
+    row.style.paddingBottom = "";
+    row.style.marginBottom = "";
+    row.style.transition = "";
+  }
+
+  function finishTodoMove(row) {
+    clearTodoMotion(row);
+    row.dataset.busy = "";
+    refreshTodoEmptyState();
+    refreshCompletedEmptyState();
+    paintAssignmentFilters();
+  }
+
+  function animateTodoMove(row, dest, place) {
+    if (!dest) {
       row.dataset.busy = "";
+      return;
+    }
+    const put = () => {
+      if (typeof place === "function") place(dest, row);
+      else dest.appendChild(row);
+    };
+    if (prefersReducedMotion()) {
+      put();
+      finishTodoMove(row);
+      return;
+    }
+
+    const height = Math.max(1, Math.ceil(row.getBoundingClientRect().height));
+    row.style.overflow = "hidden";
+    row.style.maxHeight = `${height}px`;
+    row.classList.add("is-leaving");
+    requestAnimationFrame(() => {
+      row.style.maxHeight = "0px";
+    });
+
+    window.setTimeout(() => {
+      put();
+      row.classList.remove("is-leaving");
+      row.classList.add("is-entering", "is-enter-from");
+      row.style.transition = "none";
+      row.style.maxHeight = "0px";
       refreshTodoEmptyState();
       refreshCompletedEmptyState();
-      paintAssignmentFilters();
-    };
-    row.addEventListener(
-      "transitionend",
-      (ev) => {
-        if (ev.propertyName && ev.propertyName !== "transform") return;
-        finish();
-      },
-      { once: true }
-    );
-    window.setTimeout(finish, 700);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          row.style.transition = "";
+          row.classList.remove("is-enter-from");
+          row.style.maxHeight = `${height}px`;
+        });
+      });
+      window.setTimeout(() => finishTodoMove(row), TODO_ENTER_MS + 40);
+    }, TODO_LEAVE_MS);
   }
 
   function writeTodoComplete(id, item, done) {
@@ -1085,9 +1120,7 @@
       return;
     }
 
-    const first = row.getBoundingClientRect();
-    insertTodoRowSorted(dest, row);
-    animateFly(row, first);
+    animateTodoMove(row, dest, insertTodoRowSorted);
     writeTodoComplete(id, item, true);
   }
 
@@ -1109,9 +1142,7 @@
       return;
     }
 
-    const first = row.getBoundingClientRect();
-    insertTodoRowSorted(dest, row);
-    animateFly(row, first);
+    animateTodoMove(row, dest, insertTodoRowSorted);
     writeTodoComplete(id, item, false);
   }
 

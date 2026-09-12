@@ -149,6 +149,10 @@ struct ClassView: View {
             } else {
                 TodoRows(items: visibleTodos) { item in
                     TodoRow(item: item)
+                        .transition(.asymmetric(
+                            insertion: .opacity.combined(with: .move(edge: .top)),
+                            removal: .opacity.combined(with: .scale(scale: 0.97, anchor: .top))
+                        ))
                 }
             }
         }
@@ -161,6 +165,10 @@ struct ClassView: View {
             } else {
                 TodoRows(items: doneItems) { item in
                     TodoRow(item: item)
+                        .transition(.asymmetric(
+                            insertion: .opacity.combined(with: .move(edge: .top)),
+                            removal: .opacity.combined(with: .scale(scale: 0.97, anchor: .top))
+                        ))
                 }
             }
         }

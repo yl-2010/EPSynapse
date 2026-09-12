@@ -1254,9 +1254,64 @@ html[data-resolved-theme="light"] .edu-filter.is-on {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
-.edu-row.edu-class-row:hover,
-.edu-row.edu-todo:hover {
+.edu-row.edu-class-row:hover {
   background: none;
+}
+
+.edu-row.edu-todo {
+  transform-origin: 50% 0;
+}
+
+.edu-row.edu-todo:hover {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.edu-row.edu-todo.is-done:hover {
+  opacity: 0.95;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.edu-row.edu-todo.is-leaving,
+.edu-row.edu-todo.is-entering {
+  content-visibility: visible;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.edu-row.edu-todo.is-leaving,
+.edu-row[data-tag].edu-todo.is-leaving,
+.edu-row.edu-todo.is-enter-from,
+.edu-row[data-tag].edu-todo.is-enter-from {
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  margin-bottom: 0;
+  transform: translateY(-6px);
+}
+
+.edu-row.edu-todo.is-enter-from,
+.edu-row[data-tag].edu-todo.is-enter-from {
+  transform: translateY(8px);
+}
+
+.edu-row.edu-todo.is-leaving {
+  transition:
+    opacity 0.48s ease,
+    max-height 0.52s var(--ease),
+    padding 0.52s var(--ease),
+    margin 0.52s var(--ease),
+    transform 0.48s ease,
+    background 0.2s var(--ease);
+}
+
+.edu-row.edu-todo.is-entering {
+  transition:
+    opacity 0.42s var(--ease),
+    max-height 0.46s var(--ease),
+    padding 0.46s var(--ease),
+    margin 0.46s var(--ease),
+    transform 0.42s var(--ease),
+    background 0.2s var(--ease);
 }
 
 .edu-row-main {
@@ -1393,7 +1448,7 @@ html[data-resolved-theme="light"] .edu-filter.is-on {
   opacity: 0;
   transform: scale(0.6);
   pointer-events: none;
-  transition: opacity 0.15s var(--ease), transform 0.15s var(--ease);
+  transition: opacity 0.22s var(--ease), transform 0.22s var(--ease);
 }
 
 .edu-check.is-checked .edu-check-dot {
@@ -1405,6 +1460,14 @@ html[data-resolved-theme="light"] .edu-filter.is-on {
   position: relative;
   z-index: 6;
   pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .edu-row.edu-todo.is-leaving,
+  .edu-row.edu-todo.is-entering {
+    transition: none;
+    transform: none;
+  }
 }
 
 .edu-todo.is-done {

@@ -174,8 +174,8 @@ struct TodoPanel: View {
                 TodoRows(items: visible) { item in
                     TodoRow(item: item)
                         .transition(.asymmetric(
-                            insertion: .opacity,
-                            removal: .move(edge: .bottom).combined(with: .opacity)
+                            insertion: .opacity.combined(with: .move(edge: .top)),
+                            removal: .opacity.combined(with: .scale(scale: 0.97, anchor: .top))
                         ))
                 }
             }
@@ -201,7 +201,10 @@ struct CompletedPanel: View {
             } else {
                 TodoRows(items: items) { item in
                     TodoRow(item: item)
-                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .transition(.asymmetric(
+                            insertion: .opacity.combined(with: .move(edge: .top)),
+                            removal: .opacity.combined(with: .scale(scale: 0.97, anchor: .top))
+                        ))
                 }
             }
         }
@@ -244,6 +247,7 @@ struct TodoRow: View {
     @Environment(\.openURL) private var openURL
     @EnvironmentObject private var session: SessionStore
     @EnvironmentObject private var dashboard: DashboardStore
+    @State private var hovering = false
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
@@ -279,7 +283,13 @@ struct TodoRow: View {
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 8)
-        .opacity(item.done ? 0.55 : 1)
+        .background {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(EPSTheme.accent.opacity(hovering ? 0.14 : 0))
+        }
+        .opacity(item.done ? (hovering ? 0.9 : 0.55) : 1)
+        .animation(.easeOut(duration: 0.2), value: hovering)
+        .onHover { hovering = $0 }
     }
 
     private var checkbox: some View {
