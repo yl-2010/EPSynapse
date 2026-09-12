@@ -1,0 +1,76 @@
+{
+  "subjects": [
+    "Mathematics",
+    "Physics",
+    "Chemistry",
+    "Biology",
+    "Computer Science",
+    "History",
+    "Literature",
+    "Economics"
+  ],
+  "test_n": 0,
+  "arms": {
+    "zero_shot": {
+      "name": "zero_shot",
+      "n": 0,
+      "accuracy": 0,
+      "micro_f1": 0,
+      "macro_f1": 0,
+      "per_class": {
+        "Mathematics": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
+        "Physics": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
+        "Chemistry": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
+        "Biology": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
+        "Computer Science": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
+        "History": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
+        "Literature": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
+        "Economics": { "precision": 0, "recall": 0, "f1": 0, "support": 0 }
+      },
+      "protocol": "zero_shot_cls_cosine",
+      "model": "bert-base-uncased",
+      "label": "Zero-shot BERT"
+    },
+    "fine_tuned": {
+      "name": "fine_tuned",
+      "n": 0,
+      "accuracy": 0,
+      "micro_f1": 0,
+      "macro_f1": 0,
+      "per_class": {
+        "Mathematics": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
+        "Physics": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
+        "Chemistry": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
+        "Biology": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
+        "Computer Science": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
+        "History": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
+        "Literature": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
+        "Economics": { "precision": 0, "recall": 0, "f1": 0, "support": 0 }
+      },
+      "protocol": "fine_tuned",
+      "model": "fine-tuned-bert",
+      "label": "Fine-tuned BERT"
+    },
+    "student_key": {
+      "name": "student_key",
+      "n": 0,
+      "accuracy": 0,
+      "micro_f1": 0,
+      "macro_f1": 0,
+      "per_class": {
+        "Mathematics": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
+        "Physics": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
+        "Chemistry": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
+        "Biology": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
+        "Computer Science": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
+        "History": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
+        "Literature": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
+        "Economics": { "precision": 0, "recall": 0, "f1": 0, "support": 0 }
+      },
+      "protocol": "student_key",
+      "model": "student-key",
+      "label": "Student-key model"
+    }
+  },
+  "updated_at": "2026-09-12T00:00:00.000Z"
+}

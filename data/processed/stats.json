@@ -1,0 +1,71 @@
+{
+  "seed": 42,
+  "min_tokens": 20,
+  "max_tokens": 512,
+  "targets": {
+    "train_per_subject": 2000,
+    "val_per_subject": 250,
+    "test_per_subject": 250
+  },
+  "total_rows": 20000,
+  "by_split": {
+    "train": 16000,
+    "test": 2000,
+    "val": 2000
+  },
+  "by_label_split": {
+    "Mathematics": {
+      "train": 2000,
+      "test": 250,
+      "val": 250
+    },
+    "Physics": {
+      "train": 2000,
+      "test": 250,
+      "val": 250
+    },
+    "Chemistry": {
+      "train": 2000,
+      "test": 250,
+      "val": 250
+    },
+    "Biology": {
+      "train": 2000,
+      "test": 250,
+      "val": 250
+    },
+    "Computer Science": {
+      "train": 2000,
+      "test": 250,
+      "val": 250
+    },
+    "History": {
+      "train": 2000,
+      "test": 250,
+      "val": 250
+    },
+    "Literature": {
+      "train": 2000,
+      "test": 250,
+      "val": 250
+    },
+    "Economics": {
+      "train": 2000,
+      "test": 250,
+      "val": 250
+    }
+  },
+  "by_source": {
+    "textbook_chapters": 9529,
+    "setfit": 4492,
+    "mmlu": 2023,
+    "cogbench": 1864,
+    "wiki_academic": 1549,
+    "openstax": 543
+  },
+  "by_style": {
+    "prose": 11621,
+    "short": 8379
+  },
+  "shortages": {}
+}

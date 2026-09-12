@@ -1,0 +1,20 @@
+{
+  "name": "jype-server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "JYPE / EPSynapse Mac Express API (Cloudflare Tunnel)",
+  "scripts": {
+    "start": "node --env-file=.env index.js",
+    "dev": "node --env-file=.env --watch index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "multer": "^2.0.2",
+    "pdf-parse": "^1.1.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

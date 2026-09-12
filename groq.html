@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <script>
+      (function () {
+        try {
+          var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var r = document.documentElement;
+          r.dataset.theme = "system";
+          r.dataset.resolvedTheme = dark ? "dark" : "light";
+          r.style.colorScheme = dark ? "dark" : "light";
+        } catch (e) {}
+      })();
+    </script>
+    <title>Groq key · EPSynapse</title>
+    <meta
+      name="description"
+      content="How to get a free Groq API key for EPSynapse chat."
+    />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css?v=glass16" />
+    <style>
+      a.corner {
+        text-decoration: none;
+      }
+      .page-wrap {
+        display: flex;
+        justify-content: center;
+        box-sizing: border-box;
+        min-height: 100dvh;
+        padding: 6.5rem 1rem 2rem;
+      }
+      .page-sheet {
+        max-height: min(52rem, calc(100dvh - 8rem));
+      }
+      .page-sheet .edu-sheet-body h2 {
+        margin: 1.1rem 0 0.4rem;
+        font-size: var(--text-headline);
+        font-weight: 650;
+      }
+      .page-sheet .edu-sheet-body h2:first-child {
+        margin-top: 0.15rem;
+      }
+      .page-sheet .edu-sheet-body p {
+        margin: 0 0 0.75rem;
+        font-size: var(--text-subhead);
+        line-height: 1.45;
+        color: var(--fg);
+      }
+      .page-sheet .edu-sheet-body ol {
+        margin: 0 0 0.75rem;
+        padding-left: 1.25rem;
+        font-size: var(--text-subhead);
+        line-height: 1.45;
+        color: var(--fg);
+      }
+      .page-sheet .edu-sheet-body li {
+        margin: 0 0 0.55rem;
+      }
+      .page-sheet .edu-sheet-body a {
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <a
+      href="/"
+      class="corner c-tl squircle"
+      data-liquid-glass="squircle"
+      data-filter-id="lg-tl"
+      aria-label="Home"
+    >
+      <span class="corner-mark" aria-hidden="true">E</span>
+    </a>
+
+    <button
+      type="button"
+      class="corner c-tr circle"
+      data-liquid-glass="circle"
+      data-filter-id="lg-tr"
+      aria-label="Toggle theme"
+      draggable="false"
+    ></button>
+
+    <div class="page-wrap">
+      <main class="edu-sheet page-sheet">
+        <div class="edu-sheet-head">
+          <h1 class="edu-sheet-title">Groq key</h1>
+        </div>
+        <div class="edu-sheet-body">
+          <p>
+            Chat needs a free Groq API key. Get one, then paste it into EPSynapse Settings.
+            Settings is the gear on the home screen after you sign in with Google.
+          </p>
+
+          <h2>How to get a key</h2>
+          <ol>
+            <li>
+              Open
+              <a href="https://console.groq.com" rel="noopener noreferrer">console.groq.com</a>
+              and sign up. Google, GitHub, or email works. The free tier does not ask for a card.
+            </li>
+            <li>
+              Open
+              <a href="https://console.groq.com/keys" rel="noopener noreferrer">console.groq.com/keys</a>.
+              That is API Keys in the left nav.
+            </li>
+            <li>Click Create API Key. Name it EPSynapse or whatever you will recognize. Submit.</li>
+            <li>
+              Copy the key now. It starts with gsk_. Groq shows the full value only once.
+            </li>
+            <li>
+              Come back to EPSynapse Settings, paste it in the API key field, and save.
+            </li>
+          </ol>
+
+          <h2>Where the key lives</h2>
+          <p>
+            The key stays in this browser. EPSynapse does not put it in the public site files.
+          </p>
+          <p>
+            If you lose it, make a new one on the same
+            <a href="https://console.groq.com/keys" rel="noopener noreferrer">Groq keys page</a>.
+          </p>
+
+          <p><a href="/">Back to EPSynapse</a></p>
+        </div>
+      </main>
+    </div>
+
+    <svg
+      class="liquid-glass-svg"
+      xmlns="http://www.w3.org/2000/svg"
+      width="0"
+      height="0"
+      aria-hidden="true"
+      focusable="false"
+      color-interpolation-filters="sRGB"
+      style="position: absolute; width: 0; height: 0; overflow: hidden; pointer-events: none"
+    >
+      <defs id="liquid-glass-defs"></defs>
+    </svg>
+
+    <script src="/liquid-glass.js?v=glass11"></script>
+    <script src="/theme-orb.js?v=glass12"></script>
+  </body>
+</html>

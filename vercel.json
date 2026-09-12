@@ -1,0 +1,18 @@
+{
+  "git": {
+    "deploymentEnabled": false
+  },
+  "cleanUrls": true,
+  "rewrites": [
+    { "source": "/class/:id", "destination": "/index" },
+    { "source": "/note/:id", "destination": "/index" }
+  ],
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "www.epsynapse.com" }],
+      "destination": "https://epsynapse.com/:path*",
+      "permanent": true
+    }
+  ]
+}

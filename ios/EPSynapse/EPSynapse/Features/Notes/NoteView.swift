@@ -1,0 +1,199 @@
+import SwiftUI
+
+struct NoteView: View {
+    var noteId: String
+
+    @EnvironmentObject private var session: SessionStore
+    @EnvironmentObject private var dashboard: DashboardStore
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+
+    @State private var subject = ""
+
+    private var note: ClassifiedNote? {
+        dashboard.note(id: noteId)
+    }
+
+    private var pagePad: CGFloat {
+        AdaptiveLayout.pagePadding(horizontal: horizontalSizeClass, vertical: verticalSizeClass)
+    }
+
+    private var pickerSubjects: [String] {
+        var list = NoteSubject.all
+        if !subject.isEmpty, !list.contains(subject) {
+            list.insert(subject, at: 0)
+        }
+        return list
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                backRow
+                if let note {
+                    textCard(note.text)
+                    votesCard(note)
+                    orchestratorCard(note)
+                    subjectCard
+                    researchButton
+                } else {
+                    EmptyLine("This note is gone.")
+                }
+            }
+            .padding(.horizontal, pagePad)
+            .padding(.top, AdaptiveLayout.isPad ? 96 : 88)
+            .padding(.bottom, 108)
+            .frame(maxWidth: AdaptiveLayout.pageMaxWidth)
+            .frame(maxWidth: .infinity)
+        }
+        .scrollIndicators(.hidden)
+        .toolbar(.hidden, for: .navigationBar)
+        .navigationBarBackButtonHidden(true)
+        .task {
+            await dashboard.refreshNote(id: noteId, session: session)
+            hydrate()
+        }
+        .onAppear { hydrate() }
+        .onChange(of: noteId) { _, _ in hydrate() }
+        .onChange(of: subject) { _, next in
+            guard let note, !next.isEmpty, next != note.subject else { return }
+            Task { await dashboard.updateNoteSubject(id: note.id, subject: next, session: session) }
+        }
+    }
+
+    private var backRow: some View {
+        Button {
+            EPSHaptics.tap()
+            dismiss()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 13, weight: .bold))
+                Text("Back")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .foregroundStyle(EPSTheme.fg)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+        }
+        .buttonStyle(.plain)
+        .epsGlassRounded(cornerRadius: 14, interactive: true)
+        .accessibilityLabel("Back")
+    }
+
+    private func textCard(_ text: String) -> some View {
+        EPSPanel(title: "Note") {
+            Text(text)
+                .font(.body)
+                .foregroundStyle(EPSTheme.fg)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func votesCard(_ note: ClassifiedNote) -> some View {
+        EPSPanel(title: "Votes") {
+            VStack(alignment: .leading, spacing: 10) {
+                VoteRow(title: "Zero-shot BERT", vote: note.votes.zeroShot)
+                VoteRow(title: "Fine-tuned BERT", vote: note.votes.fineTuned)
+                VoteRow(title: "Student-key", vote: note.votes.studentKey)
+            }
+        }
+    }
+
+    private func orchestratorCard(_ note: ClassifiedNote) -> some View {
+        EPSPanel(title: "Orchestrator") {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(note.orchestrator.subject.isEmpty ? note.subject : note.orchestrator.subject)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(EPSTheme.fg)
+                if let confidence = note.orchestrator.confidence {
+                    Text(NoteVote(confidence: confidence).confidenceLabel)
+                        .font(.caption)
+                        .foregroundStyle(EPSTheme.muted)
+                }
+                if !note.orchestrator.rationale.isEmpty {
+                    Text(note.orchestrator.rationale)
+                        .font(.footnote)
+                        .foregroundStyle(EPSTheme.muted)
+                }
+            }
+        }
+    }
+
+    private var subjectCard: some View {
+        EPSPanel(title: "Subject") {
+            Picker("Subject", selection: $subject) {
+                ForEach(pickerSubjects, id: \.self) { label in
+                    Text(label).tag(label)
+                }
+            }
+            .pickerStyle(.menu)
+            .tint(EPSTheme.fg)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .epsGlassField(interactive: true, cornerRadius: 14)
+            if !dashboard.notesStatus.isEmpty {
+                Text(dashboard.notesStatus)
+                    .font(.footnote)
+                    .foregroundStyle(EPSTheme.muted)
+            }
+        }
+    }
+
+    private var researchButton: some View {
+        Button {
+            EPSHaptics.tap()
+            openURL(EPSLinks.research)
+        } label: {
+            Text("Research")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(EPSTheme.fg)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+        }
+        .buttonStyle(.plain)
+        .epsGlassRounded(cornerRadius: 14, interactive: true)
+        .accessibilityHint("Opens the public research page in Safari")
+    }
+
+    private func hydrate() {
+        if let note {
+            subject = note.subject.isEmpty ? "Other" : note.subject
+        }
+    }
+}
+
+struct VoteRow: View {
+    var title: String
+    var vote: NoteVote?
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(EPSTheme.muted)
+                .frame(maxWidth: 140, alignment: .leading)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(subjectLabel)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(EPSTheme.fg)
+                if let vote, !vote.confidenceLabel.isEmpty {
+                    Text(vote.confidenceLabel)
+                        .font(.caption)
+                        .foregroundStyle(EPSTheme.muted)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 4)
+    }
+
+    private var subjectLabel: String {
+        guard let vote, !vote.subject.isEmpty else { return "None" }
+        return vote.subject
+    }
+}

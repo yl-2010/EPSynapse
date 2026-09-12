@@ -26,3 +26,38 @@ ehthumbs_vista.db
 [Dd]esktop.ini
 $RECYCLE.BIN/
 *.lnk
+
+# Node / Vercel / local secrets
+node_modules/
+server/node_modules/
+.vercel
+.env
+.env.local
+.env.*.local
+server/.env
+vercel.env
+*.log
+
+# Student profiles and sessions (tokens live here)
+server/data/
+
+# Notes classifier local data and weights
+__pycache__/
+*.pyc
+.venv/
+models/fine-tuned-bert/
+models/fine-tuned-next/
+data/raw/
+data/processed/corpus.parquet
+data/processed/corpus.csv
+data/processed/bert_eval.json
+
+# Xcode
+ios/**/xcuserdata/
+ios/**/DerivedData/
+ios/**/*.xcuserstate
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM

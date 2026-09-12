@@ -1,0 +1,4 @@
+{
+  "apiBase": "https://api.epsynapse.com",
+  "localApiBase": "http://127.0.0.1:3006"
+}
