@@ -125,11 +125,24 @@ struct Profile: Codable, Equatable {
 struct DevicePending: Codable, Equatable {
   var user_code: String
   var verification_uri: String
+  var verification_uri_complete: String
   var message: String
 
-  init(user_code: String = "", verification_uri: String = "", message: String = "") {
+  var openURL: String {
+    if !verification_uri_complete.isEmpty { return verification_uri_complete }
+    if user_code.isEmpty { return verification_uri }
+    return "https://login.microsoft.com/device?otc=\(user_code)"
+  }
+
+  init(
+    user_code: String = "",
+    verification_uri: String = "",
+    verification_uri_complete: String = "",
+    message: String = ""
+  ) {
     self.user_code = user_code
     self.verification_uri = verification_uri
+    self.verification_uri_complete = verification_uri_complete
     self.message = message
   }
 
@@ -137,6 +150,7 @@ struct DevicePending: Codable, Equatable {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     user_code = c.string(.user_code)
     verification_uri = c.string(.verification_uri)
+    verification_uri_complete = c.string(.verification_uri_complete)
     message = c.string(.message)
   }
 
@@ -591,12 +605,26 @@ struct AgentConfigResponse: Codable {
 struct DeviceStartResponse: Codable {
   var user_code: String
   var verification_uri: String
+  var verification_uri_complete: String
   var message: String
   var interval: Int
 
-  init(user_code: String = "", verification_uri: String = "", message: String = "", interval: Int = 0) {
+  var openURL: String {
+    if !verification_uri_complete.isEmpty { return verification_uri_complete }
+    if user_code.isEmpty { return verification_uri }
+    return "https://login.microsoft.com/device?otc=\(user_code)"
+  }
+
+  init(
+    user_code: String = "",
+    verification_uri: String = "",
+    verification_uri_complete: String = "",
+    message: String = "",
+    interval: Int = 0
+  ) {
     self.user_code = user_code
     self.verification_uri = verification_uri
+    self.verification_uri_complete = verification_uri_complete
     self.message = message
     self.interval = interval
   }
@@ -605,6 +633,7 @@ struct DeviceStartResponse: Codable {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     user_code = c.string(.user_code)
     verification_uri = c.string(.verification_uri)
+    verification_uri_complete = c.string(.verification_uri_complete)
     message = c.string(.message)
     interval = c.int(.interval)
   }

@@ -41,6 +41,12 @@
   const DEFAULT_SCHOOL = "Eastside Prep";
   const NEED_GOOGLE = "Sign in with Google first.";
 
+  function microsoftDeviceUrl(code, uri) {
+    const c = String(code || "").trim();
+    if (c) return `https://login.microsoft.com/device?otc=${encodeURIComponent(c)}`;
+    return uri || "https://login.microsoft.com/device";
+  }
+
   function escapeHtml(s) {
     return String(s || "")
       .replace(/&/g, "&amp;")
@@ -1213,8 +1219,11 @@
     }
     const p = me.onedrivePending;
     if (p && (p.user_code || p.verification_uri)) {
-      setStatus(odStatus, "Enter this code on the Microsoft page, then come back here.");
-      showOnedriveCode(p.user_code, p.verification_uri || "https://login.microsoft.com/device");
+      setStatus(odStatus, "Microsoft should open with this code. Allow access, then come back.");
+      showOnedriveCode(
+        p.user_code,
+        p.verification_uri_complete || microsoftDeviceUrl(p.user_code, p.verification_uri)
+      );
       paintNavSummaries();
       return;
     }
@@ -1265,8 +1274,11 @@
     }
     const p = me.outlookPending;
     if (p && (p.user_code || p.verification_uri)) {
-      setStatus(olStatus, "Enter this code on the Microsoft page, then come back here.");
-      showOutlookCode(p.user_code, p.verification_uri || "https://login.microsoft.com/device");
+      setStatus(olStatus, "Microsoft should open with this code. Allow access, then come back.");
+      showOutlookCode(
+        p.user_code,
+        p.verification_uri_complete || microsoftDeviceUrl(p.user_code, p.verification_uri)
+      );
       paintNavSummaries();
       return;
     }
@@ -1588,6 +1600,15 @@
           onedriveEmail: st.email || "",
           onedrivePending: null,
         });
+        if (st.outlookConnected) {
+          stopOlPoll();
+          me = Object.assign({}, me, {
+            outlookConnected: true,
+            outlookEmail: st.outlookEmail || "",
+            outlookPending: null,
+          });
+          paintOutlook();
+        }
         paintOnedrive();
         await loadDashboard();
         return;
@@ -1595,6 +1616,7 @@
       if (st.pending && (st.pending.user_code || st.pending.verification_uri)) {
         me = Object.assign({}, me, { onedrivePending: st.pending });
         paintOnedrive();
+        if (st.error) setStatus(odStatus, st.error);
         return;
       }
       stopOdPoll();
@@ -1620,6 +1642,15 @@
           outlookEmail: st.email || "",
           outlookPending: null,
         });
+        if (st.onedriveConnected) {
+          stopOdPoll();
+          me = Object.assign({}, me, {
+            onedriveConnected: true,
+            onedriveEmail: st.onedriveEmail || "",
+            onedrivePending: null,
+          });
+          paintOnedrive();
+        }
         paintOutlook();
         await loadDashboard();
         return;
@@ -1627,6 +1658,7 @@
       if (st.pending && (st.pending.user_code || st.pending.verification_uri)) {
         me = Object.assign({}, me, { outlookPending: st.pending });
         paintOutlook();
+        if (st.error) setStatus(olStatus, st.error);
         return;
       }
       stopOlPoll();
@@ -1658,24 +1690,47 @@
     if (me?.outlookPending && !me.outlookConnected) tickOutlook();
   });
 
+  async function beginMicrosoftConnect(kind) {
+    const popup = window.open("https://login.microsoft.com/device", `eps-ms-${kind}`);
+    const started = await api(`/v1/me/${kind}/start`, {
+      method: "POST",
+      body: "{}",
+      timeoutMs: 20000,
+    });
+    if (!started.user_code) {
+      if (popup && !popup.closed) popup.close();
+      return started;
+    }
+    const openAt =
+      started.verification_uri_complete ||
+      microsoftDeviceUrl(started.user_code, started.verification_uri);
+    try {
+      await navigator.clipboard.writeText(started.user_code);
+    } catch {
+      /* clipboard is optional */
+    }
+    if (popup && !popup.closed) popup.location.replace(openAt);
+    else window.open(openAt, `eps-ms-${kind}`);
+    return started;
+  }
+
   document.getElementById("onedrive-start").addEventListener("click", async () => {
     try {
       if (!signedInViaGoogle()) {
         setStatus(odStatus, NEED_GOOGLE);
         return;
       }
-      const started = await api("/v1/me/onedrive/start", { method: "POST", body: "{}" });
+      const started = await beginMicrosoftConnect("onedrive");
       if (started.user_code) {
         me = Object.assign({}, me, {
           onedrivePending: {
             user_code: started.user_code,
             verification_uri: started.verification_uri,
+            verification_uri_complete: started.verification_uri_complete,
             message: started.message,
           },
         });
         paintOnedrive();
-        const openAt = started.verification_uri_complete || started.verification_uri;
-        if (openAt) window.open(openAt, "_blank", "noopener");
         watchOnedrive();
       } else {
         setStatus(odStatus, started.message || "Microsoft would not start school sign-in.");
@@ -1692,18 +1747,17 @@
         setStatus(olStatus, NEED_GOOGLE);
         return;
       }
-      const started = await api("/v1/me/outlook/start", { method: "POST", body: "{}", timeoutMs: 20000 });
+      const started = await beginMicrosoftConnect("outlook");
       if (started.user_code) {
         me = Object.assign({}, me, {
           outlookPending: {
             user_code: started.user_code,
             verification_uri: started.verification_uri,
+            verification_uri_complete: started.verification_uri_complete,
             message: started.message,
           },
         });
         paintOutlook();
-        const openAt = started.verification_uri_complete || started.verification_uri;
-        if (openAt) window.open(openAt, "_blank", "noopener");
         watchOutlook();
       } else {
         setStatus(olStatus, started.message || "Microsoft would not start Outlook sign-in.");

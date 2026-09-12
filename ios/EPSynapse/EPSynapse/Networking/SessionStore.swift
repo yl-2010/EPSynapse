@@ -202,6 +202,7 @@ If you skip Save key, chat will send you back to these steps.
       profile?.onedrivePending = DevicePending(
         user_code: started.user_code,
         verification_uri: started.verification_uri,
+        verification_uri_complete: started.verification_uri_complete,
         message: started.message
       )
       paintConnections()
@@ -234,6 +235,7 @@ If you skip Save key, chat will send you back to these steps.
       profile?.outlookPending = DevicePending(
         user_code: started.user_code,
         verification_uri: started.verification_uri,
+        verification_uri_complete: started.verification_uri_complete,
         message: started.message
       )
       paintConnections()
@@ -454,9 +456,9 @@ If you skip Save key, chat will send you back to these steps.
       odCode = ""
       odURI = ""
     } else if let pending = me.onedrivePending, pending.isActive {
-      onedriveStatus = "Enter this code on the Microsoft page, then come back here. Allow files access."
+      onedriveStatus = "Microsoft should open with this code. Allow access, then come back."
       odCode = pending.user_code
-      odURI = pending.verification_uri
+      odURI = pending.openURL
     } else {
       onedriveStatus = Self.onedriveIdle
       odCode = ""
@@ -468,9 +470,9 @@ If you skip Save key, chat will send you back to these steps.
       olCode = ""
       olURI = ""
     } else if let pending = me.outlookPending, pending.isActive {
-      outlookStatus = "Enter this code on the Microsoft page, then come back here. Allow mail access."
+      outlookStatus = "Microsoft should open with this code. Allow access, then come back."
       olCode = pending.user_code
-      olURI = pending.verification_uri
+      olURI = pending.openURL
     } else {
       outlookStatus = Self.outlookIdle
       olCode = ""

@@ -201,7 +201,10 @@ struct SettingsSheet: View {
             fieldLabel("OneDrive")
             actionRow {
                 glassAction(session.profile?.onedriveConnected == true ? "Reconnect OneDrive" : "Connect OneDrive") {
-                    Task { await session.startOnedrive() }
+                    Task {
+                        await session.startOnedrive()
+                        openDeviceURI(session.odURI)
+                    }
                 }
             }
             Text(session.onedriveStatus)
