@@ -1459,7 +1459,7 @@
       .join("");
     const list = rows
       ? `<ul class="edu-list">${rows}</ul>`
-      : `<p class="edu-empty">Paste a note and classify it</p>`;
+      : `<p class="edu-empty">Paste a note and save it</p>`;
     return `${list}
       <form class="edu-notes-form" id="notes-classify">
         <textarea id="note-text" name="text" maxlength="12000" placeholder="Paste class notes" required></textarea>
