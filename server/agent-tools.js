@@ -72,6 +72,7 @@ import {
   readStudioFile,
   sendStudioChat,
   studioFlags,
+  studioOnenoteToken,
   studioOutlookToken,
   writeStudioFile,
 } from "./studio-ms.js";
@@ -669,6 +670,14 @@ async function graphAccess(student) {
   return fresh.accessToken;
 }
 
+async function onenoteAccess(student) {
+  if (studioFlags(student).onenote) {
+    const tok = await studioOnenoteToken();
+    if (tok) return tok;
+  }
+  return graphAccess(student);
+}
+
 async function mailAccess(student) {
   if (student?.outlook?.accessToken) {
     const fresh = await ensureOutlookToken(student.outlook);
@@ -895,7 +904,7 @@ export async function executeAgentTool(call, { ownerId, student, req } = {}) {
         return ok({ name: file.name, contentType: file.contentType, content: text });
       }
       case "list_onenote_notebooks": {
-        const token = await graphAccess(student);
+        const token = await onenoteAccess(student);
         if (!token) return fail("Connect OneDrive in settings first. OneNote uses that sign-in.");
         try {
           return ok({ notebooks: await listNotebooks(token) });
@@ -904,7 +913,7 @@ export async function executeAgentTool(call, { ownerId, student, req } = {}) {
         }
       }
       case "list_onenote_sections": {
-        const token = await graphAccess(student);
+        const token = await onenoteAccess(student);
         if (!token) return fail("Connect OneDrive in settings first. OneNote uses that sign-in.");
         try {
           return ok({ sections: await listOnenoteSections(token, input.notebookId) });
@@ -913,7 +922,7 @@ export async function executeAgentTool(call, { ownerId, student, req } = {}) {
         }
       }
       case "list_onenote_pages": {
-        const token = await graphAccess(student);
+        const token = await onenoteAccess(student);
         if (!token) return fail("Connect OneDrive in settings first. OneNote uses that sign-in.");
         try {
           return ok({
@@ -928,7 +937,7 @@ export async function executeAgentTool(call, { ownerId, student, req } = {}) {
         }
       }
       case "read_onenote_page": {
-        const token = await graphAccess(student);
+        const token = await onenoteAccess(student);
         if (!token) return fail("Connect OneDrive in settings first. OneNote uses that sign-in.");
         try {
           return ok({ page: await getOnenotePage(token, input.id) });
@@ -937,7 +946,7 @@ export async function executeAgentTool(call, { ownerId, student, req } = {}) {
         }
       }
       case "create_onenote_page": {
-        const token = await graphAccess(student);
+        const token = await onenoteAccess(student);
         if (!token) return fail("Connect OneDrive in settings first. OneNote uses that sign-in.");
         try {
           return ok(

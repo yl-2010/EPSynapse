@@ -698,7 +698,7 @@
     if (onSum) {
       onSum.textContent = msNavLabel(
         me && (me.onenoteConnected || me.onedriveConnected),
-        me && me.studioOnedrive,
+        me && me.studioOnenote,
         me && (me.onenoteEmail || me.onedriveEmail),
         "School notebooks"
       );
@@ -2492,7 +2492,7 @@
       prefix: "onenote",
       statusEl: onStatus,
       connected: Boolean(me && (me.onenoteConnected || me.onedriveConnected)),
-      studio: Boolean(me && me.studioOnedrive),
+      studio: Boolean(me && me.studioOnenote),
       email: (me && (me.onenoteEmail || me.onedriveEmail)) || "",
       pending: me && me.onedrivePending,
       lastError: lastOdError,

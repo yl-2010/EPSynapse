@@ -7,7 +7,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
-import { join, relative, resolve, sep } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const TOKEN_SKEW_S = 90;
@@ -25,12 +25,20 @@ function b64urlJson(part) {
   }
 }
 
-function jwtExp(token) {
+function jwtClaims(token) {
   const part = String(token || "").split(".")[1];
-  if (!part) return 0;
+  if (!part) return {};
   const claims = b64urlJson(part);
-  const exp = Number(claims?.exp);
+  return claims && typeof claims === "object" ? claims : {};
+}
+
+function jwtExp(token) {
+  const exp = Number(jwtClaims(token).exp);
   return Number.isFinite(exp) ? exp : 0;
+}
+
+function isNotesToken(token) {
+  return /Notes\.(Read|ReadWrite|Create)/i.test(String(jwtClaims(token).scp || ""));
 }
 
 export function isMacStudio() {
@@ -92,6 +100,18 @@ export function mailModulePath() {
   return String(process.env.STUDIO_MAIL_MODULE || "").trim();
 }
 
+export function onenoteModulePath() {
+  return String(process.env.STUDIO_ONENOTE_MODULE || "").trim();
+}
+
+export function onenoteSessionPath() {
+  const direct = String(process.env.STUDIO_ONENOTE_SESSION || "").trim();
+  if (direct) return resolve(direct);
+  const dir = String(process.env.STUDIO_ONENOTE_DIR || "").trim();
+  if (dir) return join(resolve(dir), "session.json");
+  return "";
+}
+
 function assertUnderRoot(root, target) {
   const base = resolve(root);
   const full = resolve(target);
@@ -113,6 +133,7 @@ async function loadModule(path, cacheHolder) {
 
 const teamsMod = { promise: null };
 const mailMod = { promise: null };
+const onenoteMod = { promise: null };
 
 async function loadTeamsModule() {
   return loadModule(teamsModulePath(), teamsMod);
@@ -122,9 +143,13 @@ async function loadMailModule() {
   return loadModule(mailModulePath(), mailMod);
 }
 
+async function loadOnenoteModule() {
+  return loadModule(onenoteModulePath(), onenoteMod);
+}
+
 export function studioFlags(student) {
   if (!isStudioDemoStudent(student)) {
-    return { onedrive: false, outlook: false, teams: false };
+    return { onedrive: false, outlook: false, teams: false, onenote: false };
   }
   const root = onedriveRoot();
   const onedrive = Boolean(root && existsSync(root));
@@ -133,7 +158,10 @@ export function studioFlags(student) {
   const outlook = Boolean((mail && existsSync(mail)) || (mailModFile && existsSync(mailModFile)));
   const teamsModFile = teamsModulePath();
   const teams = Boolean(teamsModFile && existsSync(teamsModFile));
-  return { onedrive, outlook, teams };
+  const notes = onenoteSessionPath();
+  const notesModFile = onenoteModulePath();
+  const onenote = Boolean((notes && existsSync(notes)) || (notesModFile && existsSync(notesModFile)));
+  return { onedrive, outlook, teams, onenote };
 }
 
 async function walkFiles(root, { depth = 3, cap = 80, q = "" } = {}) {
@@ -275,6 +303,38 @@ export async function studioOutlookToken() {
       return "";
     }
     return readMailSessionToken();
+  }
+  return "";
+}
+
+async function readOnenoteSessionToken() {
+  const path = onenoteSessionPath();
+  if (!path || !existsSync(path)) return "";
+  try {
+    const raw = JSON.parse(await readFile(path, "utf8"));
+    const token = String(raw?.token || raw?.accessToken || "").trim();
+    if (!token || !isNotesToken(token)) return "";
+    const exp = jwtExp(token) || Number(raw.exp) || 0;
+    if (exp && exp * 1000 <= Date.now() + TOKEN_SKEW_S * 1000) return "";
+    return token;
+  } catch {
+    return "";
+  }
+}
+
+export async function studioOnenoteToken() {
+  const live = await readOnenoteSessionToken();
+  if (live) return live;
+  const mod = await loadOnenoteModule();
+  if (mod && typeof mod.runSchoolOnenote === "function") {
+    const session = onenoteSessionPath();
+    const root = session ? dirname(session) : undefined;
+    try {
+      await mod.runSchoolOnenote(["notebooks"], root ? { root } : {});
+    } catch {
+      return "";
+    }
+    return readOnenoteSessionToken();
   }
   return "";
 }
