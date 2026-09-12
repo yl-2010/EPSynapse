@@ -9,7 +9,6 @@ struct ClassView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @State private var todoExpanded = false
-    @State private var datesExpanded = false
 
     private var schoolClass: SchoolClass? {
         dashboard.schoolClass(id: classId)
@@ -38,16 +37,6 @@ struct ClassView: View {
         items.filter(\.done)
     }
 
-    private var datedItems: [Assignment] {
-        items
-            .filter { !$0.due.isEmpty }
-            .sorted { $0.due < $1.due }
-    }
-
-    private var visibleDates: [Assignment] {
-        datesExpanded ? datedItems : Array(datedItems.prefix(Self.collapsedLimit))
-    }
-
     private var classNotes: [ClassifiedNote] {
         guard let schoolClass else { return [] }
         return dashboard.notes(for: schoolClass)
@@ -64,7 +53,6 @@ struct ClassView: View {
                     }
                     todoPanel
                     completedPanel
-                    datesPanel
                     notesPanel
                 } else {
                     EmptyLine("This class is gone from the schedule.")
@@ -173,20 +161,6 @@ struct ClassView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(doneItems) { item in
                         TodoRow(item: item)
-                    }
-                }
-            }
-        }
-    }
-
-    private var datesPanel: some View {
-        EPSPanel(title: "Dates", expanded: datesExpanded, onToggleExpanded: { datesExpanded.toggle() }) {
-            if datedItems.isEmpty {
-                EmptyLine("No upcoming dates")
-            } else {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(visibleDates) { item in
-                        DateRow(item: item)
                     }
                 }
             }

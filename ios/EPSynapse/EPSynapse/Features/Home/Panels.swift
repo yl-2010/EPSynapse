@@ -333,58 +333,6 @@ struct ClassRow: View {
     }
 }
 
-struct DatesPanel: View {
-    @EnvironmentObject private var dashboard: DashboardStore
-    @State private var expanded = false
-
-    private static let collapsedLimit = 6
-
-    private var items: [Assignment] {
-        dashboard.assignments
-            .filter { !$0.due.isEmpty && TodoPanel.matches($0, filter: dashboard.typeFilter) }
-            .sorted { $0.due < $1.due }
-    }
-
-    private var visible: [Assignment] {
-        expanded ? items : Array(items.prefix(Self.collapsedLimit))
-    }
-
-    var body: some View {
-        EPSPanel(title: "Dates", filters: true, expanded: expanded, onToggleExpanded: { expanded.toggle() }) {
-            if items.isEmpty {
-                EmptyLine("No upcoming dates")
-            } else {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(visible) { item in
-                        DateRow(item: item)
-                    }
-                }
-            }
-        }
-    }
-}
-
-struct DateRow: View {
-    var item: Assignment
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                EPSTagChip(tag: item.tag)
-                Text(item.title)
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(EPSTheme.fg)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            Text(EPSDueFormat.due(item.due))
-                .font(.caption)
-                .foregroundStyle(EPSTheme.muted)
-        }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 8)
-    }
-}
-
 struct FilesPanel: View {
     @EnvironmentObject private var session: SessionStore
     @EnvironmentObject private var dashboard: DashboardStore

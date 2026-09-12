@@ -23,9 +23,7 @@
   let olPollInFlight = false;
   const TAGS = ["CW", "HW", "QA", "MA"];
   const typeFilter = new Set(TAGS);
-  const DATES_COLLAPSED_LIMIT = 6;
   const TODOS_COLLAPSED_LIMIT = 6;
-  let datesExpanded = false;
   let todoExpanded = true;
   let lastHome = {
     courses: [],
@@ -703,14 +701,10 @@
     </section>`;
   }
 
-  function collapseTitle(title, kind, expanded) {
-    const isDates = kind === "dates";
-    const cls = isDates ? "edu-dates-toggle" : "edu-todos-toggle";
-    const attr = isDates ? "data-dates-expand" : "data-todos-expand";
-    const noun = isDates ? "dates" : "todos";
-    return `<button type="button" class="${cls}" ${attr} aria-expanded="${
+  function collapseTitle(title, expanded) {
+    return `<button type="button" class="edu-todos-toggle" data-todos-expand aria-expanded="${
       expanded ? "true" : "false"
-    }" aria-label="${expanded ? "Collapse" : "Expand"} ${noun}">${escapeHtml(title)}</button>`;
+    }" aria-label="${expanded ? "Collapse" : "Expand"} todos">${escapeHtml(title)}</button>`;
   }
 
   function collapsedSlice(items, expanded, limit) {
@@ -764,7 +758,6 @@
       row.classList.toggle("is-filter-hidden", !typeFilter.has(tag));
     });
     applyCollapseHidden("lg-edu-todo", todoExpanded, TODOS_COLLAPSED_LIMIT);
-    applyCollapseHidden("lg-edu-dates", datesExpanded, DATES_COLLAPSED_LIMIT);
     document.querySelectorAll(".edu-list").forEach((list) => {
       const rows = [...list.querySelectorAll(":scope > .edu-row[data-tag]")];
       if (!rows.length) return;
@@ -1034,14 +1027,6 @@
     </li>`;
   }
 
-  function dateRow(t) {
-    const tag = t.tag || "HW";
-    return `<li class="edu-row${tag === "MA" ? " is-ma" : ""}" data-tag="${escapeHtml(tag)}">
-      <span class="edu-name"><span class="edu-tag edu-tag-${escapeHtml(tag)}">${escapeHtml(tag)}</span> ${escapeHtml(t.title)}</span>
-      <span class="edu-meta">${escapeHtml(formatDue(t.due))}</span>
-    </li>`;
-  }
-
   function fileTile(f, i) {
     const href = f.webUrl || `${apiBase}/v1/me/onedrive/file?id=${encodeURIComponent(f.id)}`;
     return `<a class="edu-file-tile" href="${escapeHtml(href)}" target="_blank" rel="noopener" data-filter-id="lg-file-${i}" title="${escapeHtml(f.name)}"><span class="edu-file-name">${escapeHtml(f.name)}</span></a>`;
@@ -1132,9 +1117,6 @@
     };
     const open = (lastHome.assignments || []).filter((t) => !t.done);
     const done = (lastHome.assignments || []).filter((t) => t.done);
-    const dates = (lastHome.assignments || [])
-      .filter((t) => t.due)
-      .sort((a, b) => String(a.due).localeCompare(String(b.due)));
     const fileTiles = (lastHome.files || []).map(fileTile).join("");
     const classItems = homeClasses();
 
@@ -1157,14 +1139,13 @@
       <p class="edu-home-mark">EPSynapse</p>
       <div class="edu-grid edu-grid--home">
         <div class="edu-col edu-col--main">
-          ${panelHtml("TODO", listOrEmpty(open.map(todoRow).join(""), todoEmpty), "lg-edu-todo", "", todoExpanded ? filterBarHtml("todo") : "", collapseTitle("TODO", "todos", todoExpanded))}
+          ${panelHtml("TODO", listOrEmpty(open.map(todoRow).join(""), todoEmpty), "lg-edu-todo", "", todoExpanded ? filterBarHtml("todo") : "", collapseTitle("TODO", todoExpanded))}
           ${panelHtml("Completed", listOrEmpty(done.map(todoRow).join(""), "Nothing completed yet"), "lg-edu-completed", "edu-panel--completed")}
           ${panelHtml("Notes", notesPanelHtml(), "lg-edu-notes", "edu-panel--notes")}
         </div>
         <div class="edu-col edu-col--side">
           ${panelHtml("Classes", listOrEmpty(classItems.map(classRow).join(""), classEmpty), "lg-edu-classes")}
           ${panelHtml("Grades", listOrEmpty(gradeItems.map(gradeRow).join(""), gradeEmpty), "lg-edu-grades")}
-          ${panelHtml("Dates", listOrEmpty(dates.map(dateRow).join(""), "No upcoming dates"), "lg-edu-dates", "", filterBarHtml("dates"), collapseTitle("Dates", "dates", datesExpanded))}
           ${panelHtml("Files", fileTiles ? `<div class="edu-files">${fileTiles}</div>` : `<p class="edu-empty">${escapeHtml(fileEmpty)}</p>`, "lg-edu-files")}
           ${panelHtml("Mail", mailPanelHtml(lastHome.messages), "lg-edu-mail")}
         </div>
@@ -1217,9 +1198,6 @@
     const work = (lastHome.assignments || []).filter((t) => classMatchesWork(klass, t));
     const open = work.filter((t) => !t.done);
     const done = work.filter((t) => t.done);
-    const dates = work
-      .filter((t) => t.due)
-      .sort((a, b) => String(a.due).localeCompare(String(b.due)));
     const nameHint = String(klass.name || "").toLowerCase();
     const files = (lastHome.files || []).filter((f) => {
       if (!nameHint) return false;
@@ -1264,11 +1242,10 @@
       </header>
       <div class="edu-grid edu-grid--home">
         <div class="edu-col edu-col--main">
-          ${panelHtml("TODO", listOrEmpty(open.map(todoRow).join(""), "No open work for this class"), "lg-edu-todo", "", todoExpanded ? filterBarHtml("todo") : "", collapseTitle("TODO", "todos", todoExpanded))}
+          ${panelHtml("TODO", listOrEmpty(open.map(todoRow).join(""), "No open work for this class"), "lg-edu-todo", "", todoExpanded ? filterBarHtml("todo") : "", collapseTitle("TODO", todoExpanded))}
           ${panelHtml("Completed", listOrEmpty(done.map(todoRow).join(""), "Nothing completed yet"), "lg-edu-completed", "edu-panel--completed")}
         </div>
         <div class="edu-col edu-col--side">
-          ${panelHtml("Dates", listOrEmpty(dates.map(dateRow).join(""), "No upcoming dates"), "lg-edu-dates", "", filterBarHtml("dates"), collapseTitle("Dates", "dates", datesExpanded))}
           ${panelHtml("Files", fileTiles ? `<div class="edu-files">${fileTiles}</div>` : `<p class="edu-empty">No files for this class</p>`, "lg-edu-files")}
           ${panelHtml("Notes", listOrEmpty(noteRows, "No notes for this class yet"), "lg-edu-class-notes")}
         </div>
@@ -2149,13 +2126,6 @@
 
   appEl.addEventListener("click", (ev) => {
     const t = ev.target;
-    const datesToggle = t.closest?.("[data-dates-expand]");
-    if (datesToggle) {
-      ev.preventDefault();
-      datesExpanded = !datesExpanded;
-      routeAndRender();
-      return;
-    }
     const todosToggle = t.closest?.("[data-todos-expand]");
     if (todosToggle) {
       ev.preventDefault();
