@@ -238,7 +238,8 @@
     </div>
 
     <div id="settings-sheet" class="edu-sheet-backdrop" hidden>
-      <form class="edu-sheet edu-sheet--set" autocomplete="off">
+      <form id="settings-form" class="set-stage" autocomplete="off">
+      <div class="edu-sheet edu-sheet--set" id="settings-main">
         <div class="edu-sheet-head">
           <h2 class="edu-sheet-title">Settings</h2>
           <button
@@ -302,20 +303,6 @@
             <input id="canvasHost" name="canvasHost" value="https://eastsideprep.instructure.com" />
           </div>
 
-          <div id="canvas-ready" hidden>
-            <div class="set-row">
-              <p class="set-ready">Canvas connected</p>
-              <button type="button" id="canvas-replace" class="set-textbtn">Replace token</button>
-            </div>
-          </div>
-          <div id="canvas-entry">
-            <label for="canvasToken">Canvas token</label>
-            <div class="edu-sheet-field">
-              <input id="canvasToken" name="canvasToken" type="password" autocomplete="off" />
-            </div>
-            <p class="set-hint">Canvas → Account → Settings → New Access Token</p>
-          </div>
-
           <div class="edu-sheet-actions">
             <button type="submit" id="settings-save" class="edu-sheet-btn edu-sheet-btn--gold">Save</button>
           </div>
@@ -339,34 +326,87 @@
         </section>
 
         <section class="set-block">
-          <h3>Chat</h3>
-          <div id="key-ready" hidden>
-            <div class="set-row">
-              <p class="set-ready" id="key-ready-label"></p>
-              <div class="set-actions">
-                <button type="button" id="key-replace" class="set-textbtn">Replace</button>
-                <button type="button" id="key-clear" class="set-textbtn">Clear</button>
-              </div>
-            </div>
-          </div>
-          <div id="key-entry">
-            <label for="provider">Model</label>
-            <div class="edu-sheet-field">
-              <select id="provider" name="provider"></select>
-            </div>
-            <label for="modelKey">API key</label>
-            <div class="edu-sheet-field">
-              <input id="modelKey" name="modelKey" type="password" autocomplete="off" placeholder="gsk_…" />
-            </div>
-            <div class="edu-sheet-actions">
-              <button type="button" id="key-save" class="edu-sheet-btn edu-sheet-btn--gold">Save key</button>
-            </div>
-          </div>
-          <p class="set-hint" id="key-status"></p>
-          <a class="set-link" href="/groq">How to get a Groq key</a>
+          <h3>Keys</h3>
+          <button type="button" id="keys-open" class="set-nav">
+            <span class="set-nav-copy">
+              <span class="set-nav-title">API keys</span>
+              <span class="set-nav-meta" id="keys-summary">Groq and Canvas</span>
+            </span>
+            <svg class="set-nav-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M9 6.2L15.2 12L9 17.8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
         </section>
         </div>
         </div>
+      </div>
+
+      <div class="edu-sheet edu-sheet--set edu-sheet--keys" id="settings-keys" aria-hidden="true" inert>
+        <div class="edu-sheet-head">
+          <h2 class="edu-sheet-title">API keys</h2>
+          <button
+            type="button"
+            id="keys-close"
+            class="edu-sheet-close"
+            aria-label="Close API keys"
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" shape-rendering="geometricPrecision" aria-hidden="true">
+              <path
+                d="M5.448 7.252 16.748 18.552a1.275 1.275 0 0 0 1.804-1.804L7.252 5.448a1.275 1.275 0 0 0-1.804 1.804Zm11.3-1.804L5.448 16.748a1.275 1.275 0 0 0 1.804 1.804L18.552 7.252a1.275 1.275 0 0 0-1.804-1.804Z"
+              />
+            </svg>
+          </button>
+        </div>
+        <div class="edu-sheet-body">
+          <section class="set-block">
+            <h3>Chat</h3>
+            <div id="key-ready" hidden>
+              <div class="set-row">
+                <p class="set-ready" id="key-ready-label"></p>
+                <div class="set-actions">
+                  <button type="button" id="key-replace" class="set-textbtn">Replace</button>
+                  <button type="button" id="key-clear" class="set-textbtn">Clear</button>
+                </div>
+              </div>
+            </div>
+            <div id="key-entry">
+              <label for="provider">Model</label>
+              <div class="edu-sheet-field">
+                <select id="provider" name="provider"></select>
+              </div>
+              <label for="modelKey">API key</label>
+              <div class="edu-sheet-field">
+                <input id="modelKey" name="modelKey" type="password" autocomplete="off" placeholder="gsk_…" />
+              </div>
+              <div class="edu-sheet-actions">
+                <button type="button" id="key-save" class="edu-sheet-btn edu-sheet-btn--gold">Save key</button>
+              </div>
+            </div>
+            <p class="set-hint" id="key-status"></p>
+            <a class="set-link" href="/groq">How to get a Groq key</a>
+          </section>
+
+          <section class="set-block">
+            <h3>Canvas</h3>
+            <div id="canvas-ready" hidden>
+              <div class="set-row">
+                <p class="set-ready">Canvas connected</p>
+                <button type="button" id="canvas-replace" class="set-textbtn">Replace token</button>
+              </div>
+            </div>
+            <div id="canvas-entry">
+              <label for="canvasToken">Access token</label>
+              <div class="edu-sheet-field">
+                <input id="canvasToken" name="canvasToken" type="password" autocomplete="off" />
+              </div>
+              <p class="set-hint">Canvas → Account → Settings → New Access Token</p>
+            </div>
+            <div class="edu-sheet-actions">
+              <button type="submit" class="edu-sheet-btn edu-sheet-btn--gold">Save token</button>
+            </div>
+          </section>
+        </div>
+      </div>
       </form>
     </div>
 

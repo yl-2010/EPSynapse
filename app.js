@@ -7,7 +7,8 @@
   const stage = document.getElementById("stage-full");
   const appEl = document.getElementById("edu-app");
   const sheet = document.getElementById("settings-sheet");
-  const form = sheet.querySelector(".edu-sheet");
+  const form = document.getElementById("settings-form") || sheet.querySelector("form");
+  const keysPanel = document.getElementById("settings-keys");
   const statusEl = document.getElementById("settings-status");
   const odStatus = document.getElementById("onedrive-status");
   const olStatus = document.getElementById("outlook-status");
@@ -392,11 +393,62 @@
     if (appEl) appEl.innerHTML = "";
   }
 
+  function glassAfterMove() {
+    queueMicrotask(() => window.reinitLiquidGlass?.());
+  }
+
+  function keysOpen() {
+    return sheet.classList.contains("is-keys");
+  }
+
+  function paintKeysSummary() {
+    const el = document.getElementById("keys-summary");
+    if (!el) return;
+    const key = localStorage.getItem(LS_KEY) || "";
+    const id = providerSel.value || localStorage.getItem(LS_PROV) || "groq";
+    const bits = [];
+    if (key) bits.push(`${id} · ends ${key.slice(-4)}`);
+    if (me && me.canvasConnected) bits.push("Canvas");
+    el.textContent = bits.length ? bits.join(" · ") : "Groq and Canvas";
+  }
+
+  function openKeys() {
+    if (!signedInViaGoogle()) return;
+    sheet.classList.add("is-keys");
+    if (keysPanel) {
+      keysPanel.setAttribute("aria-hidden", "false");
+      keysPanel.removeAttribute("inert");
+    }
+    refreshKeyStatus();
+    paintCanvasToken();
+    paintKeysSummary();
+    glassAfterMove();
+    window.setTimeout(glassAfterMove, 320);
+    window.setTimeout(glassAfterMove, 680);
+  }
+
+  function closeKeys(immediate) {
+    const keyEntry = document.getElementById("key-entry");
+    const canvasEntry = document.getElementById("canvas-entry");
+    if (keyEntry) delete keyEntry.dataset.replace;
+    if (canvasEntry) delete canvasEntry.dataset.replace;
+    sheet.classList.remove("is-keys");
+    if (keysPanel) {
+      keysPanel.setAttribute("aria-hidden", "true");
+      keysPanel.setAttribute("inert", "");
+    }
+    refreshKeyStatus();
+    paintCanvasToken();
+    paintKeysSummary();
+    glassAfterMove();
+    if (!immediate) window.setTimeout(glassAfterMove, 620);
+  }
+
   function openSheet() {
     if (!signedInViaGoogle()) return;
+    closeKeys(true);
     sheet.hidden = false;
-    document.querySelector(".edu-sheet-body")?.scrollTo(0, 0);
-    form.scrollTop = 0;
+    document.querySelector("#settings-main .edu-sheet-body")?.scrollTo(0, 0);
     const keyEntry = document.getElementById("key-entry");
     const canvasEntry = document.getElementById("canvas-entry");
     if (keyEntry) delete keyEntry.dataset.replace;
@@ -405,13 +457,15 @@
     paintAccount();
     refreshKeyStatus();
     paintCanvasToken();
+    paintKeysSummary();
     paintOnedrive();
     paintOutlook();
-    queueMicrotask(() => window.reinitLiquidGlass?.());
+    glassAfterMove();
   }
 
   function closeSheet() {
     hideSchoolResults();
+    closeKeys(true);
     sheet.hidden = true;
   }
 
@@ -749,6 +803,7 @@
     const replacing = entry && entry.dataset.replace === "1";
     if (entry) entry.hidden = connected && !replacing;
     if (ready) ready.hidden = !connected;
+    paintKeysSummary();
   }
 
   function refreshKeyStatus() {
@@ -761,6 +816,7 @@
     if (entry) entry.hidden = Boolean(key) && !replacing;
     if (ready) ready.hidden = !key;
     if (readyLabel) readyLabel.textContent = key ? `${id} · ends ${key.slice(-4)}` : "";
+    paintKeysSummary();
     if (key && !replacing) {
       setStatus(keyStatus, "");
       return;
@@ -878,7 +934,9 @@
     if (!wrap) hideSchoolResults();
   });
   sheet.addEventListener("click", (ev) => {
-    if (ev.target === sheet) closeSheet();
+    if (ev.target !== sheet) return;
+    if (keysOpen()) closeKeys();
+    else closeSheet();
   });
   document.addEventListener("keydown", (ev) => {
     if (ev.key === "Escape" && !sheet.hidden) {
@@ -887,8 +945,18 @@
         hideSchoolResults();
         return;
       }
+      if (keysOpen()) {
+        closeKeys();
+        return;
+      }
       closeSheet();
     }
+  });
+  document.getElementById("keys-open")?.addEventListener("click", () => {
+    openKeys();
+  });
+  document.getElementById("keys-close")?.addEventListener("click", () => {
+    closeKeys();
   });
   appEl.addEventListener("change", (ev) => {
     const input = ev.target.closest("input[data-filter]");
