@@ -4,10 +4,6 @@
  */
 
 import {
-  markAssignmentComplete,
-  markAssignmentIncomplete,
-} from "./canvas.js";
-import {
   createNote,
   deleteNote,
   listNotes,
@@ -31,6 +27,7 @@ import {
   patchTodo,
   readClassFile,
   renameClass,
+  setCanvasTodoDone,
   writeClassFile,
 } from "./workspace.js";
 import {
@@ -203,7 +200,7 @@ export const AGENT_TOOLS = [
     type: "function",
     function: {
       name: "complete_todo",
-      description: "Check a todo done. Works for local todos and Canvas assignments.",
+      description: "Check a todo done. Local only. Does not change Canvas.",
       parameters: {
         type: "object",
         properties: {
@@ -612,16 +609,7 @@ export async function executeAgentTool(call, { ownerId, student, req } = {}) {
           const todo = await patchTodo(ownerId, input.id, { done });
           return ok({ todo }, { kinds: ["todos"] });
         }
-        if (!student?.canvasToken) return fail("Connect Canvas to check off that assignment.");
-        const saved = done
-          ? await markAssignmentComplete(student.canvasHost, student.canvasToken, {
-              id: input.id,
-              canvasId: input.id,
-            })
-          : await markAssignmentIncomplete(student.canvasHost, student.canvasToken, {
-              id: input.id,
-              canvasId: input.id,
-            });
+        const saved = await setCanvasTodoDone(ownerId, input.id, done);
         return ok({ todo: saved }, { kinds: ["todos"] });
       }
       case "delete_todo": {

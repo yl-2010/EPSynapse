@@ -32,8 +32,6 @@ import {
   listAssignments,
   listCourses,
   listGrades,
-  markAssignmentComplete,
-  markAssignmentIncomplete,
   normalizeHost,
   validateToken,
 } from "./canvas.js";
@@ -138,6 +136,7 @@ import {
   mergeAssignments,
   parseClassFileId,
   patchTodo,
+  setCanvasTodoDone,
   readClassFile,
   renameClass,
   writeClassFile,
@@ -402,8 +401,13 @@ async function liveSnapshot(student) {
   if (student.canvasToken) {
     try {
       const dash = await dashboardPayload(student.canvasHost, student.canvasToken);
+      const ownerId = ownerIdForStudent(student);
+      const meta = ownerId
+        ? await loadWorkspaceMeta(ownerId).catch(() => ({ hiddenTodoIds: [], canvasTodoDone: {} }))
+        : { hiddenTodoIds: [], canvasTodoDone: {} };
+      const assignments = mergeAssignments(dash.assignments, [], meta.hiddenTodoIds, meta.canvasTodoDone);
       const courses = (dash.courses || []).map((c) => c.name).filter(Boolean).slice(0, 12);
-      const open = (dash.assignments || [])
+      const open = (assignments || [])
         .filter((a) => !a.done)
         .slice(0, 8)
         .map((a) => {
@@ -765,8 +769,10 @@ app.get("/v1/me/canvas/assignments", async (req, res) => {
       canvas = await listAssignments(student.canvasHost, student.canvasToken).catch(() => []);
     }
     const local = ownerId ? await listTodos(ownerId).catch(() => []) : [];
-    const meta = ownerId ? await loadWorkspaceMeta(ownerId).catch(() => ({ hiddenTodoIds: [] })) : { hiddenTodoIds: [] };
-    return res.json({ assignments: mergeAssignments(canvas, local, meta.hiddenTodoIds) });
+    const meta = ownerId
+      ? await loadWorkspaceMeta(ownerId).catch(() => ({ hiddenTodoIds: [], canvasTodoDone: {} }))
+      : { hiddenTodoIds: [], canvasTodoDone: {} };
+    return res.json({ assignments: mergeAssignments(canvas, local, meta.hiddenTodoIds, meta.canvasTodoDone) });
   } catch (err) {
     return fail(res, err, err.status || 502);
   }
@@ -780,16 +786,10 @@ app.post("/v1/me/canvas/assignments/:id/complete", async (req, res) => {
     if (ownerId && isLocalTodoId(req.params.id)) {
       return res.json(await patchTodo(ownerId, req.params.id, { done: true }));
     }
-    if (!student.canvasToken) {
-      return res.status(400).json({ error: "Connect Canvas in settings first." });
+    if (!ownerId) {
+      return res.status(400).json({ error: "Sign in to check off work." });
     }
-    const saved = await markAssignmentComplete(student.canvasHost, student.canvasToken, {
-      id: req.params.id,
-      canvasId: req.body?.canvasId || req.params.id,
-      plannerOverrideId: req.body?.plannerOverrideId,
-      plannableType: req.body?.plannableType,
-    });
-    return res.json(saved);
+    return res.json(await setCanvasTodoDone(ownerId, req.params.id, true, req.body || {}));
   } catch (err) {
     return fail(res, err, err.status || 502);
   }
@@ -803,16 +803,10 @@ app.post("/v1/me/canvas/assignments/:id/incomplete", async (req, res) => {
     if (ownerId && isLocalTodoId(req.params.id)) {
       return res.json(await patchTodo(ownerId, req.params.id, { done: false }));
     }
-    if (!student.canvasToken) {
-      return res.status(400).json({ error: "Connect Canvas in settings first." });
+    if (!ownerId) {
+      return res.status(400).json({ error: "Sign in to check off work." });
     }
-    const saved = await markAssignmentIncomplete(student.canvasHost, student.canvasToken, {
-      id: req.params.id,
-      canvasId: req.body?.canvasId || req.params.id,
-      plannerOverrideId: req.body?.plannerOverrideId,
-      plannableType: req.body?.plannableType,
-    });
-    return res.json(saved);
+    return res.json(await setCanvasTodoDone(ownerId, req.params.id, false, req.body || {}));
   } catch (err) {
     return fail(res, err, err.status || 502);
   }

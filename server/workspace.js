@@ -121,7 +121,17 @@ export function publicTodoId(id) {
 }
 
 function emptyMeta() {
-  return { classAliases: {}, hiddenTodoIds: [] };
+  return { classAliases: {}, hiddenTodoIds: [], canvasTodoDone: {} };
+}
+
+function cleanCanvasTodoDone(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out = {};
+  for (const [key, value] of Object.entries(raw)) {
+    const id = String(key || "").trim();
+    if (id) out[id] = Boolean(value);
+  }
+  return out;
 }
 
 export async function loadWorkspaceMeta(ownerId) {
@@ -133,13 +143,14 @@ export async function loadWorkspaceMeta(ownerId) {
   const hidden = Array.isArray(raw?.hiddenTodoIds)
     ? raw.hiddenTodoIds.map((x) => String(x || "").trim()).filter(Boolean)
     : [];
-  return { classAliases: aliases, hiddenTodoIds: hidden };
+  return { classAliases: aliases, hiddenTodoIds: hidden, canvasTodoDone: cleanCanvasTodoDone(raw?.canvasTodoDone) };
 }
 
 async function saveWorkspaceMeta(ownerId, meta) {
   await writeJsonAtomic(metaPath(ownerId), {
     classAliases: meta.classAliases || {},
     hiddenTodoIds: meta.hiddenTodoIds || [],
+    canvasTodoDone: cleanCanvasTodoDone(meta.canvasTodoDone),
   });
 }
 
@@ -298,12 +309,47 @@ export async function hideCanvasTodo(ownerId, canvasId) {
   return { ok: true, id };
 }
 
-export function mergeAssignments(canvasRows, localRows, hiddenIds = []) {
+export async function setCanvasTodoDone(ownerId, canvasId, done, extra = {}) {
+  const id = String(canvasId || extra.canvasId || "").trim();
+  if (!id) {
+    const err = new Error("Missing todo id.");
+    err.status = 400;
+    throw err;
+  }
+  const meta = await loadWorkspaceMeta(ownerId);
+  meta.canvasTodoDone[id] = Boolean(done);
+  await saveWorkspaceMeta(ownerId, meta);
+  return {
+    id,
+    canvasId: id,
+    done: Boolean(done),
+    plannerOverrideId: String(extra.plannerOverrideId || "").trim(),
+    plannableType: String(extra.plannableType || "assignment").trim() || "assignment",
+  };
+}
+
+function overlayCanvasDone(row, doneMap) {
+  if (!row || !doneMap) return row;
+  const id = String(row.id || "");
+  const canvasId = String(row.canvasId || "");
+  if (id && Object.prototype.hasOwnProperty.call(doneMap, id)) {
+    return { ...row, done: Boolean(doneMap[id]) };
+  }
+  if (canvasId && canvasId !== id && Object.prototype.hasOwnProperty.call(doneMap, canvasId)) {
+    return { ...row, done: Boolean(doneMap[canvasId]) };
+  }
+  return row;
+}
+
+export function mergeAssignments(canvasRows, localRows, hiddenIds = [], canvasTodoDone = {}) {
   const hidden = new Set((hiddenIds || []).map((x) => String(x)));
-  const canvas = (canvasRows || []).filter((row) => {
-    const id = String(row?.id || row?.canvasId || "");
-    return id && !hidden.has(id);
-  });
+  const doneMap = cleanCanvasTodoDone(canvasTodoDone);
+  const canvas = (canvasRows || [])
+    .filter((row) => {
+      const id = String(row?.id || row?.canvasId || "");
+      return id && !hidden.has(id);
+    })
+    .map((row) => overlayCanvasDone(row, doneMap));
   const locals = localRows || [];
   return [...locals, ...canvas];
 }

@@ -1,6 +1,6 @@
 /**
  * Canvas LMS client. Student access token.
- * Reads courses/assignments. The only write is planner complete for TODO checks.
+ * Reads courses, assignments, and grades. Does not write planner overrides.
  */
 
 export const DEFAULT_HOST = "https://eastsideprep.instructure.com";
@@ -593,88 +593,4 @@ export async function dashboardPayload(host, token) {
     listAssignments(host, token),
   ]);
   return { self, courses, assignments };
-}
-
-async function canvasWrite(host, token, path, method, body) {
-  const base = normalizeHost(host);
-  const tokenStr = String(token || "").trim();
-  if (!tokenStr) {
-    const err = new Error("Canvas rejected that token.");
-    err.status = 401;
-    throw err;
-  }
-  const url = `${base}/api/v1${path.startsWith("/") ? path : `/${path}`}`;
-  let res;
-  try {
-    res = await fetch(url, {
-      method,
-      headers: {
-        Authorization: `Bearer ${tokenStr}`,
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body || {}),
-      signal: AbortSignal.timeout(FETCH_MS),
-    });
-  } catch (err) {
-    const timedOut = err && err.name === "TimeoutError";
-    const e = new Error(timedOut ? "Canvas timed out." : "Could not reach Canvas.");
-    e.status = 502;
-    throw e;
-  }
-  if (res.status === 401 || res.status === 403) {
-    const err = new Error("Canvas rejected that token.");
-    err.status = 401;
-    throw err;
-  }
-  if (!res.ok) {
-    const err = new Error(`Canvas returned ${res.status}.`);
-    err.status = res.status >= 400 && res.status < 600 ? res.status : 502;
-    throw err;
-  }
-  const text = await res.text();
-  try {
-    return text ? JSON.parse(text) : {};
-  } catch {
-    return {};
-  }
-}
-
-async function setPlannerComplete(host, token, assignment, done) {
-  const canvasId = String(assignment?.canvasId || assignment?.id || "").trim();
-  if (!canvasId) {
-    const err = new Error("Missing assignment id.");
-    err.status = 400;
-    throw err;
-  }
-  const overrideId = String(assignment?.plannerOverrideId || "").trim();
-  const plannableType = String(assignment?.plannableType || "assignment").trim() || "assignment";
-  const marked = Boolean(done);
-  let saved;
-  if (overrideId) {
-    saved = await canvasWrite(host, token, `/planner/overrides/${encodeURIComponent(overrideId)}`, "PUT", {
-      marked_complete: marked,
-    });
-  } else {
-    saved = await canvasWrite(host, token, "/planner/overrides", "POST", {
-      plannable_type: plannableType,
-      plannable_id: canvasId,
-      marked_complete: marked,
-    });
-  }
-  return {
-    id: canvasId,
-    canvasId,
-    done: marked,
-    plannerOverrideId: String(saved?.id || overrideId).trim(),
-    plannableType,
-  };
-}
-
-export async function markAssignmentComplete(host, token, assignment) {
-  return setPlannerComplete(host, token, assignment, true);
-}
-
-export async function markAssignmentIncomplete(host, token, assignment) {
-  return setPlannerComplete(host, token, assignment, false);
 }
