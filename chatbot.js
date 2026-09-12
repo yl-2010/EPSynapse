@@ -32,8 +32,9 @@
     "4. Open [console.groq.com/keys](https://console.groq.com/keys). Sign up with Google. No credit card. Tap Create API Key and copy the value that starts with `gsk_`. Groq shows the full key only once.",
     "5. Paste it in the API key field. Leave Model on Groq.",
     "6. Tap **Save key**. Enter also saves. Do not use the School Save button for this.",
-    "7. You should land back on the settings list. Chat key must say Groq, not \"Add a Groq key\".",
-    "8. Close settings. Type a question here. Homework, a class, Canvas, the day. The chat uses the key saved on your Google account.",
+    "7. You can add more than one key. If one hits its free limit, chat switches to the next on its own.",
+    "8. You should land back on the settings list. Chat key must say Groq, not \"Add a Groq key\".",
+    "9. Close settings. Type a question here. Homework, a class, Canvas, the day. The chat uses the key saved on your Google account.",
     "",
     "If you skip Save key, chat will send you back to these steps.",
   ].join("\n");

@@ -284,16 +284,27 @@ struct SettingsSheet: View {
 
             if hasChatKey {
                 HStack(alignment: .center, spacing: 12) {
-                    Text(providerLabel)
+                    Text(chatKeyTitle)
                         .font(.body.weight(.semibold))
                         .foregroundStyle(EPSTheme.fg)
                     Spacer(minLength: 8)
-                    textAction("Replace") { replacingKey = true }
-                    textAction("Clear") {
+                    textAction("Add another") { replacingKey = true }
+                    textAction("Clear all") {
                         Task {
                             await session.clearKey()
                             draftKey = ""
                             replacingKey = false
+                        }
+                    }
+                }
+                ForEach(Array(chatKeyHints.enumerated()), id: \.offset) { index, hint in
+                    HStack(alignment: .center, spacing: 12) {
+                        Text("••••\(hint)")
+                            .font(.body)
+                            .foregroundStyle(EPSTheme.fg)
+                        Spacer(minLength: 8)
+                        textAction("Remove") {
+                            Task { await session.removeKey(at: index) }
                         }
                     }
                 }
@@ -621,7 +632,9 @@ struct SettingsSheet: View {
     }
 
     private var chatMeta: String {
-        hasChatKey ? providerLabel : "Add a Groq key"
+        guard hasChatKey else { return "Add a Groq key" }
+        if chatKeyCount > 1 { return "\(providerLabel) · \(chatKeyCount) keys" }
+        return providerLabel
     }
 
     private var canvasMeta: String {
@@ -669,9 +682,26 @@ struct SettingsSheet: View {
     }
 
     private var chatStatusCopy: String {
-        if replacingKey { return "Paste a new key to replace the one on this account." }
+        if replacingKey { return "Paste another key. Chat will use the next one if this one hits its limit." }
         if hasChatKey { return "" }
         return session.keyStatus
+    }
+
+    private var chatKeyCount: Int {
+        let count = session.profile?.modelKeyCount ?? 0
+        if count > 0 { return count }
+        return hasChatKey ? 1 : 0
+    }
+
+    private var chatKeyTitle: String {
+        chatKeyCount > 1 ? "\(providerLabel) · \(chatKeyCount) keys" : providerLabel
+    }
+
+    private var chatKeyHints: [String] {
+        let hints = session.profile?.modelKeyHints ?? []
+        if !hints.isEmpty { return hints }
+        let hint = session.profile?.modelKeyHint ?? ""
+        return hint.isEmpty ? [] : [hint]
     }
 
     private var hasMicrosoftPending: Bool {
@@ -744,6 +774,7 @@ struct SettingsSheet: View {
         "Get a free Groq key at [console.groq.com/keys](https://console.groq.com/keys). Sign up with Google. No credit card. Create API Key, then copy the value that starts with gsk_. Groq shows it only once.",
         "Paste it in the API key field below. Leave Model on Groq.",
         "Tap Save key. Enter also saves. Do not use the School Save button for this.",
+        "You can save more than one key. Chat switches if a key hits its free limit.",
         "Chat key on the settings list must say Groq. Then close settings and ask in the chat pill. Do not paste the key in chat.",
     ]
 

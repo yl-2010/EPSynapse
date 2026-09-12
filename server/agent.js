@@ -61,9 +61,26 @@ const MAX_MESSAGES = 40;
 const MAX_CONTENT = 8000;
 const ALLOWED_ROLES = new Set(["user", "assistant"]);
 
+const KEY_COOLDOWN_MS = 15 * 60 * 1000;
+const KEY_COOLDOWN_MAX_MS = 60 * 60 * 1000;
+const keyCooldown = new Map();
+
+export function demoGroqKeys() {
+  const raw = [process.env.DEMO_GROQ_KEYS, process.env.DEMO_GROQ_KEY].filter(Boolean).join(",");
+  const seen = new Set();
+  const out = [];
+  for (const part of raw.split(/[\s,]+/)) {
+    const key = part.trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(key);
+  }
+  return out;
+}
+
 export function publicAgentConfig() {
   return {
-    demo: { groq: Boolean(process.env.DEMO_GROQ_KEY) },
+    demo: { groq: demoGroqKeys().length > 0 },
     providers: Object.values(PROVIDERS).map((p) => ({
       id: p.id,
       label: p.label,
@@ -79,16 +96,111 @@ export function publicAgentConfig() {
 export const MISSING_KEY_ERROR =
   "Do not paste a key in this chat. Sign in with Google, tap the bottom-left gear, open Chat key, paste a free gsk_ key from console.groq.com/keys, tap Save key, wait until Chat key says Groq, then ask here.";
 
-export function resolveApiKey(req, providerId, student) {
+function keyFingerprint(key) {
+  return String(key || "").slice(-12);
+}
+
+export function parseRetryAfterMs(res) {
+  const raw = res?.headers?.get?.("retry-after");
+  if (!raw) return KEY_COOLDOWN_MS;
+  const sec = Number(raw);
+  if (Number.isFinite(sec) && sec >= 0) {
+    return Math.min(Math.max(sec * 1000, 5_000), KEY_COOLDOWN_MAX_MS);
+  }
+  const when = Date.parse(raw);
+  if (Number.isFinite(when)) {
+    return Math.min(Math.max(when - Date.now(), 5_000), KEY_COOLDOWN_MAX_MS);
+  }
+  return KEY_COOLDOWN_MS;
+}
+
+export function markKeyLimited(key, ms) {
+  const id = keyFingerprint(key);
+  if (!id) return;
+  keyCooldown.set(id, Date.now() + (Number(ms) || KEY_COOLDOWN_MS));
+}
+
+export function isKeyLimited(key) {
+  const id = keyFingerprint(key);
+  if (!id) return false;
+  const until = keyCooldown.get(id);
+  if (!until) return false;
+  if (until <= Date.now()) {
+    keyCooldown.delete(id);
+    return false;
+  }
+  return true;
+}
+
+export function pickApiKey(keys, startIndex = 0) {
+  const list = Array.isArray(keys) ? keys.filter(Boolean) : [];
+  if (!list.length) return { key: "", index: -1 };
+  const n = list.length;
+  const start = ((Number(startIndex) || 0) % n + n) % n;
+  for (let i = 0; i < n; i += 1) {
+    const idx = (start + i) % n;
+    if (!isKeyLimited(list[idx])) return { key: list[idx], index: idx };
+  }
+  return { key: list[start], index: start };
+}
+
+export function studentStoredKeys(student) {
+  const seen = new Set();
+  const out = [];
+  const add = (raw) => {
+    const key = String(raw || "").trim();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    out.push(key);
+  };
+  if (Array.isArray(student?.modelKeys)) student.modelKeys.forEach(add);
+  add(student?.modelKey);
+  return out;
+}
+
+export function resolveApiKeys(req, providerId, student) {
   const header = req.get("authorization") || "";
   const bearer = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
-  if (bearer) return { key: bearer, source: "student" };
-  const stored = String(student?.modelKey || "").trim();
-  if (stored) return { key: stored, source: "account" };
-  if (providerId === "groq" && process.env.DEMO_GROQ_KEY) {
-    return { key: process.env.DEMO_GROQ_KEY, source: "demo" };
+  if (bearer) return { keys: [bearer], source: "student" };
+  const stored = studentStoredKeys(student);
+  if (stored.length) return { keys: stored, source: "account" };
+  if (providerId === "groq") {
+    const demo = demoGroqKeys();
+    if (demo.length) return { keys: demo, source: "demo" };
   }
-  return { key: "", source: "none" };
+  return { keys: [], source: "none" };
+}
+
+export function resolveApiKey(req, providerId, student) {
+  const { keys, source } = resolveApiKeys(req, providerId, student);
+  const picked = pickApiKey(keys);
+  return { key: picked.key, source, keys, index: picked.index };
+}
+
+export async function fetchWithKeyCycle(keys, makeRequest) {
+  const list = Array.isArray(keys) ? keys.filter(Boolean) : [];
+  if (!list.length) return { response: null, key: "", attempts: 0 };
+  let last = null;
+  let lastKey = "";
+  const tried = new Set();
+  let start = 0;
+  while (tried.size < list.length) {
+    const picked = pickApiKey(list, start);
+    if (!picked.key || tried.has(picked.index)) break;
+    tried.add(picked.index);
+    lastKey = picked.key;
+    const response = await makeRequest(picked.key);
+    last = response;
+    const limited =
+      response && (response.status === 429 || response.status === 401 || response.status === 403);
+    if (!response || response.ok || !limited || tried.size >= list.length) {
+      return { response, key: picked.key, attempts: tried.size };
+    }
+    await response.text().catch(() => {});
+    markKeyLimited(picked.key, parseRetryAfterMs(response));
+    start = picked.index + 1;
+  }
+  return { response: last, key: lastKey, attempts: tried.size };
 }
 
 export function sanitizeMessages(raw) {
@@ -212,12 +324,17 @@ export function finishedToolCalls(calls) {
   return (calls || []).filter((c) => c?.function?.name);
 }
 
-export function explainUpstreamError(status, text) {
+export function explainUpstreamError(status, text, extras = {}) {
+  const many = Number(extras.keyCount) > 1;
   if (status === 401 || status === 403) {
-    return "That key was rejected. Check you copied the whole key from the provider dashboard.";
+    return many
+      ? "Every saved key was rejected. Check you copied the whole key from the provider dashboard."
+      : "That key was rejected. Check you copied the whole key from the provider dashboard.";
   }
   if (status === 429) {
-    return "This key hit its free limit. Wait a bit, or try another provider.";
+    return many
+      ? "Every saved key hit its free limit. Wait a bit, or add another key."
+      : "This key hit its free limit. Add another key, wait a bit, or try another provider.";
   }
   const clipped = String(text || "").replace(/\s+/g, " ").slice(0, 240);
   return clipped || `Provider returned ${status}.`;

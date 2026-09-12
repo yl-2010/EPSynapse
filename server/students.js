@@ -19,6 +19,7 @@ const SKEW_SEC = 90;
 const ID_CHARS = /^[A-Za-z0-9._@+\- ]+$/;
 const PROVIDER_IDS = new Set(["groq", "gemini", "openrouter"]);
 const MODEL_KEY_MAX = 256;
+const MODEL_KEY_LIMIT = 8;
 
 const sessions = new Map();
 const sessionsReady = loadSessions();
@@ -91,6 +92,29 @@ export function normalizeModelKey(raw) {
   return key;
 }
 
+export function normalizeModelKeys(keys, legacy) {
+  const out = [];
+  const seen = new Set();
+  const add = (raw) => {
+    let key = "";
+    try {
+      key = normalizeModelKey(raw);
+    } catch {
+      return;
+    }
+    if (!key || seen.has(key) || out.length >= MODEL_KEY_LIMIT) return;
+    seen.add(key);
+    out.push(key);
+  };
+  if (Array.isArray(keys)) keys.forEach(add);
+  add(legacy);
+  return out;
+}
+
+export function studentModelKeys(student) {
+  return normalizeModelKeys(student?.modelKeys, student?.modelKey);
+}
+
 function modelKeyHint(key) {
   const raw = String(key || "");
   return raw.length >= 4 ? raw.slice(-4) : "";
@@ -149,6 +173,7 @@ function hydrate(raw) {
   const graph = src.graph && typeof src.graph === "object" ? src.graph : {};
   const outlook = src.outlook && typeof src.outlook === "object" ? src.outlook : {};
   const teams = src.teams && typeof src.teams === "object" ? src.teams : {};
+  const modelKeys = normalizeModelKeys(src.modelKeys, src.modelKey);
   return {
     googleSub: String(src.googleSub || ""),
     email: String(src.email || ""),
@@ -160,7 +185,8 @@ function hydrate(raw) {
     studentId: String(src.studentId || ""),
     canvasHost: String(src.canvasHost || DEFAULT_CANVAS_HOST),
     canvasToken: String(src.canvasToken || ""),
-    modelKey: String(src.modelKey || ""),
+    modelKeys,
+    modelKey: modelKeys[0] || "",
     modelProvider: normalizeModelProvider(src.modelProvider),
     displayName: String(src.displayName || ""),
     graph: {
@@ -227,9 +253,11 @@ export function publicProfile(student) {
     canvasHost: s.canvasHost,
     displayName: s.displayName,
     canvasConnected: Boolean(s.canvasToken),
-    modelKeySet: Boolean(s.modelKey),
+    modelKeySet: s.modelKeys.length > 0,
     modelProvider: s.modelProvider || "groq",
-    modelKeyHint: modelKeyHint(s.modelKey),
+    modelKeyHint: modelKeyHint(s.modelKeys[0] || s.modelKey),
+    modelKeyHints: s.modelKeys.map(modelKeyHint),
+    modelKeyCount: s.modelKeys.length,
     onedriveConnected: graphConnected(s.graph),
     onedriveEmail: s.graph.email || "",
     onedrivePending: publicPending(s.graph.pending),
@@ -311,6 +339,7 @@ export async function upsertGoogleStudent({ googleSub, email, googleName, pictur
     studentId: "",
     canvasHost: DEFAULT_CANVAS_HOST,
     canvasToken: "",
+    modelKeys: [],
     modelKey: "",
     modelProvider: "groq",
     displayName: "",
@@ -346,7 +375,21 @@ export async function updateStudentProfile(student, patch) {
     s.canvasHost = host || DEFAULT_CANVAS_HOST;
   }
   if (src.canvasToken !== undefined) s.canvasToken = String(src.canvasToken);
-  if (src.modelKey !== undefined) s.modelKey = normalizeModelKey(src.modelKey);
+  if (src.modelKeys !== undefined) {
+    s.modelKeys = normalizeModelKeys(src.modelKeys, "");
+    s.modelKey = s.modelKeys[0] || "";
+  } else if (src.modelKey !== undefined) {
+    const next = studentModelKeys(s);
+    const pasted = normalizeModelKey(src.modelKey);
+    if (pasted && !next.includes(pasted)) {
+      if (next.length >= MODEL_KEY_LIMIT) {
+        throw new Error("That's 8 keys. Remove one first.");
+      }
+      next.push(pasted);
+    }
+    s.modelKeys = next;
+    s.modelKey = next[0] || "";
+  }
   if (src.modelProvider !== undefined) s.modelProvider = normalizeModelProvider(src.modelProvider);
   if (src.displayName !== undefined) {
     const name = String(src.displayName).trim();

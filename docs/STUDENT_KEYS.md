@@ -12,6 +12,8 @@ Live page: https://epsynapse.com (chat pill on the dashboard). `/agent.html` red
 
 That key runs `openai/gpt-oss-120b`, a reasoning model, at Groq speed. Free tier is about 30 requests a minute and 1000 a day. Enough for one student talking through a school day.
 
+They can save more than one key on the same account, up to 8. If a key returns 429 or gets rejected, chat tries the next one on its own. Settings lists each key as its last four characters.
+
 ## The other two options
 
 **Gemini.** [aistudio.google.com/apikey](https://aistudio.google.com/apikey). Same Google account they already have. Stronger thinking. Google may use free-tier prompts to improve the product, which matters if we ever put this in front of a school lawyer.
@@ -22,7 +24,7 @@ Do not send students to OpenAI or Anthropic for this. Those keys are paid.
 
 ## Table demo
 
-If `DEMO_GROQ_KEY` is set in `server/.env`, a visitor with no pasted key can still talk through Groq. That is for the hackathon table. Students should still paste their own key so they are not sharing one quota.
+If `DEMO_GROQ_KEY` or `DEMO_GROQ_KEYS` is set in `server/.env`, a visitor with no pasted key can still talk through Groq. Separate multiple demo keys with commas or spaces. That is for the hackathon table. Students should still paste their own key so they are not sharing one quota.
 
 Never commit the demo key.
 

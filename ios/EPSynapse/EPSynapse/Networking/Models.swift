@@ -20,6 +20,10 @@ private extension KeyedDecodingContainer {
     }
     return 0
   }
+
+  func strings(_ key: Key) -> [String] {
+    (try? decodeIfPresent([String].self, forKey: key)) ?? []
+  }
 }
 
 struct Profile: Codable, Equatable {
@@ -45,6 +49,8 @@ struct Profile: Codable, Equatable {
   var modelKeySet: Bool
   var modelProvider: String
   var modelKeyHint: String
+  var modelKeyHints: [String]
+  var modelKeyCount: Int
   var sessionId: String?
 
   init(
@@ -70,6 +76,8 @@ struct Profile: Codable, Equatable {
     modelKeySet: Bool = false,
     modelProvider: String = "groq",
     modelKeyHint: String = "",
+    modelKeyHints: [String] = [],
+    modelKeyCount: Int = 0,
     sessionId: String? = nil
   ) {
     self.school = school
@@ -94,6 +102,8 @@ struct Profile: Codable, Equatable {
     self.modelKeySet = modelKeySet
     self.modelProvider = modelProvider
     self.modelKeyHint = modelKeyHint
+    self.modelKeyHints = modelKeyHints
+    self.modelKeyCount = modelKeyCount
     self.sessionId = sessionId
   }
 
@@ -122,6 +132,13 @@ struct Profile: Codable, Equatable {
     modelProvider = c.string(.modelProvider)
     if modelProvider.isEmpty { modelProvider = "groq" }
     modelKeyHint = c.string(.modelKeyHint)
+    modelKeyHints = c.strings(.modelKeyHints)
+    modelKeyCount = c.int(.modelKeyCount)
+    if modelKeyCount == 0, !modelKeyHints.isEmpty {
+      modelKeyCount = modelKeyHints.count
+    } else if modelKeySet, modelKeyCount == 0, modelKeyHints.isEmpty {
+      modelKeyCount = 1
+    }
     let sid = c.string(.sessionId)
     sessionId = sid.isEmpty ? nil : sid
   }
@@ -429,9 +446,10 @@ struct SaveAgentBody: Encodable {
   var provider: String?
   var modelKey: String?
   var clear: Bool?
+  var removeIndex: Int?
 
   enum CodingKeys: String, CodingKey {
-    case provider, modelKey, clear
+    case provider, modelKey, clear, removeIndex
   }
 
   func encode(to encoder: Encoder) throws {
@@ -444,6 +462,9 @@ struct SaveAgentBody: Encodable {
     }
     if clear == true {
       try c.encode(true, forKey: .clear)
+    }
+    if let removeIndex {
+      try c.encode(removeIndex, forKey: .removeIndex)
     }
   }
 }

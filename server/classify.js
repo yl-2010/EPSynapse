@@ -7,7 +7,8 @@ import {
   PROVIDERS,
   MISSING_KEY_ERROR,
   explainUpstreamError,
-  resolveApiKey,
+  fetchWithKeyCycle,
+  resolveApiKeys,
   textFromModelField,
   upstreamHeaders,
 } from "./agent.js";
@@ -94,8 +95,8 @@ function classLine(klass) {
 async function completeJson(req, student, system, user) {
   const providerId = String(student?.modelProvider || "groq");
   const provider = PROVIDERS[providerId] || PROVIDERS.groq;
-  const { key, source } = resolveApiKey(req, provider.id, student);
-  if (!key) {
+  const { keys, source } = resolveApiKeys(req, provider.id, student);
+  if (!keys.length) {
     const err = new Error(MISSING_KEY_ERROR);
     err.status = 401;
     throw err;
@@ -108,21 +109,24 @@ async function completeJson(req, student, system, user) {
   const started = Date.now();
   let upstream;
   try {
-    upstream = await fetch(provider.url, {
-      method: "POST",
-      headers: upstreamHeaders(provider, key),
-      body: JSON.stringify({
-        model: provider.model,
-        stream: false,
-        temperature: 0.1,
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: user },
-        ],
-        ...extra,
-      }),
-      signal: AbortSignal.timeout(60_000),
-    });
+    const cycled = await fetchWithKeyCycle(keys, (useKey) =>
+      fetch(provider.url, {
+        method: "POST",
+        headers: upstreamHeaders(provider, useKey),
+        body: JSON.stringify({
+          model: provider.model,
+          stream: false,
+          temperature: 0.1,
+          messages: [
+            { role: "system", content: system },
+            { role: "user", content: user },
+          ],
+          ...extra,
+        }),
+        signal: AbortSignal.timeout(60_000),
+      })
+    );
+    upstream = cycled.response;
   } catch (err) {
     const timedOut = err && err.name === "TimeoutError";
     const fail = new Error(timedOut ? "The model timed out. Try again." : "Could not reach the model host.");
@@ -130,9 +134,15 @@ async function completeJson(req, student, system, user) {
     throw fail;
   }
 
+  if (!upstream) {
+    const fail = new Error("Could not reach the model host.");
+    fail.status = 502;
+    throw fail;
+  }
+
   const text = await upstream.text().catch(() => "");
   if (!upstream.ok) {
-    const fail = new Error(explainUpstreamError(upstream.status, text));
+    const fail = new Error(explainUpstreamError(upstream.status, text, { keyCount: keys.length }));
     fail.status = upstream.status === 401 ? 401 : 502;
     throw fail;
   }

@@ -371,6 +371,12 @@ If you skip Save key, chat will send you back to these steps.
     await persistAgent(modelKey: trimmed, provider: provider)
   }
 
+  func removeKey(at index: Int) async {
+    guard isSignedIn else { return }
+    keyStatus = "Removing…"
+    await persistAgent(removeIndex: index)
+  }
+
   func clearKey() async {
     guard isSignedIn else { return }
     keyStatus = "Clearing…"
@@ -476,13 +482,23 @@ If you skip Save key, chat will send you back to these steps.
     refreshKeyStatus()
   }
 
-  private func persistAgent(modelKey: String? = nil, provider: String? = nil, clear: Bool = false) async {
+  private func persistAgent(
+    modelKey: String? = nil,
+    provider: String? = nil,
+    clear: Bool = false,
+    removeIndex: Int? = nil
+  ) async {
     guard !sessionId.isEmpty else { return }
     do {
       let me: Profile = try await api.request(
         "/v1/me/agent",
         method: "POST",
-        body: SaveAgentBody(provider: provider, modelKey: modelKey, clear: clear),
+        body: SaveAgentBody(
+          provider: provider,
+          modelKey: modelKey,
+          clear: clear,
+          removeIndex: removeIndex
+        ),
         sessionId: sessionId
       )
       profile = me
@@ -574,12 +590,13 @@ If you skip Save key, chat will send you back to these steps.
   }
 
   private func refreshKeyStatus() {
-    if profile?.modelKeySet == true {
-      keyStatus = "Using your \(provider) key on this account"
-      return
-    }
-    if !modelKey.isEmpty {
-      keyStatus = "Using your \(provider) key on this account"
+    let count = profile?.modelKeyCount ?? 0
+    if profile?.modelKeySet == true || !modelKey.isEmpty {
+      if count > 1 {
+        keyStatus = "Using \(count) \(provider) keys on this account. Chat switches if one hits its limit."
+      } else {
+        keyStatus = "Using your \(provider) key on this account"
+      }
       return
     }
     keyStatus = Self.keyIdle

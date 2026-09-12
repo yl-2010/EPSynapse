@@ -19,7 +19,8 @@ import {
   normalizeUiContext,
   publicAgentConfig,
   MISSING_KEY_ERROR,
-  resolveApiKey,
+  fetchWithKeyCycle,
+  resolveApiKeys,
   sanitizeMessages,
   upstreamBody,
   upstreamHeaders,
@@ -118,6 +119,7 @@ import {
   sessionIdFromRequest,
   setSessionCookie,
   studentFromRequest,
+  studentModelKeys,
   updateStudentProfile,
   upsertGoogleStudent,
 } from "./students.js";
@@ -720,7 +722,15 @@ app.post("/v1/me/agent", async (req, res) => {
     }
 
     if (req.body?.clear) {
-      patch.modelKey = "";
+      patch.modelKeys = [];
+    } else if (req.body?.removeIndex !== undefined) {
+      const next = studentModelKeys(student);
+      const index = Number(req.body.removeIndex);
+      if (!Number.isInteger(index) || index < 0 || index >= next.length) {
+        return res.status(400).json({ error: "No key at that index." });
+      }
+      next.splice(index, 1);
+      patch.modelKeys = next;
     } else if (req.body?.modelKey !== undefined) {
       const pasted = String(req.body.modelKey || "").trim();
       if (!pasted) {
@@ -1751,8 +1761,8 @@ app.post("/v1/agent/chat", async (req, res) => {
     return res.status(400).json({ error: "Send at least one user message." });
   }
 
-  const { key, source } = resolveApiKey(req, providerId, student);
-  if (!key) {
+  const { keys, source } = resolveApiKeys(req, providerId, student);
+  if (!keys.length) {
     return res.status(401).json({
       error: MISSING_KEY_ERROR,
     });
@@ -1791,14 +1801,22 @@ app.post("/v1/agent/chat", async (req, res) => {
   };
 
   const fetchUpstream = async (convo, { tools = true } = {}) => {
-    return fetch(provider.url, {
-      method: "POST",
-      headers: upstreamHeaders(provider, key),
-      body: JSON.stringify(
-        upstreamBody(provider, convo, snapshot, tools ? { tools: AGENT_TOOLS } : {})
-      ),
-      signal: AbortSignal.timeout(90_000),
-    });
+    const { response } = await fetchWithKeyCycle(keys, (useKey) =>
+      fetch(provider.url, {
+        method: "POST",
+        headers: upstreamHeaders(provider, useKey),
+        body: JSON.stringify(
+          upstreamBody(provider, convo, snapshot, tools ? { tools: AGENT_TOOLS } : {})
+        ),
+        signal: AbortSignal.timeout(90_000),
+      })
+    );
+    if (!response) {
+      const err = new Error("Could not reach the model host.");
+      err.name = "FetchError";
+      throw err;
+    }
+    return response;
   };
 
   const pipePlainStream = async (upstream) => {
@@ -1920,12 +1938,12 @@ app.post("/v1/agent/chat", async (req, res) => {
           }
         }
         if (res.headersSent) {
-          writeEvent({ choices: [{ delta: { content: explainUpstreamError(upstream.status, text) } }] });
+          writeEvent({ choices: [{ delta: { content: explainUpstreamError(upstream.status, text, { keyCount: keys.length }) } }] });
           writeEvent("[DONE]");
           return res.end();
         }
         return res.status(upstream.status === 401 ? 401 : 502).json({
-          error: explainUpstreamError(upstream.status, text),
+          error: explainUpstreamError(upstream.status, text, { keyCount: keys.length }),
         });
       }
 

@@ -565,6 +565,33 @@
     return Boolean(me && me.modelKeySet);
   }
 
+  function accountKeyCount() {
+    const n = Number(me && me.modelKeyCount);
+    if (Number.isFinite(n) && n > 0) return n;
+    const hints = accountKeyHints();
+    if (hints.length) return hints.length;
+    return accountHasKey() ? 1 : 0;
+  }
+
+  function accountKeyHints() {
+    if (me && Array.isArray(me.modelKeyHints) && me.modelKeyHints.length) {
+      return me.modelKeyHints.map((h) => String(h || ""));
+    }
+    if (me && me.modelKeyHint) return [String(me.modelKeyHint)];
+    return [];
+  }
+
+  function providerLabel() {
+    return providerSel.value || (me && me.modelProvider) || localStorage.getItem(LS_PROV) || "groq";
+  }
+
+  function chatKeySummary() {
+    if (!accountHasKey()) return "Add a Groq key";
+    const id = providerLabel();
+    const n = accountKeyCount();
+    return n > 1 ? `${id} · ${n} keys` : id;
+  }
+
   function applyAgentFromMe() {
     const id = (me && me.modelProvider) || localStorage.getItem(LS_PROV) || "groq";
     if (providerSel && [].some.call(providerSel.options, (o) => o.value === id)) {
@@ -600,9 +627,14 @@
       localStorage.setItem(LS_PROV, providerSel.value || "groq");
       document.getElementById("modelKey").value = "";
       const entry = document.getElementById("key-entry");
-      if (entry) delete entry.dataset.replace;
+      if (entry) delete entry.dataset.add;
       applyAgentFromMe();
-      setStatus(keyStatus, "Saved on this account. Chat can use it now.");
+      setStatus(
+        keyStatus,
+        accountKeyCount() > 1
+          ? "Saved. Chat will switch to the next key if one hits its limit."
+          : "Saved on this account. Chat can use it now."
+      );
       closePane();
       return true;
     } catch (err) {
@@ -650,14 +682,7 @@
         (form.school && form.school.value.trim()) || (me && me.school) || "Eastside Prep";
     }
     const chat = document.getElementById("chat-summary");
-    if (chat) {
-      const id = providerSel.value || (me && me.modelProvider) || localStorage.getItem(LS_PROV) || "groq";
-      if (accountHasKey()) {
-        chat.textContent = id;
-      } else {
-        chat.textContent = "Add a Groq key";
-      }
-    }
+    if (chat) chat.textContent = chatKeySummary();
     const canvas = document.getElementById("canvas-summary");
     if (canvas) canvas.textContent = me && me.canvasConnected ? "Connected" : "URL and token";
     const odSum = document.getElementById("onedrive-summary");
@@ -744,7 +769,7 @@
     hideSchoolResults();
     const keyEntry = document.getElementById("key-entry");
     const canvasEntry = document.getElementById("canvas-entry");
-    if (keyEntry) delete keyEntry.dataset.replace;
+    if (keyEntry) delete keyEntry.dataset.add;
     if (canvasEntry) delete canvasEntry.dataset.replace;
     sheet.classList.remove("is-side");
     delete sheet.dataset.pane;
@@ -808,7 +833,7 @@
     document.querySelector("#settings-main .edu-sheet-body")?.scrollTo(0, 0);
     const keyEntry = document.getElementById("key-entry");
     const canvasEntry = document.getElementById("canvas-entry");
-    if (keyEntry) delete keyEntry.dataset.replace;
+    if (keyEntry) delete keyEntry.dataset.add;
     if (canvasEntry) delete canvasEntry.dataset.replace;
     fillFormFromMe();
     paintAccount();
@@ -2491,27 +2516,65 @@
     paintKeysSummary();
   }
 
+  function paintKeyList() {
+    const list = document.getElementById("key-list");
+    if (!list) return;
+    const hints = accountKeyHints();
+    list.innerHTML = "";
+    list.hidden = !hints.length;
+    hints.forEach((hint, index) => {
+      const li = document.createElement("li");
+      const code = document.createElement("code");
+      code.textContent = hint ? `••••${hint}` : "Key saved";
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "set-textbtn";
+      btn.textContent = "Remove";
+      btn.addEventListener("click", () => removeChatKey(index));
+      li.append(code, btn);
+      list.appendChild(li);
+    });
+  }
+
+  async function removeChatKey(index) {
+    if (!signedInViaGoogle()) {
+      setStatus(keyStatus, NEED_GOOGLE);
+      return;
+    }
+    setStatus(keyStatus, "Removing…");
+    try {
+      me = await api("/v1/me/agent", {
+        method: "POST",
+        body: JSON.stringify({ removeIndex: index }),
+      });
+      const entry = document.getElementById("key-entry");
+      if (entry && !accountHasKey()) delete entry.dataset.add;
+      applyAgentFromMe();
+      setStatus(keyStatus, accountHasKey() ? "" : "No keys on this account.");
+    } catch (err) {
+      setStatus(keyStatus, err.message || "Could not remove that key.");
+    }
+  }
+
   function refreshKeyStatus() {
     const hasKey = accountHasKey();
-    const id = providerSel.value || (me && me.modelProvider) || localStorage.getItem(LS_PROV) || "groq";
     const entry = document.getElementById("key-entry");
     const ready = document.getElementById("key-ready");
     const readyLabel = document.getElementById("key-ready-label");
-    const replacing = entry && entry.dataset.replace === "1";
-    if (entry) entry.hidden = hasKey && !replacing;
+    const adding = entry && entry.dataset.add === "1";
+    if (entry) entry.hidden = hasKey && !adding;
     if (ready) ready.hidden = !hasKey;
-    if (readyLabel) {
-      readyLabel.textContent = hasKey ? id : "";
-    }
+    if (readyLabel) readyLabel.textContent = hasKey ? chatKeySummary() : "";
+    paintKeyList();
     paintKeysSummary();
     const steps = document.getElementById("key-steps");
-    if (steps) steps.hidden = hasKey && !replacing;
-    if (hasKey && !replacing) {
+    if (steps) steps.hidden = hasKey && !adding;
+    if (hasKey && !adding) {
       setStatus(keyStatus, "");
       return;
     }
-    if (hasKey && replacing) {
-      setStatus(keyStatus, "Paste a new key to replace the one on this account.");
+    if (hasKey && adding) {
+      setStatus(keyStatus, "Paste another key. Chat will use the next one if this one hits its limit.");
       return;
     }
     setStatus(
@@ -3399,10 +3462,10 @@
     saveChatKey();
   });
 
-  document.getElementById("key-replace")?.addEventListener("click", () => {
+  document.getElementById("key-add")?.addEventListener("click", () => {
     if (!signedInViaGoogle()) return;
     const entry = document.getElementById("key-entry");
-    if (entry) entry.dataset.replace = "1";
+    if (entry) entry.dataset.add = "1";
     refreshKeyStatus();
     document.getElementById("modelKey")?.focus();
   });
@@ -3429,7 +3492,7 @@
       localStorage.removeItem(LS_KEY);
       document.getElementById("modelKey").value = "";
       const entry = document.getElementById("key-entry");
-      if (entry) delete entry.dataset.replace;
+      if (entry) delete entry.dataset.add;
       applyAgentFromMe();
     } catch (err) {
       setStatus(keyStatus, err.message || "Could not clear the key.");

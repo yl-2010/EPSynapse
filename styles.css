@@ -3702,6 +3702,31 @@ html[data-auth="in"] #stage-out {
   color: var(--fg);
 }
 
+.key-list {
+  list-style: none;
+  margin: 0 0 0.7rem;
+  padding: 0;
+}
+
+.key-list[hidden] {
+  display: none !important;
+}
+
+.key-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 2rem;
+}
+
+.key-list code {
+  font-size: var(--text-footnote);
+  font-weight: 550;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
 .set-link {
   display: inline-block;
   margin: 0.1rem 0 0;

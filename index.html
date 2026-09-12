@@ -18,7 +18,7 @@
     <title>EPSchedule</title>
     <meta name="description" content="EPSynapse student dashboard" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/styles.css?v=orb2" />
+    <link rel="stylesheet" href="/styles.css?v=keys1" />
     <link
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css"
@@ -421,16 +421,18 @@
               </li>
               <li>Paste it in the API key field below. Leave Model on Groq.</li>
               <li>Tap Save key. Enter also saves. Do not use the School Save button for this.</li>
+              <li>You can add more than one key. If one hits its free limit, chat switches to the next on its own.</li>
               <li>Chat key on the settings list must say Groq. Then close settings and ask in the chat pill. Do not paste the key in chat.</li>
             </ol>
             <div id="key-ready" hidden>
               <div class="set-row">
                 <p class="set-ready" id="key-ready-label"></p>
                 <div class="set-actions">
-                  <button type="button" id="key-replace" class="set-textbtn">Replace</button>
-                  <button type="button" id="key-clear" class="set-textbtn">Clear</button>
+                  <button type="button" id="key-add" class="set-textbtn">Add another</button>
+                  <button type="button" id="key-clear" class="set-textbtn">Clear all</button>
                 </div>
               </div>
+              <ul id="key-list" class="key-list" hidden></ul>
             </div>
             <div id="key-entry">
               <label for="provider">Model</label>
@@ -657,9 +659,9 @@
 
     <script src="/liquid-glass.js?v=glass14"></script>
     <script src="/theme-orb.js?v=moon6"></script>
-    <script src="/app.js?v=todo10"></script>
+    <script src="/app.js?v=keys1"></script>
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js" crossorigin="anonymous"></script>
     <script src="/markdown.js?v=2"></script>
-    <script src="/chatbot.js?v=ms1"></script>
+    <script src="/chatbot.js?v=keys1"></script>
   </body>
 </html>
