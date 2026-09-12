@@ -136,6 +136,7 @@ import multer from "multer";
 import { probeBertService } from "./bert.js";
 import { listNotes, mountNotes } from "./notes.js";
 import { mountResearch } from "./research-metrics.js";
+import { mountMcp } from "./mcp-http.js";
 import { loadSchedule, mountSchedule } from "./schedule.js";
 import {
   applyClassAliases,
@@ -2127,6 +2128,7 @@ mountSchedule(app, {
 });
 mountNotes(app, { requireStudent, fail });
 mountResearch(app, { fail });
+mountMcp(app, { publicMe });
 
 app.listen(PORT, HOST, () => {
   console.log(`[jype-server] listening on http://${HOST}:${PORT}`);
