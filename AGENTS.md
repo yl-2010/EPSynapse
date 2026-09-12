@@ -18,9 +18,21 @@ This is not an estore repo. Estore's "no git" rule does not apply here.
 
 Frontier Cascadia, Saturday Sep 12 2026, Founders Hall, UW. Team JYPE: Jeffery Xu, Yan Levin, Prasham Dhruva, Everette Deng.
 
-Several people and several agents commit to `main` at the same time. Some of them are on this same Mac. Treat the repo like a shared kitchen, not a solo branch.
+Timed. Speed wins. Several people and several agents commit to `main` at the same time. Some of them are on this same Mac. Treat the repo like a shared kitchen, not a solo branch.
 
 You are never the only writer. Assume another agent pushed while you were editing. Assume another checkout or Cursor session has uncommitted work next to yours.
+
+## Speed: fan out Grok 4.6 High Fast
+
+The clock is running. Do not do sequential solo work when you can launch parallel agents.
+
+- Every Task / subagent call must set `model` to `cursor-grok-4.6-high-fast`. Do not inherit. Do not pick another model.
+- If a request can split (separate files, pages, bugs, research vs implement, server vs site), launch as many Task subagents as you can in one turn. One agent per chunk. Prefer background so the parent stays free.
+- Do not wait for the user to say `/multitask` or name the model.
+- Skip fan-out only when step B needs step A's output, both would edit the same hot file, or the change is one tiny file.
+- Give each subagent a full prompt: goal, paths, these git rules, and what to return. They cannot see the parent chat.
+
+The always-apply Cursor rule `.cursor/rules/hackathon-speed.mdc` repeats this so new sessions cannot miss it.
 
 ## Git (do this every session)
 
