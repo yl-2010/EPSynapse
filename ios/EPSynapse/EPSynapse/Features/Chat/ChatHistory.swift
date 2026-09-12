@@ -135,7 +135,7 @@ struct ChatHistoryPanel: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 16) {
+            LazyVStack(alignment: .leading, spacing: 8) {
                 if chat.chats.isEmpty, chat.historyLoading {
                     ProgressView()
                         .frame(maxWidth: .infinity)
@@ -149,10 +149,10 @@ struct ChatHistoryPanel: View {
                 } else {
                     ForEach(ChatHistoryGrouping.sections(from: chat.chats)) { section in
                         Text(section.title)
-                            .font(.caption.weight(.semibold))
+                            .font(.caption2.weight(.semibold))
                             .foregroundStyle(EPSTheme.muted)
                             .padding(.horizontal, 4)
-                            .padding(.bottom, 2)
+                            .padding(.top, 4)
 
                         ForEach(section.items) { item in
                             Button {
@@ -166,8 +166,8 @@ struct ChatHistoryPanel: View {
                 }
             }
             .padding(.horizontal, 12)
-            .padding(.top, 16)
-            .padding(.bottom, 28)
+            .padding(.top, 12)
+            .padding(.bottom, 20)
         }
         .scrollIndicators(.hidden)
     }
@@ -184,20 +184,20 @@ struct ChatHistoryRowLabel: View {
                     .alignmentGuide(.firstTextBaseline) { dim in dim.height * 0.72 }
             }
             Text(item.title)
-                .font(.body)
+                .font(.subheadline)
                 .foregroundStyle(EPSTheme.fg)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if showAge {
                 Text(ChatHistoryGrouping.relativeAge(from: item.updated))
-                    .font(.caption)
+                    .font(.caption2)
                     .foregroundStyle(EPSTheme.muted)
                     .monospacedDigit()
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .epsGlassRounded(cornerRadius: 14, interactive: true)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .epsGlassRounded(cornerRadius: 11, interactive: true)
     }
 }
 
