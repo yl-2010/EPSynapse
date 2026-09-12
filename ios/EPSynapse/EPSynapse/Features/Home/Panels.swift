@@ -240,8 +240,13 @@ struct TodoRow: View {
 
     private var checkbox: some View {
         Button {
-            guard !item.done else { return }
-            Task { await dashboard.markDone(item, session: session) }
+            Task {
+                if item.done {
+                    await dashboard.markUndone(item, session: session)
+                } else {
+                    await dashboard.markDone(item, session: session)
+                }
+            }
         } label: {
             Color.clear
                 .epsSizedGlassCircle(side: 20, interactive: false)
@@ -255,8 +260,7 @@ struct TodoRow: View {
                 }
         }
         .buttonStyle(.plain)
-        .disabled(item.done)
-        .accessibilityLabel(item.done ? "Completed" : "Mark complete")
+        .accessibilityLabel(item.done ? "Mark incomplete" : "Mark complete")
         .epsHapticOnTap()
     }
 }
