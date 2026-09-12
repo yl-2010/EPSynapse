@@ -7,8 +7,8 @@ import UIKit
 final class SessionStore: ObservableObject {
   static let shared = SessionStore()
 
-  static let onedriveIdle = "School OneDrive. One Microsoft sign-in can unlock both OneDrive and Outlook."
-  static let outlookIdle = "School Outlook. Same Microsoft sign-in can unlock both."
+  static let onedriveIdle = "Opens school OneDrive in the browser"
+  static let outlookIdle = "Opens school Outlook in the browser"
   static let keyIdle = "Paste the gsk_ key here, tap Save key, wait until Chat key says Groq, then ask in chat. Do not paste the key in the chat box."
   static let setupGuide = """
 This box is only for questions. The Groq key goes in Settings, not here.

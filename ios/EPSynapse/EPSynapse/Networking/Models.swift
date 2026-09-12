@@ -248,6 +248,18 @@ struct DriveFile: Codable, Identifiable, Equatable {
     webUrl = c.string(.webUrl)
     source = c.string(.source)
   }
+
+  func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    try c.encode(id, forKey: .id)
+    try c.encode(name, forKey: .name)
+    try c.encode(webUrl, forKey: .webUrl)
+    try c.encode(source, forKey: .source)
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case id, name, webUrl, source
+  }
 }
 
 struct MailMessage: Codable, Identifiable, Equatable {
@@ -817,6 +829,7 @@ enum NoteSubject {
 
 enum EPSLinks {
   static let research = URL(string: "https://epsynapse.com/research")!
+  static let onedriveWeb = URL(string: "https://eastsideprep-my.sharepoint.com/")!
   static let outlookWeb = URL(string: "https://outlook.office.com/mail/")!
 }
 

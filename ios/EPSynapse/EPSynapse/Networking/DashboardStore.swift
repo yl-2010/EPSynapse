@@ -10,6 +10,7 @@ final class DashboardStore: ObservableObject {
   @Published var meetings: [ScheduleMeeting] = []
   @Published var assignments: [Assignment] = []
   @Published var files: [DriveFile] = []
+  @Published var localFiles: [DriveFile] = []
   @Published var messages: [MailMessage] = []
   @Published var filesError = ""
   @Published var mailError = ""
@@ -30,6 +31,14 @@ final class DashboardStore: ObservableObject {
   }
 
   private let api = APIClient.shared
+
+  init() {
+    localFiles = Self.readImportedFiles()
+  }
+
+  var allFiles: [DriveFile] {
+    localFiles + files
+  }
 
   func load(from session: SessionStore) async {
     isLoading = true
@@ -92,10 +101,37 @@ final class DashboardStore: ObservableObject {
   }
 
   func files(for schoolClass: SchoolClass) -> [DriveFile] {
+    let pool = allFiles
     let hint = schoolClass.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    guard !hint.isEmpty else { return files }
-    let matched = files.filter { $0.name.lowercased().contains(hint) }
-    return matched.isEmpty ? files : matched
+    guard !hint.isEmpty else { return pool }
+    let matched = pool.filter { $0.name.lowercased().contains(hint) }
+    return matched.isEmpty ? pool : matched
+  }
+
+  func importLocalFile(from url: URL) {
+    let accessed = url.startAccessingSecurityScopedResource()
+    defer {
+      if accessed { url.stopAccessingSecurityScopedResource() }
+    }
+    let original = url.lastPathComponent.isEmpty ? "file" : url.lastPathComponent
+    let dest = Self.importedDirectory().appendingPathComponent(Self.uniqueImportedName(original))
+    do {
+      if FileManager.default.fileExists(atPath: dest.path) {
+        try FileManager.default.removeItem(at: dest)
+      }
+      try FileManager.default.copyItem(at: url, to: dest)
+      let file = DriveFile(
+        id: dest.lastPathComponent,
+        name: dest.lastPathComponent,
+        webUrl: dest.absoluteString,
+        source: "local"
+      )
+      localFiles.removeAll { $0.id == file.id }
+      localFiles.insert(file, at: 0)
+      Self.writeImportedFiles(localFiles)
+    } catch {
+      filesError = "Could not import that file."
+    }
   }
 
   func notes(for schoolClass: SchoolClass) -> [ClassifiedNote] {
@@ -323,9 +359,9 @@ final class DashboardStore: ObservableObject {
   private func loadFiles(sessionId: String) async -> (files: [DriveFile], error: String) {
     do {
       let wrapped: FilesResponse = try await api.request("/v1/me/onedrive/files", sessionId: sessionId, timeout: 20)
-      return (wrapped.files, wrapped.error)
+      return (wrapped.files, Self.sanitizeGraphError(wrapped.error))
     } catch {
-      return ([], (error as? APIError)?.message ?? "Could not load files.")
+      return ([], Self.sanitizeGraphError((error as? APIError)?.message ?? ""))
     }
   }
 
@@ -336,9 +372,58 @@ final class DashboardStore: ObservableObject {
         sessionId: sessionId,
         timeout: 20
       )
-      return (wrapped.messages, wrapped.error)
+      return (wrapped.messages, Self.sanitizeGraphError(wrapped.error))
     } catch {
-      return ([], (error as? APIError)?.message ?? "Could not load mail.")
+      return ([], Self.sanitizeGraphError((error as? APIError)?.message ?? ""))
+    }
+  }
+
+  private static func sanitizeGraphError(_ raw: String) -> String {
+    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    if trimmed.isEmpty { return "" }
+    if isIgnoredGraphMessage(trimmed) { return "" }
+    return trimmed
+  }
+
+  private static func isIgnoredGraphMessage(_ message: String) -> Bool {
+    let lower = message.lowercased()
+    return lower.contains("connect outlook")
+      || lower.contains("connect onedrive")
+      || lower.contains("settings first")
+      || lower.contains("not connected")
+      || lower.contains("sign-in")
+      || lower.contains("device code")
+  }
+
+  private static let importedIndexKey = "epsynapse.imported.files"
+
+  private static func importedDirectory() -> URL {
+    let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+      ?? FileManager.default.temporaryDirectory
+    let dir = base.appendingPathComponent("ImportedFiles", isDirectory: true)
+    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    return dir
+  }
+
+  private static func uniqueImportedName(_ original: String) -> String {
+    let dest = importedDirectory().appendingPathComponent(original)
+    if !FileManager.default.fileExists(atPath: dest.path) { return original }
+    return "\(UUID().uuidString.prefix(8))-\(original)"
+  }
+
+  private static func readImportedFiles() -> [DriveFile] {
+    guard let data = UserDefaults.standard.data(forKey: importedIndexKey),
+          let files = try? JSONDecoder().decode([DriveFile].self, from: data)
+    else { return [] }
+    return files.filter { file in
+      guard let url = URL(string: file.webUrl), url.isFileURL else { return false }
+      return FileManager.default.fileExists(atPath: url.path)
+    }
+  }
+
+  private static func writeImportedFiles(_ files: [DriveFile]) {
+    if let data = try? JSONEncoder().encode(files) {
+      UserDefaults.standard.set(data, forKey: importedIndexKey)
     }
   }
 

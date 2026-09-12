@@ -79,18 +79,6 @@ struct SettingsSheet: View {
                 dashboard.scheduleStatus = "Could not open that PDF."
             }
         }
-        .task(id: isPresented) {
-            guard isPresented, session.isSignedIn else { return }
-            while !Task.isCancelled, isPresented, session.isSignedIn {
-                let od = session.profile?.onedriveConnected
-                let ol = session.profile?.outlookConnected
-                await session.pollConnections()
-                if session.profile?.onedriveConnected != od || session.profile?.outlookConnected != ol {
-                    await dashboard.load(from: session)
-                }
-                try? await Task.sleep(nanoseconds: 4_000_000_000)
-            }
-        }
     }
 
     private var header: some View {
@@ -207,47 +195,30 @@ struct SettingsSheet: View {
 
     private var microsoftSection: some View {
         settingsGroup("Microsoft") {
-            Text("One school Microsoft sign-in can unlock both OneDrive and Outlook.")
+            Text("School IT blocks app sign-in. Open the real apps.")
                 .font(.footnote)
                 .foregroundStyle(EPSTheme.muted)
 
             fieldLabel("OneDrive")
             actionRow {
-                glassAction(session.profile?.onedriveConnected == true ? "Reconnect OneDrive" : "Connect OneDrive") {
-                    Task {
-                        await session.startOnedrive()
-                        openDeviceURI(session.odURI)
-                    }
+                glassAction("Open OneDrive") {
+                    openURL(EPSLinks.onedriveWeb)
                 }
             }
-            Text(session.onedriveStatus)
+            Text("Opens school OneDrive in the browser")
                 .font(.footnote)
                 .foregroundStyle(EPSTheme.muted)
-            deviceCode(session.odCode, uri: session.odURI)
 
             fieldLabel("Outlook")
                 .padding(.top, 6)
             actionRow {
-                glassAction(session.profile?.outlookConnected == true ? "Reconnect Outlook" : "Connect Outlook") {
-                    Task {
-                        await session.startOutlook()
-                        openDeviceURI(session.olURI)
-                    }
+                glassAction("Open Outlook") {
+                    openURL(EPSLinks.outlookWeb)
                 }
             }
-            Text(session.outlookStatus)
+            Text("Opens school Outlook in the browser")
                 .font(.footnote)
                 .foregroundStyle(EPSTheme.muted)
-            deviceCode(session.olCode, uri: session.olURI)
-
-            actionRow {
-                glassAction("I signed in") {
-                    Task {
-                        await session.pollConnections(force: true)
-                        await dashboard.load(from: session)
-                    }
-                }
-            }
         }
     }
 
@@ -440,29 +411,8 @@ struct SettingsSheet: View {
         HStack { content(); Spacer(minLength: 0) }
     }
 
-    @ViewBuilder
-    private func deviceCode(_ code: String, uri: String) -> some View {
-        if !code.isEmpty {
-            Text(code)
-                .font(.system(size: 24, weight: .bold, design: .rounded))
-                .foregroundStyle(EPSTheme.accent)
-                .tracking(3.2)
-                .padding(.top, 2)
-        }
-        if let url = URL(string: uri), !uri.isEmpty {
-            Link("Open Microsoft sign-in", destination: url)
-                .font(.footnote)
-                .foregroundStyle(EPSTheme.muted)
-        }
-    }
-
     private var goldLabel: Color {
         colorScheme == .dark ? Color.white : Color(red: 11 / 255, green: 31 / 255, blue: 58 / 255)
-    }
-
-    private func openDeviceURI(_ raw: String) {
-        guard let url = URL(string: raw), !raw.isEmpty else { return }
-        openURL(url)
     }
 
     private func hydrate() {

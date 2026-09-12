@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 enum EPSDueFormat {
     static func due(_ iso: String) -> String {
@@ -336,14 +337,16 @@ struct ClassRow: View {
 struct FilesPanel: View {
     var schoolClass: SchoolClass? = nil
 
-    @EnvironmentObject private var session: SessionStore
     @EnvironmentObject private var dashboard: DashboardStore
+    @Environment(\.openURL) private var openURL
+
+    @State private var pickingFile = false
 
     private var shown: [DriveFile] {
         if let schoolClass {
             return dashboard.files(for: schoolClass)
         }
-        return dashboard.files
+        return dashboard.allFiles
     }
 
     var body: some View {
@@ -361,26 +364,69 @@ struct FilesPanel: View {
                         }
                     }
                 }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Button {
+                        pickingFile = true
+                    } label: {
+                        Text("Upload from Files")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(EPSTheme.fg)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                    }
+                    .buttonStyle(.plain)
+                    .epsGlassRounded(cornerRadius: 14, interactive: true)
+                    .epsHapticOnTap()
+
+                    Button {
+                        openURL(EPSLinks.onedriveWeb)
+                    } label: {
+                        Text("Open OneDrive")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(EPSTheme.fg)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                    }
+                    .buttonStyle(.plain)
+                    .epsGlassRounded(cornerRadius: 14, interactive: true)
+                    .epsHapticOnTap()
+                }
+            }
+        }
+        .fileImporter(
+            isPresented: $pickingFile,
+            allowedContentTypes: [.item],
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case .success(let urls):
+                if let url = urls.first {
+                    dashboard.importLocalFile(from: url)
+                }
+            case .failure:
+                dashboard.filesError = "Could not open that file."
             }
         }
     }
 
     private var emptyCopy: String {
         if !dashboard.filesError.isEmpty { return dashboard.filesError }
-        if session.profile?.onedriveConnected == true {
-            return schoolClass == nil ? "No recent school files yet" : "No files for this class"
-        }
-        return "Connect OneDrive in settings"
+        return "Upload from the Files app, or open OneDrive"
     }
 }
 
 struct FileTile: View {
     var file: DriveFile
     @Environment(\.openURL) private var openURL
+    @State private var previewURL: URL?
 
     var body: some View {
         Button {
-            if let url = URL(string: file.webUrl), !file.webUrl.isEmpty {
+            guard let url = URL(string: file.webUrl), !file.webUrl.isEmpty else { return }
+            if file.source == "local" || url.isFileURL {
+                previewURL = url
+            } else {
                 openURL(url)
             }
         } label: {
@@ -394,22 +440,17 @@ struct FileTile: View {
         }
         .buttonStyle(.plain)
         .epsGlassRounded(cornerRadius: 22, interactive: true)
+        .quickLookPreview($previewURL)
     }
 }
 
 struct MailPanel: View {
-    @EnvironmentObject private var session: SessionStore
     @EnvironmentObject private var dashboard: DashboardStore
     @Environment(\.openURL) private var openURL
 
     @State private var to = ""
     @State private var subject = ""
     @State private var mailBody = ""
-    @State private var confirmSend = false
-
-    private var outlookConnected: Bool {
-        session.profile?.outlookConnected == true
-    }
 
     var body: some View {
         EPSPanel(title: "Mail") {
@@ -417,11 +458,7 @@ struct MailPanel: View {
                 if !dashboard.mailError.isEmpty {
                     EmptyLine(dashboard.mailError)
                 }
-                if dashboard.messages.isEmpty {
-                    if dashboard.mailError.isEmpty {
-                        EmptyLine(outlookConnected ? "Inbox is empty" : "Connect Outlook in settings")
-                    }
-                } else {
+                if !dashboard.messages.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {
                         ForEach(dashboard.messages) { message in
                             MailRow(message: message)
@@ -429,20 +466,18 @@ struct MailPanel: View {
                     }
                 }
 
-                if !outlookConnected {
-                    Button {
-                        openURL(EPSLinks.outlookWeb)
-                    } label: {
-                        Text("Open Outlook on the web")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(EPSTheme.fg)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
-                    }
-                    .buttonStyle(.plain)
-                    .epsGlassRounded(cornerRadius: 14, interactive: true)
-                    .epsHapticOnTap()
+                Button {
+                    openURL(EPSLinks.outlookWeb)
+                } label: {
+                    Text("Open school Outlook")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(EPSTheme.fg)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
                 }
+                .buttonStyle(.plain)
+                .epsGlassRounded(cornerRadius: 14, interactive: true)
+                .epsHapticOnTap()
 
                 if let open = dashboard.openMail {
                     VStack(alignment: .leading, spacing: 6) {
@@ -461,16 +496,8 @@ struct MailPanel: View {
                     .padding(.top, 4)
                 }
 
-                if outlookConnected {
-                    compose
-                }
+                compose
             }
-        }
-        .alert("Send this email to \(to)?", isPresented: $confirmSend) {
-            Button("Send") {
-                Task { await dashboard.sendMail(to: to, subject: subject, body: mailBody, session: session) }
-            }
-            Button("Cancel", role: .cancel) {}
         }
     }
 
@@ -488,16 +515,15 @@ struct MailPanel: View {
 
             Button {
                 EPSHaptics.tap()
-                confirmSend = true
+                openMailto()
             } label: {
-                Text(dashboard.mailBusy ? "Sending…" : "Send")
+                Text("Send")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(goldLabel)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 10)
             }
             .buttonStyle(.plain)
-            .disabled(dashboard.mailBusy)
             .epsGlassRounded(cornerRadius: 14, tint: EPSTheme.accent.opacity(0.72), interactive: true)
 
             if !dashboard.sendStatus.isEmpty {
@@ -507,6 +533,35 @@ struct MailPanel: View {
             }
         }
         .padding(.top, 4)
+    }
+
+    private func openMailto() {
+        let trimmedTo = to.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedTo.isEmpty {
+            dashboard.sendStatus = "Add a recipient first."
+            return
+        }
+        var comps = URLComponents()
+        comps.scheme = "mailto"
+        comps.path = trimmedTo
+        var items: [URLQueryItem] = []
+        let trimmedSubject = subject.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedBody = mailBody.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedSubject.isEmpty {
+            items.append(URLQueryItem(name: "subject", value: trimmedSubject))
+        }
+        if !trimmedBody.isEmpty {
+            items.append(URLQueryItem(name: "body", value: trimmedBody))
+        }
+        if !items.isEmpty {
+            comps.queryItems = items
+        }
+        guard let url = comps.url else {
+            dashboard.sendStatus = "Could not open Mail."
+            return
+        }
+        dashboard.sendStatus = ""
+        openURL(url)
     }
 
     private func composeField(_ placeholder: String, text: Binding<String>) -> some View {
