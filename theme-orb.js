@@ -11,17 +11,19 @@
     const style = document.createElement("style");
     style.id = "theme-mode-icon-style";
     style.textContent =
-      ".c-tr .theme-mode-icon{width:40%;height:40%;pointer-events:none}";
+      ".c-tr .theme-mode-icon{width:50%;height:50%;pointer-events:none}";
     document.head.appendChild(style);
   }
 
   if (!el.querySelector(".theme-mode-icon")) {
     el.insertAdjacentHTML(
       "afterbegin",
-      `<svg class="theme-mode-icon" viewBox="0 0 24 24" shape-rendering="geometricPrecision" aria-hidden="true">
-        <circle cx="12" cy="12" r="10" fill="#f2f2f7"/>
-        <path d="M12 2a10 10 0 1 0 0 20Z" fill="#1c1c1e"/>
-        <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="0.7" opacity="0.28"/>
+      `<svg class="theme-mode-icon" viewBox="0 0 47.808 47.779" fill="currentColor" shape-rendering="geometricPrecision" aria-hidden="true">
+        <path
+          fill-rule="evenodd"
+          transform="matrix(1 0 0 -1 0 47.779)"
+          d="M23.889 45.33V2.449C11.72 2.449 2.473 11.715 2.473 23.889S11.72 45.33 23.889 45.33Zm0 2.449c13.202 0 23.919-10.687 23.919-23.89S37.091 0 23.889 0 0 10.687 0 23.889s10.717 23.89 23.889 23.89Zm0-3.969C12.878 43.81 3.988 34.9 3.988 23.889S12.878 3.969 23.889 3.969s19.926 8.91 19.926 19.92S34.906 43.81 23.889 43.81Z"
+        />
       </svg>`
     );
   }
