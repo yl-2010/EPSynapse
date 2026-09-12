@@ -18,7 +18,7 @@
     <title>EPSynapse</title>
     <meta name="description" content="EPSynapse student dashboard" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/styles.css?v=glass14" />
+    <link rel="stylesheet" href="/styles.css?v=glass15" />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
       .od-code {
@@ -158,40 +158,9 @@
               />
             </svg>
           </button>
-          <button
-            type="button"
-            class="yan-chat-close yan-chat-history-btn yan-chat-history-btn--panel circle"
-            data-liquid-glass="circle"
-            data-filter-id="lg-edu-chat-history-panel"
-            data-edu-chat-history
-            aria-label="Past chats"
-            aria-pressed="false"
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor" shape-rendering="geometricPrecision" aria-hidden="true">
-              <path
-                d="M12 3.6a8.4 8.4 0 1 0 0 16.8 8.4 8.4 0 0 0 0-16.8ZM12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20Zm.75 5.2a.75.75 0 0 0-1.5 0v5.05c0 .24.12.47.32.61l3.4 2.2a.75.75 0 1 0 .82-1.26L12.75 11.9V7.2Z"
-              />
-            </svg>
-          </button>
           <div class="yan-chat-messages" aria-live="polite"></div>
           <div class="yan-chat-history" hidden aria-hidden="true"></div>
         </div>
-
-        <button
-          type="button"
-          class="yan-chat-close yan-chat-history-btn yan-chat-history-btn--dock circle"
-          data-liquid-glass="circle"
-          data-filter-id="lg-edu-chat-history"
-          data-edu-chat-history
-          aria-label="Past chats"
-          aria-pressed="false"
-        >
-          <svg viewBox="0 0 24 24" fill="currentColor" shape-rendering="geometricPrecision" aria-hidden="true">
-            <path
-              d="M12 3.6a8.4 8.4 0 1 0 0 16.8 8.4 8.4 0 0 0 0-16.8ZM12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20Zm.75 5.2a.75.75 0 0 0-1.5 0v5.05c0 .24.12.47.32.61l3.4 2.2a.75.75 0 1 0 .82-1.26L12.75 11.9V7.2Z"
-            />
-          </svg>
-        </button>
 
         <div
           class="yan-chat-pill corner circle c-br"
@@ -232,6 +201,22 @@
           </button>
 
           <form class="yan-chat-form" action="#" autocomplete="off">
+            <button
+              type="button"
+              class="yan-chat-history-btn circle"
+              data-liquid-glass="circle"
+              data-filter-id="lg-edu-chat-history"
+              data-edu-chat-history
+              aria-label="Past chats"
+              aria-pressed="false"
+              tabindex="-1"
+            >
+              <svg viewBox="0 0 24 24" fill="currentColor" shape-rendering="geometricPrecision" aria-hidden="true">
+                <path
+                  d="M12 3.6a8.4 8.4 0 1 0 0 16.8 8.4 8.4 0 0 0 0-16.8ZM12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20Zm.75 5.2a.75.75 0 0 0-1.5 0v5.05c0 .24.12.47.32.61l3.4 2.2a.75.75 0 1 0 .82-1.26L12.75 11.9V7.2Z"
+                />
+              </svg>
+            </button>
             <label class="visually-hidden" for="edu-chat-input">Ask your personal agent</label>
             <textarea
               id="edu-chat-input"
@@ -384,6 +369,6 @@
     <script src="/liquid-glass.js?v=glass9"></script>
     <script src="/theme-orb.js?v=glass6"></script>
     <script src="/app.js?v=glass14"></script>
-    <script src="/chatbot.js?v=glass9"></script>
+    <script src="/chatbot.js?v=glass10"></script>
   </body>
 </html>

@@ -66,6 +66,9 @@
         window.setTimeout(() => input.focus({ preventScroll: true }), reduceMotion ? 0 : 420);
       }
     }
+    historyBtns.forEach((btn) => {
+      btn.tabIndex = open ? 0 : -1;
+    });
     syncComposerSize();
     window.setTimeout(refreshGlass, reduceMotion ? 0 : 420);
   }

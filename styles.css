@@ -1742,40 +1742,39 @@ html[data-resolved-theme="dark"] .yan-chat-pill.corner.lg-refraction::after {
 .yan-chat.has-panel .yan-chat-close--pill {
   opacity: 1; pointer-events: auto; transition-delay: 0.18s;
 }
-.yan-chat-history-btn--panel {
-  left: auto;
-  right: calc(var(--chat-panel-radius) - var(--chat-x-size) / 2);
-}
-.yan-chat-history-btn--dock {
-  top: auto;
-  left: calc(var(--pill-left) - var(--chat-x-size) - 0.65rem);
-  bottom: calc(var(--chat-pad) + (var(--pill-h) - var(--chat-x-size)) / 2);
-  transition:
-    opacity 0.28s var(--ease),
-    transform 0.3s var(--ease),
-    box-shadow 0.3s var(--ease),
-    left 0.7s var(--chat-spring),
-    bottom 0.22s var(--ease);
-}
-.yan-chat.is-open .yan-chat-history-btn--dock,
-.yan-chat.has-panel .yan-chat-history-btn--panel {
-  opacity: 1;
-  pointer-events: auto;
-  transition-delay: 0.18s;
-}
-.yan-chat.has-panel .yan-chat-history-btn--dock {
-  opacity: 0;
-  pointer-events: none;
-}
-.yan-chat.is-history .yan-chat-history-btn {
-  color: var(--chat-orange);
-}
-
 .yan-chat-form {
   position: absolute; inset: 0; z-index: 4; display: flex; align-items: center; gap: 0.45rem;
   padding: 0 0.7rem 0 2.45rem; opacity: 0; pointer-events: none;
   transition: opacity 0.28s var(--ease);
 }
+.yan-chat-history-btn {
+  --lg-filter: none;
+  --chat-hist-size: 1.7rem;
+  position: relative;
+  z-index: 5;
+  flex: 0 0 var(--chat-hist-size);
+  width: var(--chat-hist-size);
+  min-width: var(--chat-hist-size);
+  max-width: var(--chat-hist-size);
+  height: var(--chat-hist-size);
+  min-height: var(--chat-hist-size);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--fg);
+  background: transparent;
+  isolation: isolate;
+  box-shadow: 0 3px var(--lg-outer-shadow-blur) var(--lg-outer-shadow);
+  cursor: pointer;
+  align-self: center;
+}
+.yan-chat-history-btn svg { width: 52%; height: 52%; display: block; }
+.yan-chat-history-btn:focus-visible { outline: 2px solid var(--chat-orange); outline-offset: 2px; }
+.yan-chat.is-composer-tall .yan-chat-history-btn { align-self: flex-end; }
+.yan-chat.is-history .yan-chat-history-btn { color: var(--chat-orange); }
 .yan-chat.is-open .yan-chat-form { opacity: 1; pointer-events: auto; transition-delay: 0.2s; }
 .yan-chat.is-composer-tall .yan-chat-form {
   align-items: flex-end;
@@ -1800,7 +1799,7 @@ html[data-resolved-theme="dark"] .yan-chat-pill.corner.lg-refraction::after {
 }
 .yan-chat-attach-chips {
   position: absolute;
-  left: 2.45rem;
+  left: 4.6rem;
   right: 3.2rem;
   bottom: calc(100% + 0.35rem);
   display: flex;
@@ -2360,7 +2359,7 @@ a.yan-chat-widget {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .yan-chat-pill.corner, .yan-chat-panel, .yan-chat-launcher, .yan-chat-close, .yan-chat-form, .yan-chat-send {
+  .yan-chat-pill.corner, .yan-chat-panel, .yan-chat-launcher, .yan-chat-close, .yan-chat-form, .yan-chat-history-btn, .yan-chat-send {
     transition-duration: 0.01ms !important; animation: none !important;
   }
 }
