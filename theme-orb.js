@@ -11,19 +11,20 @@
     const style = document.createElement("style");
     style.id = "theme-mode-icon-style";
     style.textContent =
-      ".c-tr .theme-mode-icon{width:50%;height:50%;pointer-events:none}";
+      ".c-tr .theme-mode-icon{width:38%;height:38%;pointer-events:none}";
     document.head.appendChild(style);
   }
 
   if (!el.querySelector(".theme-mode-icon")) {
+    // Same stack as ios CornerChrome: circle.fill #F2F2F7 under
+    // circle.lefthalf.filled #1C1C1E, Semibold, 38% of the orb.
     el.insertAdjacentHTML(
       "afterbegin",
-      `<svg class="theme-mode-icon" viewBox="0 0 47.808 47.779" fill="currentColor" shape-rendering="geometricPrecision" aria-hidden="true">
-        <path
-          fill-rule="evenodd"
-          transform="matrix(1 0 0 -1 0 47.779)"
-          d="M23.889 45.33V2.449C11.72 2.449 2.473 11.715 2.473 23.889S11.72 45.33 23.889 45.33Zm0 2.449c13.202 0 23.919-10.687 23.919-23.89S37.091 0 23.889 0 0 10.687 0 23.889s10.717 23.89 23.889 23.89Zm0-3.969C12.878 43.81 3.988 34.9 3.988 23.889S12.878 3.969 23.889 3.969s19.926 8.91 19.926 19.92S34.906 43.81 23.889 43.81Z"
-        />
+      `<svg class="theme-mode-icon" viewBox="0 0 203.682 203.593" shape-rendering="geometricPrecision" aria-hidden="true">
+        <g transform="matrix(1 0 0 -1 0 203.593)">
+          <path fill="#f2f2f7" d="M101.796606 203.593368C158.01282 203.593368 203.681509 157.93996 203.681509 101.796762S158.01282.000155 101.796606.000155 0 45.653563 0 101.796762s45.653408 101.796606 101.796606 101.796606Z"/>
+          <path fill="#1c1c1e" fill-rule="evenodd" d="M101.796606 192.674182V10.919341C50.112072 10.919341 10.9922 50.096946 10.9922 101.796762S50.112072 192.674182 101.796606 192.674182ZM101.796606 203.593368C158.043382 203.593368 203.681509 158.043538 203.681509 101.796762S158.043382.000155 101.796606.000155 0 45.549986 0 101.796762s45.638126 101.796606 101.796606 101.796606ZM101.796606 181.26136C57.875212 181.26136 22.389741 145.718155 22.389741 101.796762S57.875212 22.332163 101.796606 22.332163s79.479881 35.543205 79.479881 79.464599-35.543205 79.464598-79.479881 79.464598Z"/>
+        </g>
       </svg>`
     );
   }
