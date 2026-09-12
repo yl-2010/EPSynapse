@@ -1769,16 +1769,6 @@ app.post("/v1/agent/chat", async (req, res) => {
   }
 
   let snapshot = "";
-  try {
-    snapshot = await liveSnapshot(student);
-  } catch {
-    snapshot = "";
-  }
-  const uiBlock = formatUiContextBlock(normalizeUiContext(req.body?.uiContext));
-  if (uiBlock) {
-    snapshot = snapshot ? `${snapshot}\n\n${uiBlock}` : uiBlock;
-  }
-
   const ownerId = ownerIdForStudent(student);
   const writeSseHeaders = () => {
     if (res.headersSent) return;
@@ -1808,7 +1798,7 @@ app.post("/v1/agent/chat", async (req, res) => {
         body: JSON.stringify(
           upstreamBody(provider, convo, snapshot, tools ? { tools: AGENT_TOOLS } : {})
         ),
-        signal: AbortSignal.timeout(90_000),
+        signal: AbortSignal.timeout(150_000),
       })
     );
     if (!response) {
@@ -1872,7 +1862,10 @@ app.post("/v1/agent/chat", async (req, res) => {
       }
       const delta = extractChatDelta(json);
       if (delta.content) content += delta.content;
-      if (delta.reasoning) reasoning += delta.reasoning;
+      if (delta.reasoning) {
+        reasoning += delta.reasoning;
+        writeEvent({ choices: [{ delta: { reasoning: delta.reasoning } }] });
+      }
       toolCalls = mergeToolCallDeltas(toolCalls, extractToolCalls(json));
     };
     const reader = upstream.body.getReader();
@@ -1895,6 +1888,7 @@ app.post("/v1/agent/chat", async (req, res) => {
         content = delta.content || "";
         reasoning = delta.reasoning || "";
         toolCalls = mergeToolCallDeltas(toolCalls, extractToolCalls(json));
+        if (reasoning) writeEvent({ choices: [{ delta: { reasoning } }] });
       } catch {
         /* leftover was not a full JSON body */
       }
@@ -1934,7 +1928,32 @@ app.post("/v1/agent/chat", async (req, res) => {
     return res.end();
   };
 
+  const heartbeat = setInterval(() => {
+    if (res.writableEnded || res.destroyed) {
+      clearInterval(heartbeat);
+      return;
+    }
+    try {
+      writeSseHeaders();
+      res.write(": keepalive\n\n");
+    } catch {
+      clearInterval(heartbeat);
+    }
+  }, 12_000);
+
   try {
+    writeSseHeaders();
+    writeEvent({ type: "status", text: "Thinking…" });
+    try {
+      snapshot = await liveSnapshot(student);
+    } catch {
+      snapshot = "";
+    }
+    const uiBlock = formatUiContextBlock(normalizeUiContext(req.body?.uiContext));
+    if (uiBlock) {
+      snapshot = snapshot ? `${snapshot}\n\n${uiBlock}` : uiBlock;
+    }
+
     for (let round = 0; round < 8; round += 1) {
       let upstream;
       try {
@@ -1979,7 +1998,6 @@ app.post("/v1/agent/chat", async (req, res) => {
 
       const roundOut = await readToolRound(upstream);
       if (!roundOut.toolCalls.length) {
-        if (roundOut.reasoning) writeEvent({ choices: [{ delta: { reasoning: roundOut.reasoning } }] });
         return finishMutations(roundOut.content || (kinds.size ? "Done" : ""));
       }
 
@@ -2020,6 +2038,8 @@ app.post("/v1/agent/chat", async (req, res) => {
       /* hung up */
     }
     return res.end();
+  } finally {
+    clearInterval(heartbeat);
   }
 });
 

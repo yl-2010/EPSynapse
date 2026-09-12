@@ -13,6 +13,8 @@ struct APIClient {
   static let productionBase = "https://api.epsynapse.com"
   static let localBase = "http://127.0.0.1:3006"
   static let useLocalFlag = "eps.useLocalAPI"
+  static let unreachableChatMessage =
+    "Chat lost the path to api.epsynapse.com before the model could answer. The app and the Mac API are different hosts. A first reply can work and a follow-up still fail. The second ask sends the whole thread, and the tunnel can drop if the Mac stays quiet too long while the model thinks. Your question was not blocked. Try again. If it keeps failing, the tunnel or the Mac API is down."
 
   let encoder: JSONEncoder
   let decoder: JSONDecoder
@@ -182,7 +184,7 @@ struct APIClient {
       method: "POST",
       body: ChatRequestBody(provider: provider, messages: messages, uiContext: uiContext),
       sessionId: sessionId,
-      timeout: 90
+      timeout: 180
     )
     request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
     request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
@@ -191,21 +193,27 @@ struct APIClient {
       request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
     }
 
-    let (bytes, response) = try await session.bytes(for: request)
-    let http = try httpResponse(response)
-    if !(200 ... 299).contains(http.statusCode) {
-      var collected = Data()
-      for try await byte in bytes {
-        collected.append(byte)
+    do {
+      let (bytes, response) = try await session.bytes(for: request)
+      let http = try httpResponse(response)
+      if !(200 ... 299).contains(http.statusCode) {
+        var collected = Data()
+        for try await byte in bytes {
+          collected.append(byte)
+        }
+        throw apiError(status: http.statusCode, data: collected)
       }
-      throw apiError(status: http.statusCode, data: collected)
-    }
 
-    for try await line in bytes.lines {
-      let trimmed = line.trimmingCharacters(in: CharacterSet(charactersIn: "\r"))
-      guard trimmed.hasPrefix("data:") else { continue }
-      let chunk = trimmed.dropFirst(5).trimmingCharacters(in: .whitespaces)
-      emitChatDelta(chunk, onDelta: onDelta, onEvent: onEvent)
+      for try await line in bytes.lines {
+        let trimmed = line.trimmingCharacters(in: CharacterSet(charactersIn: "\r"))
+        guard trimmed.hasPrefix("data:") else { continue }
+        let chunk = trimmed.dropFirst(5).trimmingCharacters(in: .whitespaces)
+        emitChatDelta(chunk, onDelta: onDelta, onEvent: onEvent)
+      }
+    } catch let err as APIError {
+      throw err
+    } catch {
+      throw APIError(status: 0, message: Self.unreachableChatMessage)
     }
   }
 

@@ -72,10 +72,41 @@
       return "You look offline. Chat needs a network path to api.epsynapse.com, so the model never saw your question. Reconnect and try again.";
     }
     return [
-      "Chat never reached api.epsynapse.com, so the model never saw your question.",
-      "This page is the public site. Chat talks to a separate Mac API published through a Cloudflare tunnel.",
-      "The prompt was not blocked or filtered. Try again in a moment. If it keeps failing, the tunnel or the Mac API is down.",
+      "Chat lost the path to api.epsynapse.com before the model could answer.",
+      "This page and the Mac API are different hosts.",
+      "A first reply can work and a follow-up still fail.",
+      "The second ask sends the whole thread, and the tunnel can drop if the Mac stays quiet too long while the model thinks.",
+      "Your question was not blocked. Try again.",
+      "If it keeps failing, the tunnel or the Mac API is down.",
     ].join(" ");
+  }
+
+  async function postChat(headers, list) {
+    const body = JSON.stringify({
+      provider:
+        document.documentElement.dataset.modelProvider ||
+        localStorage.getItem(LS_PROV) ||
+        "groq",
+      messages: list,
+      uiContext:
+        typeof window.__epsynapseUiContext === "function"
+          ? window.__epsynapseUiContext()
+          : undefined,
+    });
+    const opts = {
+      method: "POST",
+      credentials: "include",
+      headers,
+      body,
+    };
+    const url = apiBase() + "/v1/agent/chat";
+    try {
+      return await fetch(url, opts);
+    } catch (err) {
+      if (typeof navigator !== "undefined" && navigator.onLine === false) throw err;
+      await new Promise((resolve) => window.setTimeout(resolve, 800));
+      return fetch(url, opts);
+    }
   }
 
   function state() {
@@ -837,22 +868,7 @@
     const headers = authHeaders();
 
     try {
-      const res = await fetch(apiBase() + "/v1/agent/chat", {
-        method: "POST",
-        credentials: "include",
-        headers,
-        body: JSON.stringify({
-          provider:
-            document.documentElement.dataset.modelProvider ||
-            localStorage.getItem(LS_PROV) ||
-            "groq",
-          messages,
-          uiContext:
-            typeof window.__epsynapseUiContext === "function"
-              ? window.__epsynapseUiContext()
-              : undefined,
-        }),
-      });
+      const res = await postChat(headers, messages);
       if (!res.ok) {
         let errBody = {};
         try {
