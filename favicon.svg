@@ -4,7 +4,7 @@
     <style>
       .bg { fill: #e4eaf2; }
       .cls-1 { fill: #072457; }
-      .cls-2 { fill: #ffd52f; }
+      .cls-2 { fill: #c48a00; }
       @media (prefers-color-scheme: dark) {
         .bg { fill: #071525; }
         .cls-1 { fill: #d6e6f8; }

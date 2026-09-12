@@ -1897,7 +1897,6 @@
 
     appEl.classList.add("is-settled");
     appEl.innerHTML = `
-      <p class="edu-home-mark">EPSynapse</p>
       <div class="edu-grid edu-grid--home">
         <div class="edu-col edu-col--main">
           ${panelHtml("TODO", listOrEmpty(todoRows, todoEmpty), "lg-edu-todo", "", todoExpanded ? filterBarHtml("todo") : "", collapseTitle("TODO", todoExpanded))}
