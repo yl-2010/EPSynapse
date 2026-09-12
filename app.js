@@ -21,7 +21,15 @@
   let olPollTimer = 0;
   const TAGS = ["CW", "HW", "QA", "MA"];
   const typeFilter = new Set(TAGS);
-  let lastHome = { courses: [], assignments: [], files: [], messages: [] };
+  let lastHome = {
+    courses: [],
+    assignments: [],
+    files: [],
+    messages: [],
+    classes: [],
+    meetings: [],
+    notes: [],
+  };
   let openMail = null;
   let mailBusy = false;
   let googleClientId = "";
@@ -600,14 +608,29 @@
     if (input) input.tabIndex = -1;
   }
 
+  function currentRoute() {
+    const path = (location.pathname || "/").replace(/\/+$/, "") || "/";
+    const classMatch = path.match(/^\/class\/([^/]+)$/);
+    if (classMatch) return { page: "class", id: decodeURIComponent(classMatch[1]) };
+    const noteMatch = path.match(/^\/note\/([^/]+)$/);
+    if (noteMatch) return { page: "note", id: decodeURIComponent(noteMatch[1]) };
+    return { page: "home" };
+  }
+
+  function goTo(path) {
+    const next = path || "/";
+    if (location.pathname !== next) history.pushState({}, "", next);
+    routeAndRender();
+    window.scrollTo(0, 0);
+  }
+
   function goHome() {
     closeSheet();
     closeChatOverlay();
     if (!signedInViaGoogle()) return;
     if (loading) loading.hidden = true;
     if (stage) stage.hidden = false;
-    renderHome(lastHome);
-    window.scrollTo(0, 0);
+    goTo("/");
   }
 
   function panelHtml(title, body, filterId, extraClass, filtersHtml) {
@@ -677,16 +700,35 @@
     </li>`;
   }
 
+  function classHref(c) {
+    const id = c && (c.id || c.courseId);
+    return id ? `/class/${encodeURIComponent(id)}` : "/";
+  }
+
+  function isCurrentClass(c) {
+    const period = String(c?.period || "").toUpperCase();
+    const meeting = (lastHome.meetings || []).find((m) => m.current && String(m.period || "").toUpperCase() === period);
+    if (meeting) {
+      if (c.id && meeting.classId) return meeting.classId === c.id;
+      return true;
+    }
+    const cur = currentPeriod();
+    const p = period;
+    return Boolean(cur && p && (p === cur[2] || p === cur[3]));
+  }
+
   function classRow(c) {
     const period = c.period
       ? `<span class="edu-tag edu-period">${escapeHtml(c.period)}</span>`
       : "";
-    const cur = currentPeriod();
-    const p = String(c.period || "").toUpperCase();
-    const highlight = Boolean(cur && p && (p === cur[2] || p === cur[3]));
+    const highlight = isCurrentClass(c);
+    const href = classHref(c);
+    const meta = c.courseCode || (c.term ? c.term : "");
     return `<li class="edu-row edu-class-row${highlight ? " is-current" : ""}">
-      <span class="edu-name">${period}<span class="edu-hero-class-name">${escapeHtml(c.name)}</span></span>
-      <span class="edu-meta">${escapeHtml(c.courseCode || "")}</span>
+      <a class="edu-row-link" data-route href="${escapeHtml(href)}">
+        <span class="edu-name">${period}<span class="edu-hero-class-name">${escapeHtml(c.name)}</span></span>
+        <span class="edu-meta">${escapeHtml(meta)}</span>
+      </a>
     </li>`;
   }
 
@@ -745,34 +787,76 @@
       </form>`;
   }
 
-  function renderHome({ courses, assignments, files, messages }) {
-    lastHome = { courses, assignments, files, messages: messages || lastHome.messages || [] };
-    const open = (assignments || []).filter((t) => !t.done && matchesTag(t));
-    const done = (assignments || []).filter((t) => t.done && matchesTag(t));
-    const dates = (assignments || [])
+  function homeClasses() {
+    const scheduled = (lastHome.classes || []).filter((c) => !c.freePeriod);
+    if (scheduled.length) return scheduled;
+    return lastHome.courses || [];
+  }
+
+  function notesPanelHtml() {
+    const rows = (lastHome.notes || [])
+      .slice(0, 8)
+      .map((n) => {
+        const href = `/note/${encodeURIComponent(n.id)}`;
+        return `<li class="edu-row">
+          <a class="edu-row-link" data-route href="${escapeHtml(href)}">
+            <span class="edu-name">${escapeHtml(n.title || n.subject || "Note")}</span>
+            <span class="edu-meta">${escapeHtml(n.subject || "")}</span>
+          </a>
+        </li>`;
+      })
+      .join("");
+    const list = rows
+      ? `<ul class="edu-list">${rows}</ul>`
+      : `<p class="edu-empty">Paste a note and classify it</p>`;
+    return `${list}
+      <form class="edu-notes-form" id="notes-classify">
+        <textarea id="note-text" name="text" maxlength="12000" placeholder="Paste class notes" required></textarea>
+        <button type="submit" class="edu-sheet-btn edu-sheet-btn--gold" data-liquid-glass="rounded" data-filter-id="lg-edu-note-go">Classify</button>
+        <p class="edu-empty" id="note-status"></p>
+      </form>`;
+  }
+
+  function renderHome({ courses, assignments, files, messages, classes, meetings, notes } = lastHome) {
+    lastHome = {
+      courses: courses || lastHome.courses || [],
+      assignments: assignments || lastHome.assignments || [],
+      files: files || lastHome.files || [],
+      messages: messages || lastHome.messages || [],
+      classes: classes || lastHome.classes || [],
+      meetings: meetings || lastHome.meetings || [],
+      notes: notes || lastHome.notes || [],
+    };
+    const open = (lastHome.assignments || []).filter((t) => !t.done && matchesTag(t));
+    const done = (lastHome.assignments || []).filter((t) => t.done && matchesTag(t));
+    const dates = (lastHome.assignments || [])
       .filter((t) => t.due && matchesTag(t))
       .sort((a, b) => String(a.due).localeCompare(String(b.due)))
       .slice(0, 12);
-    const fileTiles = (files || []).map(fileTile).join("");
+    const fileTiles = (lastHome.files || []).map(fileTile).join("");
+    const classItems = homeClasses();
 
     const todoEmpty = me?.canvasConnected
       ? "No open work"
       : "Connect Canvas in settings";
-    const classEmpty = me?.canvasConnected ? "No classes" : "Connect Canvas in settings";
+    const classEmpty = classItems.length
+      ? "No classes"
+      : "Upload a term schedule PDF in settings";
     const fileEmpty = me?.onedriveConnected
       ? "No files in /EPSynapse yet"
       : "Connect OneDrive in settings";
 
     appEl.classList.add("is-settled");
     appEl.innerHTML = `
-      <p class="edu-home-mark">EPSynapse</p>
+      <p class="edu-home-mark">EPSynapse <a class="edu-home-research" href="/research">Research</a></p>
       <div class="edu-grid edu-grid--home">
         <div class="edu-col edu-col--main">
           ${panelHtml("TODO", listOrEmpty(open.map(todoRow).join(""), todoEmpty), "lg-edu-todo", "", filterBarHtml("todo"))}
           ${panelHtml("Completed", listOrEmpty(done.map(todoRow).join(""), "Nothing completed yet"), "lg-edu-completed", "edu-panel--completed")}
+          ${panelHtml("Notes", notesPanelHtml(), "lg-edu-notes", "edu-panel--notes")}
         </div>
         <div class="edu-col edu-col--side">
-          ${panelHtml("Classes", listOrEmpty((courses || []).map(classRow).join(""), classEmpty), "lg-edu-classes")}
+          ${panelHtml("Classes", listOrEmpty(classItems.map(classRow).join(""), classEmpty), "lg-edu-classes")}
           ${panelHtml("Dates", listOrEmpty(dates.map(dateRow).join(""), "No upcoming dates"), "lg-edu-dates", "", filterBarHtml("dates"))}
           ${panelHtml("Files", fileTiles ? `<div class="edu-files">${fileTiles}</div>` : `<p class="edu-empty">${escapeHtml(fileEmpty)}</p>`, "lg-edu-files")}
           ${panelHtml("Mail", mailPanelHtml(lastHome.messages), "lg-edu-mail")}
@@ -780,6 +864,204 @@
       </div>
     `;
     if (typeof window.reinitLiquidGlass === "function") window.reinitLiquidGlass();
+  }
+
+  function classMatchesWork(klass, item) {
+    if (!klass || !item) return false;
+    const courseId = String(klass.canvasCourseId || klass.courseId || "");
+    if (courseId && String(item.courseId || "") === courseId) return true;
+    const a = String(klass.name || "").toLowerCase();
+    const b = String(item.courseName || "").toLowerCase();
+    if (!a || !b) return false;
+    return a === b || a.includes(b) || b.includes(a);
+  }
+
+  function findClass(id) {
+    const key = String(id || "");
+    return (
+      (lastHome.classes || []).find((c) => String(c.id) === key) ||
+      (lastHome.courses || []).find((c) => String(c.id) === key) ||
+      null
+    );
+  }
+
+  function renderClass(id) {
+    const klass = findClass(id);
+    if (!klass) {
+      appEl.classList.add("is-settled");
+      appEl.innerHTML = `
+        <p class="edu-home-mark">EPSynapse</p>
+        <p class="edu-empty">No class with that id. Upload a term schedule PDF or connect Canvas.</p>
+      `;
+      return;
+    }
+    const work = (lastHome.assignments || []).filter((t) => classMatchesWork(klass, t));
+    const open = work.filter((t) => !t.done && matchesTag(t));
+    const done = work.filter((t) => t.done && matchesTag(t));
+    const dates = work
+      .filter((t) => t.due && matchesTag(t))
+      .sort((a, b) => String(a.due).localeCompare(String(b.due)))
+      .slice(0, 12);
+    const nameHint = String(klass.name || "").toLowerCase();
+    const files = (lastHome.files || []).filter((f) => {
+      if (!nameHint) return false;
+      return String(f.name || "").toLowerCase().includes(nameHint);
+    });
+    const fileTiles = (files.length ? files : lastHome.files || []).map(fileTile).join("");
+    const notes = (lastHome.notes || []).filter((n) => {
+      if (n.classId && n.classId === klass.id) return true;
+      if (klass.subject && n.subject === klass.subject) return true;
+      const title = String(n.title || "").toLowerCase();
+      return nameHint && title.includes(nameHint);
+    });
+    const noteRows = notes
+      .map((n) => {
+        const href = `/note/${encodeURIComponent(n.id)}`;
+        return `<li class="edu-row">
+          <a class="edu-row-link" data-route href="${escapeHtml(href)}">
+            <span class="edu-name">${escapeHtml(n.title || n.subject || "Note")}</span>
+            <span class="edu-meta">${escapeHtml(n.subject || "")}</span>
+          </a>
+        </li>`;
+      })
+      .join("");
+
+    const period = klass.period
+      ? `<span class="edu-tag edu-period edu-period--hero">${escapeHtml(klass.period)}</span>`
+      : "";
+    appEl.classList.add("is-settled");
+    appEl.innerHTML = `
+      <header class="edu-hero edu-hero--detail edu-hero--detail-canvas">
+        <div class="edu-hero-lead">
+          <h1 class="edu-hero-title edu-hero-title--class">${period}<span class="edu-hero-class-name">${escapeHtml(klass.name)}</span></h1>
+          <p class="edu-hero-sub">${escapeHtml([klass.term, klass.subject, klass.courseCode].filter(Boolean).join(" · "))}</p>
+        </div>
+      </header>
+      <div class="edu-grid edu-grid--home">
+        <div class="edu-col edu-col--main">
+          ${panelHtml("TODO", listOrEmpty(open.map(todoRow).join(""), "No open work for this class"), "lg-edu-todo", "", filterBarHtml("todo"))}
+          ${panelHtml("Completed", listOrEmpty(done.map(todoRow).join(""), "Nothing completed yet"), "lg-edu-completed", "edu-panel--completed")}
+        </div>
+        <div class="edu-col edu-col--side">
+          ${panelHtml("Dates", listOrEmpty(dates.map(dateRow).join(""), "No upcoming dates"), "lg-edu-dates", "", filterBarHtml("dates"))}
+          ${panelHtml("Files", fileTiles ? `<div class="edu-files">${fileTiles}</div>` : `<p class="edu-empty">No files for this class</p>`, "lg-edu-files")}
+          ${panelHtml("Notes", listOrEmpty(noteRows, "No notes for this class yet"), "lg-edu-class-notes")}
+        </div>
+      </div>
+    `;
+    if (typeof window.reinitLiquidGlass === "function") window.reinitLiquidGlass();
+  }
+
+  function voteLine(label, vote) {
+    if (!vote || !vote.subject) return `<li class="edu-row"><span class="edu-name">${escapeHtml(label)}</span><span class="edu-meta">no vote</span></li>`;
+    const conf =
+      typeof vote.confidence === "number" ? ` · ${Math.round(vote.confidence * 100)}%` : "";
+    return `<li class="edu-row"><span class="edu-name">${escapeHtml(label)}</span><span class="edu-meta">${escapeHtml(vote.subject)}${escapeHtml(conf)}</span></li>`;
+  }
+
+  function subjectOptions(selected) {
+    const labels = [
+      "Mathematics",
+      "Physics",
+      "Chemistry",
+      "Biology",
+      "Computer Science",
+      "History",
+      "Literature",
+      "Economics",
+      "Other",
+    ];
+    return labels
+      .map((s) => `<option value="${escapeHtml(s)}"${s === selected ? " selected" : ""}>${escapeHtml(s)}</option>`)
+      .join("");
+  }
+
+  function renderNote(id) {
+    const note = (lastHome.notes || []).find((n) => String(n.id) === String(id));
+    if (!note) {
+      appEl.classList.add("is-settled");
+      appEl.innerHTML = `
+        <p class="edu-home-mark">EPSynapse</p>
+        <p class="edu-empty">That note is not on this account.</p>
+      `;
+      return;
+    }
+    const votes = note.votes || {};
+    const orch = note.orchestrator || {};
+    const gold = note.userGoldSubject || note.subject || "";
+    appEl.classList.add("is-settled");
+    appEl.innerHTML = `
+      <header class="edu-hero edu-hero--detail">
+        <div class="edu-hero-lead">
+          <h1 class="edu-hero-title">${escapeHtml(note.title || "Note")}</h1>
+          <p class="edu-hero-sub">${escapeHtml(note.subject || "Unclassified")}</p>
+        </div>
+      </header>
+      <div class="edu-grid edu-grid--home">
+        <div class="edu-col edu-col--main">
+          ${panelHtml("Note", `<pre class="edu-note-body">${escapeHtml(note.text || "")}</pre>`, "lg-edu-note-text")}
+        </div>
+        <div class="edu-col edu-col--side">
+          ${panelHtml(
+            "Votes",
+            `<ul class="edu-list">
+              ${voteLine("Zero-shot BERT", votes.baseBert)}
+              ${voteLine("Fine-tuned BERT", votes.fineTunedBert)}
+              ${voteLine("Student-key model", votes.studentKey)}
+              ${voteLine("Orchestrator", { subject: orch.subject || note.subject, confidence: orch.confidence })}
+            </ul>`,
+            "lg-edu-note-votes"
+          )}
+          ${panelHtml(
+            "Subject",
+            `<form class="edu-notes-form" id="note-gold">
+              <label for="note-subject">Correct subject</label>
+              <select id="note-subject" name="subject">${subjectOptions(gold)}</select>
+              <button type="submit" class="edu-sheet-btn edu-sheet-btn--gold" data-liquid-glass="rounded" data-filter-id="lg-edu-note-gold">Save</button>
+              <p class="edu-empty" id="note-gold-status"></p>
+            </form>`,
+            "lg-edu-note-gold"
+          )}
+        </div>
+      </div>
+    `;
+    if (typeof window.reinitLiquidGlass === "function") window.reinitLiquidGlass();
+  }
+
+  async function ensureNote(id) {
+    const existing = (lastHome.notes || []).find(
+      (n) => String(n.id) === String(id) && n.text
+    );
+    if (existing) return existing;
+    try {
+      const data = await api(`/v1/me/notes/${encodeURIComponent(id)}`);
+      const note = data.note || data;
+      if (!note?.id) return null;
+      lastHome.notes = [note, ...(lastHome.notes || []).filter((n) => n.id !== note.id)];
+      return note;
+    } catch {
+      return null;
+    }
+  }
+
+  async function routeAndRender() {
+    if (!signedInViaGoogle()) {
+      applyAuthGate();
+      return;
+    }
+    if (loading) loading.hidden = true;
+    if (stage) stage.hidden = false;
+    const route = currentRoute();
+    if (route.page === "class") {
+      renderClass(route.id);
+      return;
+    }
+    if (route.page === "note") {
+      await ensureNote(route.id);
+      renderNote(route.id);
+      return;
+    }
+    renderHome(lastHome);
   }
 
   async function loadDashboard() {
@@ -801,12 +1083,23 @@
     const messages = me?.outlookConnected
       ? api("/v1/me/outlook/messages?limit=12", { timeoutMs: 20000 }).then((r) => r.messages || []).catch(() => [])
       : Promise.resolve([]);
-    renderHome({
+    const schedule = api("/v1/me/schedule")
+      .then((r) => r)
+      .catch(() => ({ classes: [], meetings: [] }));
+    const notes = api("/v1/me/notes")
+      .then((r) => r.notes || [])
+      .catch(() => []);
+    const sched = await schedule;
+    lastHome = {
       courses: await courses,
       assignments: await assignments,
       files: await files,
       messages: await messages,
-    });
+      classes: sched.classes || [],
+      meetings: sched.meetings || [],
+      notes: await notes,
+    };
+    routeAndRender();
   }
 
   function showOnedriveCode(code, uri) {
@@ -1009,7 +1302,62 @@
     await initGoogle();
   }
 
+  window.addEventListener("popstate", () => {
+    routeAndRender();
+  });
+
   document.getElementById("home-open").addEventListener("click", goHome);
+
+  document.getElementById("schedule-upload")?.addEventListener("click", async () => {
+    const status = document.getElementById("schedule-status");
+    if (!signedInViaGoogle()) {
+      if (status) status.textContent = NEED_GOOGLE;
+      return;
+    }
+    const input = document.getElementById("schedulePdf");
+    const file = input && input.files && input.files[0];
+    if (!file) {
+      if (status) status.textContent = "Choose a term schedule PDF first.";
+      return;
+    }
+    if (status) status.textContent = "Uploading…";
+    const body = new FormData();
+    body.append("pdf", file, file.name);
+    try {
+      const headers = { Accept: "application/json" };
+      const session = sid();
+      if (session) headers["X-EPSynapse-Session"] = session;
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 30000);
+      let res;
+      try {
+        res = await fetch(`${apiBase}/v1/me/schedule/pdf`, {
+          method: "POST",
+          credentials: "include",
+          headers,
+          body,
+          signal: ctrl.signal,
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+      const text = await res.text();
+      let payload = {};
+      try {
+        payload = text ? JSON.parse(text) : {};
+      } catch {
+        payload = { error: text.slice(0, 200) };
+      }
+      if (!res.ok) throw new Error(payload.error || "Upload failed.");
+      lastHome.classes = payload.classes || [];
+      lastHome.meetings = payload.meetings || [];
+      if (status) status.textContent = `Saved ${(payload.classes || []).filter((c) => !c.freePeriod).length} classes.`;
+      if (input) input.value = "";
+      await loadDashboard();
+    } catch (err) {
+      if (status) status.textContent = err.message || "Could not read that PDF.";
+    }
+  });
   document.getElementById("settings-open").addEventListener("click", openSheet);
   document.getElementById("settings-close").addEventListener("click", () => {
     closeSheet();
@@ -1093,7 +1441,7 @@
     if (input.checked) typeFilter.add(tag);
     else typeFilter.delete(tag);
     if (typeFilter.size === 0) TAGS.forEach((t) => typeFilter.add(t));
-    renderHome(lastHome);
+    routeAndRender();
   });
 
   form.addEventListener("submit", async (ev) => {
@@ -1234,14 +1582,77 @@
     try {
       const data = await api(`/v1/me/outlook/message?id=${encodeURIComponent(id)}`, { timeoutMs: 20000 });
       openMail = data.message || null;
-      renderHome(lastHome);
+      routeAndRender();
     } catch (err) {
       openMail = { subject: "Could not open", body: err.message || "Read failed." };
-      renderHome(lastHome);
+      routeAndRender();
     }
   });
 
+  appEl.addEventListener("click", (ev) => {
+    const a = ev.target.closest("a[data-route]");
+    if (!a) return;
+    const href = a.getAttribute("href");
+    if (!href || href.startsWith("http")) return;
+    ev.preventDefault();
+    goTo(href);
+  });
+
   appEl.addEventListener("submit", async (ev) => {
+    const noteForm = ev.target.closest("#notes-classify");
+    if (noteForm) {
+      ev.preventDefault();
+      const status = document.getElementById("note-status");
+      const text = String(noteForm.text?.value || "").trim();
+      if (!text) {
+        if (status) status.textContent = "Paste some notes first.";
+        return;
+      }
+      if (status) status.textContent = "Classifying…";
+      try {
+        const created = await api("/v1/me/notes", {
+          method: "POST",
+          body: JSON.stringify({ text }),
+          timeoutMs: 180000,
+        });
+        const note = created.note || created;
+        if (note?.id) {
+          const others = (lastHome.notes || []).filter((n) => n.id !== note.id);
+          lastHome.notes = [note, ...others];
+          goTo(`/note/${encodeURIComponent(note.id)}`);
+          return;
+        }
+        if (status) status.textContent = "Classified, but no note id came back.";
+      } catch (err) {
+        if (status) status.textContent = err.message || "Classify failed.";
+      }
+      return;
+    }
+
+    const goldForm = ev.target.closest("#note-gold");
+    if (goldForm) {
+      ev.preventDefault();
+      const route = currentRoute();
+      const status = document.getElementById("note-gold-status");
+      const subject = String(goldForm.subject?.value || "").trim();
+      if (!route.id || !subject) return;
+      if (status) status.textContent = "Saving…";
+      try {
+        const updated = await api(`/v1/me/notes/${encodeURIComponent(route.id)}`, {
+          method: "PATCH",
+          body: JSON.stringify({ subject }),
+        });
+        const note = updated.note || updated;
+        lastHome.notes = (lastHome.notes || []).map((n) => (n.id === note.id ? note : n));
+        renderNote(route.id);
+        const again = document.getElementById("note-gold-status");
+        if (again) again.textContent = "Saved.";
+      } catch (err) {
+        if (status) status.textContent = err.message || "Could not save subject.";
+      }
+      return;
+    }
+
     const compose = ev.target.closest("#outlook-compose");
     if (!compose) return;
     ev.preventDefault();
@@ -1256,7 +1667,7 @@
     }
     if (!window.confirm(`Send this email to ${to}?`)) return;
     mailBusy = true;
-    renderHome(lastHome);
+    routeAndRender();
     try {
       const sent = await api("/v1/me/outlook/send", {
         method: "POST",
@@ -1265,12 +1676,12 @@
       });
       mailBusy = false;
       openMail = null;
-      renderHome(lastHome);
+      routeAndRender();
       const again = document.getElementById("outlook-send-status");
       if (again) again.textContent = sent.sent ? `Sent to ${sent.to}` : "Sent.";
     } catch (err) {
       mailBusy = false;
-      renderHome(lastHome);
+      routeAndRender();
       const form = document.getElementById("outlook-compose");
       if (form) {
         form.to.value = to;

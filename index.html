@@ -18,7 +18,7 @@
     <title>EPSynapse</title>
     <meta name="description" content="EPSynapse student dashboard" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/styles.css?v=glass20" />
+    <link rel="stylesheet" href="/styles.css?v=glass21" />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
       .od-code {
@@ -113,7 +113,10 @@
           Sign in with Google
         </button>
         <p class="stage-out-status" id="stage-out-status" hidden></p>
-        <a class="stage-out-foot" href="/privacy.html">Privacy</a>
+        <p class="stage-out-links">
+          <a class="stage-out-foot" href="/research">Research</a>
+          <a class="stage-out-foot" href="/privacy.html">Privacy</a>
+        </p>
       </div>
     </div>
 
@@ -370,6 +373,14 @@
             <div class="edu-sheet-field">
               <input id="studentId" name="studentId" maxlength="80" placeholder="Optional" />
             </div>
+            <label for="schedulePdf">Term schedule PDF</label>
+            <div class="edu-sheet-field">
+              <input id="schedulePdf" name="schedulePdf" type="file" accept="application/pdf,.pdf" />
+            </div>
+            <div class="edu-sheet-actions">
+              <button type="button" id="schedule-upload" class="edu-sheet-btn">Upload schedule PDF</button>
+            </div>
+            <p class="edu-empty" id="schedule-status"></p>
             <div class="edu-sheet-actions">
               <button type="submit" id="settings-save" class="edu-sheet-btn edu-sheet-btn--gold">Save</button>
             </div>
@@ -502,7 +513,7 @@
 
     <script src="/liquid-glass.js?v=glass11"></script>
     <script src="/theme-orb.js?v=glass9"></script>
-    <script src="/app.js?v=glass20"></script>
+    <script src="/app.js?v=glass21"></script>
     <script src="/chatbot.js?v=glass13"></script>
   </body>
 </html>

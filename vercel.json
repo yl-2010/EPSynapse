@@ -3,6 +3,11 @@
     "deploymentEnabled": false
   },
   "cleanUrls": true,
+  "rewrites": [
+    { "source": "/class/:id", "destination": "/index.html" },
+    { "source": "/note/:id", "destination": "/index.html" },
+    { "source": "/research", "destination": "/research.html" }
+  ],
   "redirects": [
     {
       "source": "/:path*",
