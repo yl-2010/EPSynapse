@@ -542,7 +542,7 @@ struct AgentUIContext: Codable, Equatable {
       .split(whereSeparator: \.isNewline)
       .map { $0.trimmingCharacters(in: .whitespaces) }
       .first(where: { !$0.isEmpty })
-      .map(String.init) ?? ""
+      .map { String($0) } ?? ""
     return AgentUIContext(
       view: "note",
       path: "/note/\(row.id)",

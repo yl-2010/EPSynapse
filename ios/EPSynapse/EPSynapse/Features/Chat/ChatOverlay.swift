@@ -940,6 +940,17 @@ enum AgentKeyboardScrub {
         hidden = []
     }
 
+    /// UIKeyboardImpl logs if we snapshot before its first draw. Wait for that frame.
+    private static func snapshot(_ view: UIView, from rect: CGRect) -> UIView? {
+        guard rect.width > 8, rect.height > 8 else { return nil }
+        if view.window == nil, !(view is UIWindow) { return nil }
+        return view.resizableSnapshotView(
+            from: rect,
+            afterScreenUpdates: true,
+            withCapInsets: .zero
+        )
+    }
+
     private static func makePuppet() -> UIView? {
         guard let key = keyWindow() else { return nil }
         var kbFrame = lastKeyboardFrame
@@ -966,11 +977,7 @@ enum AgentKeyboardScrub {
         for window in overlapping {
             let local = window.convert(kbFrame, from: nil).intersection(window.bounds)
             guard local.width > 8, local.height > 8 else { continue }
-            if let snap = window.resizableSnapshotView(
-                from: local,
-                afterScreenUpdates: false,
-                withCapInsets: .zero
-            ) {
+            if let snap = snapshot(window, from: local) {
                 snap.frame = box.bounds
                 box.addSubview(snap)
                 placed = true
@@ -979,7 +986,7 @@ enum AgentKeyboardScrub {
 
         for host in hosts {
             guard host.bounds.width > 20, host.bounds.height > 40 else { continue }
-            guard let snap = host.snapshotView(afterScreenUpdates: false) else { continue }
+            guard let snap = snapshot(host, from: host.bounds) else { continue }
             snap.frame = box.convert(host.convert(host.bounds, to: nil), from: nil)
             box.addSubview(snap)
             placed = true
@@ -1015,7 +1022,7 @@ enum AgentKeyboardScrub {
                 guard winFrame.intersects(frame) else { continue }
                 ctx.cgContext.saveGState()
                 ctx.cgContext.translateBy(x: winFrame.minX - frame.minX, y: winFrame.minY - frame.minY)
-                window.drawHierarchy(in: CGRect(origin: .zero, size: winFrame.size), afterScreenUpdates: false)
+                window.drawHierarchy(in: CGRect(origin: .zero, size: winFrame.size), afterScreenUpdates: true)
                 ctx.cgContext.restoreGState()
             }
         }

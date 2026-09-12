@@ -653,10 +653,10 @@ struct SettingsSheet: View {
             return label
         }
         switch session.provider {
-        case "groq": "Groq"
-        case "gemini": "Gemini"
-        case "openrouter": "OpenRouter"
-        default: session.provider.isEmpty ? "Groq" : session.provider
+        case "groq": return "Groq"
+        case "gemini": return "Gemini"
+        case "openrouter": return "OpenRouter"
+        default: return session.provider.isEmpty ? "Groq" : session.provider
         }
     }
 
