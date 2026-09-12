@@ -2978,3 +2978,13 @@ html[data-resolved-theme="dark"] .edu-school-results {
   font-size: var(--text-caption);
   color: var(--muted);
 }
+
+html[data-auth="out"] #home-open,
+html[data-auth="out"] #settings-open,
+html[data-auth="out"] #stage-full,
+html[data-auth="out"] #stage-loading,
+html[data-auth="out"] #edu-chat,
+html[data-auth="out"] #settings-sheet,
+html[data-auth="out"] #settings-gated {
+  display: none !important;
+}

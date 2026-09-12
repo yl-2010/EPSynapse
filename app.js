@@ -86,6 +86,16 @@
     return Boolean(me && (me.email || me.googleName));
   }
 
+  function applyAuthGate() {
+    const on = signedInViaGoogle();
+    document.documentElement.dataset.auth = on ? "in" : "out";
+    if (on) return;
+    closeSheet();
+    closeChatOverlay();
+    if (loading) loading.hidden = true;
+    if (stage) stage.hidden = true;
+  }
+
   function accountStatusText() {
     if (!signedInViaGoogle()) {
       return gisConfigError || "Sign in with Google. Then add school and student ID so the school can match you.";
@@ -186,6 +196,7 @@
       homeWrap.classList.toggle("is-gis", !inGoogle && Boolean(gisInitialized && googleClientId));
     }
     setStatus(statusEl, accountStatusText());
+    applyAuthGate();
     renderGoogleButtons();
   }
 
@@ -426,10 +437,12 @@
     paintAccount();
     paintOnedrive();
     paintOutlook();
-    renderHome(lastHome);
+    lastHome = { courses: [], assignments: [], files: [], messages: [] };
+    if (appEl) appEl.innerHTML = "";
   }
 
   function openSheet() {
+    if (!signedInViaGoogle()) return;
     sheet.hidden = false;
     document.querySelector(".edu-sheet-body")?.scrollTo(0, 0);
     form.scrollTop = 0;
@@ -473,6 +486,7 @@
   function goHome() {
     closeSheet();
     closeChatOverlay();
+    if (!signedInViaGoogle()) return;
     if (loading) loading.hidden = true;
     if (stage) stage.hidden = false;
     renderHome(lastHome);
@@ -652,6 +666,10 @@
   }
 
   async function loadDashboard() {
+    if (!signedInViaGoogle()) {
+      applyAuthGate();
+      return;
+    }
     loading.hidden = true;
     stage.hidden = false;
     const courses = me?.canvasConnected
@@ -829,8 +847,7 @@
       } catch {
         me = null;
         loading.hidden = true;
-        stage.hidden = false;
-        renderHome({ courses: [], assignments: [], files: [], messages: [] });
+        stage.hidden = true;
       }
     }
     paintAccount();
@@ -1093,6 +1110,10 @@
   });
 
   document.getElementById("key-save").addEventListener("click", () => {
+    if (!signedInViaGoogle()) {
+      setStatus(keyStatus, NEED_GOOGLE);
+      return;
+    }
     const key = document.getElementById("modelKey").value.trim();
     if (!key) {
       setStatus(keyStatus, "Paste a key first.");
@@ -1105,12 +1126,17 @@
   });
 
   document.getElementById("key-clear").addEventListener("click", () => {
+    if (!signedInViaGoogle()) {
+      setStatus(keyStatus, NEED_GOOGLE);
+      return;
+    }
     localStorage.removeItem(LS_KEY);
     document.getElementById("modelKey").value = "";
     refreshKeyStatus();
   });
 
   providerSel.addEventListener("change", () => {
+    if (!signedInViaGoogle()) return;
     localStorage.setItem(LS_PROV, providerSel.value || "groq");
     refreshKeyStatus();
   });

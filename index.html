@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-auth="out">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -18,7 +18,7 @@
     <title>EPSynapse</title>
     <meta name="description" content="EPSynapse student dashboard" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/styles.css?v=glass8" />
+    <link rel="stylesheet" href="/styles.css?v=glass9" />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
       .od-code {
@@ -257,6 +257,7 @@
         </div>
         <p class="edu-empty" id="settings-status">Sign in with Google. Then add school and student ID so the school can match you.</p>
 
+        <div id="settings-gated" class="edu-sheet-gated">
         <div class="edu-school-search">
           <label for="school">School</label>
           <div class="edu-sheet-field">
@@ -313,6 +314,7 @@
         </div>
         <p class="edu-empty" id="key-status"></p>
         </div>
+        </div>
       </form>
     </div>
 
@@ -331,7 +333,7 @@
 
     <script src="/liquid-glass.js?v=glass8"></script>
     <script src="/theme-orb.js?v=glass6"></script>
-    <script src="/app.js?v=glass7"></script>
-    <script src="/chatbot.js?v=glass6"></script>
+    <script src="/app.js?v=glass8"></script>
+    <script src="/chatbot.js?v=glass7"></script>
   </body>
 </html>

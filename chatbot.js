@@ -156,8 +156,12 @@
     return { body: inner, think: thinking !== undefined ? turn.firstChild : null };
   }
 
+  function signedIn() {
+    return document.documentElement.dataset.auth === "in";
+  }
+
   function openChat() {
-    if (state() !== "closed") return;
+    if (!signedIn() || state() !== "closed") return;
     setState(messages.length || preferPanel ? "panel" : "open");
   }
 
@@ -169,6 +173,10 @@
   }
 
   function clearChat() {
+    if (!signedIn()) {
+      minimizeChat();
+      return;
+    }
     messages = [];
     preferPanel = false;
     busy = false;
@@ -180,6 +188,10 @@
   }
 
   async function sendMessage(raw) {
+    if (!signedIn()) {
+      minimizeChat();
+      return;
+    }
     const text = String(raw || "").trim();
     if (!text || busy) return;
     if (state() !== "panel") setState("panel");
