@@ -89,11 +89,6 @@ struct SettingsSheet: View {
         .padding(.horizontal, 20)
         .padding(.top, 18)
         .padding(.bottom, 12)
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(EPSTheme.accent.opacity(0.38))
-                .frame(height: 1)
-        }
     }
 
     private var statusLine: some View {

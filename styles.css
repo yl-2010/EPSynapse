@@ -958,8 +958,6 @@ html[data-resolved-theme="dark"] .edu-back-shadow feGaussianBlur {
   gap: 0.65rem;
   margin-bottom: 0.7rem;
   min-height: 2.15rem;
-  padding-bottom: 0.55rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
 }
 
 .edu-panel-title {

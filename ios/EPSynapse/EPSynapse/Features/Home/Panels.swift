@@ -60,12 +60,6 @@ struct EPSPanel<Content: View>: View {
                     FilterOrbBar()
                 }
             }
-            .padding(.bottom, 8)
-            .overlay(alignment: .bottom) {
-                Rectangle()
-                    .fill(EPSTheme.accent.opacity(0.38))
-                    .frame(height: 1)
-            }
 
             content()
         }
