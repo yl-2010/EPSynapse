@@ -73,11 +73,18 @@ struct ChatOverlay: View {
                 .epsSizedGlassCircle(side: 36)
                 .accessibilityLabel("Hide chat")
 
-                AgentComposerField(
-                    text: $draft,
-                    isFocused: $composerFocused,
-                    onSubmit: send
-                )
+                TextField("Ask your personal agent…", text: $draft, axis: .vertical)
+                    .lineLimit(1 ... 4)
+                    .font(.body)
+                    .foregroundStyle(EPSTheme.fg)
+                    .textInputAutocapitalization(.sentences)
+                    .submitLabel(.send)
+                    .focused($composerFocused)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .background {
+                        KeyboardAccessoryInstaller()
+                    }
+                    .onSubmit { send() }
 
                 Button {
                     send()
@@ -110,6 +117,7 @@ struct ChatOverlay: View {
         .padding(.vertical, isOpen ? 8 : 0)
         .frame(minHeight: pillSide)
         .frame(maxWidth: isOpen ? .infinity : pillSide)
+        .fixedSize(horizontal: false, vertical: true)
         .epsGlassCapsule(interactive: true)
     }
 
@@ -321,105 +329,69 @@ final class KeyboardAnchorView: UIView {
     }
 }
 
-private struct AgentComposerField: UIViewRepresentable {
-    @Binding var text: String
-    var isFocused: FocusState<Bool>.Binding
-    var onSubmit: () -> Void
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text, isFocused: isFocused, onSubmit: onSubmit)
+/// Finds the SwiftUI field and hangs the keyboard hook on it.
+private struct KeyboardAccessoryInstaller: UIViewRepresentable {
+    func makeUIView(context: Context) -> KeyboardAccessoryInstallerView {
+        KeyboardAccessoryInstallerView()
     }
 
-    func makeUIView(context: Context) -> UITextView {
-        let view = UITextView()
-        view.delegate = context.coordinator
-        view.backgroundColor = .clear
-        view.textColor = UIColor(EPSTheme.fg)
-        view.font = .preferredFont(forTextStyle: .body)
-        view.isScrollEnabled = false
-        view.textContainerInset = UIEdgeInsets(top: 8, left: 0, bottom: 8, right: 0)
-        view.textContainer.lineFragmentPadding = 0
-        view.textContainer.maximumNumberOfLines = 4
-        view.returnKeyType = .send
-        view.keyboardDismissMode = .none
-        view.textContainer.lineBreakMode = .byWordWrapping
-        view.inputAccessoryView = KeyboardAnchorView.shared
-        view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        applyPlaceholder(view, text: text)
-        return view
+    func updateUIView(_ view: KeyboardAccessoryInstallerView, context: Context) {
+        view.attach()
+    }
+}
+
+final class KeyboardAccessoryInstallerView: UIView {
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false
+        backgroundColor = .clear
     }
 
-    func updateUIView(_ view: UITextView, context: Context) {
-        context.coordinator.text = $text
-        context.coordinator.isFocused = isFocused
-        context.coordinator.onSubmit = onSubmit
-        if view.text != text, !context.coordinator.isEditingPlaceholder {
-            applyPlaceholder(view, text: text)
-        }
-        if isFocused.wrappedValue, !view.isFirstResponder {
-            view.becomeFirstResponder()
-        } else if !isFocused.wrappedValue, view.isFirstResponder {
-            view.resignFirstResponder()
-        }
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
     }
 
-    private func applyPlaceholder(_ view: UITextView, text: String) {
-        if text.isEmpty {
-            view.text = "Ask your personal agent…"
-            view.textColor = UIColor(EPSTheme.muted)
-            view.tag = 1
-        } else {
-            view.text = text
-            view.textColor = UIColor(EPSTheme.fg)
-            view.tag = 0
-        }
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        attach()
     }
 
-    final class Coordinator: NSObject, UITextViewDelegate {
-        var text: Binding<String>
-        var isFocused: FocusState<Bool>.Binding
-        var onSubmit: () -> Void
-        var isEditingPlaceholder = false
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        attach()
+    }
 
-        init(text: Binding<String>, isFocused: FocusState<Bool>.Binding, onSubmit: @escaping () -> Void) {
-            self.text = text
-            self.isFocused = isFocused
-            self.onSubmit = onSubmit
+    func attach() {
+        if let field = findTextField(from: superview) ?? findTextField(from: window) {
+            if field.inputAccessoryView !== KeyboardAnchorView.shared {
+                field.inputAccessoryView = KeyboardAnchorView.shared
+            }
+            return
         }
-
-        func textViewDidBeginEditing(_ textView: UITextView) {
-            isFocused.wrappedValue = true
-            if textView.tag == 1 {
-                isEditingPlaceholder = true
-                textView.text = ""
-                textView.textColor = UIColor(EPSTheme.fg)
-                textView.tag = 0
-                isEditingPlaceholder = false
+        if let view = findTextView(from: superview) ?? findTextView(from: window) {
+            if view.inputAccessoryView !== KeyboardAnchorView.shared {
+                view.inputAccessoryView = KeyboardAnchorView.shared
             }
         }
+    }
 
-        func textViewDidEndEditing(_ textView: UITextView) {
-            isFocused.wrappedValue = false
-            if textView.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                textView.text = "Ask your personal agent…"
-                textView.textColor = UIColor(EPSTheme.muted)
-                textView.tag = 1
-                text.wrappedValue = ""
-            }
+    private func findTextField(from root: UIView?) -> UITextField? {
+        guard let root else { return nil }
+        if let field = root as? UITextField { return field }
+        for sub in root.subviews {
+            if let found = findTextField(from: sub) { return found }
         }
+        return nil
+    }
 
-        func textViewDidChange(_ textView: UITextView) {
-            guard textView.tag != 1 else { return }
-            text.wrappedValue = textView.text
+    private func findTextView(from root: UIView?) -> UITextView? {
+        guard let root else { return nil }
+        if let view = root as? UITextView { return view }
+        for sub in root.subviews {
+            if let found = findTextView(from: sub) { return found }
         }
-
-        func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText replacement: String) -> Bool {
-            if replacement == "\n" {
-                onSubmit()
-                return false
-            }
-            return true
-        }
+        return nil
     }
 }
 
