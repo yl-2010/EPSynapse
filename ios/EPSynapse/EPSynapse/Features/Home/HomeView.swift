@@ -61,10 +61,16 @@ struct HomeView: View {
                     ClassView(classId: id)
                 case .note(let id):
                     NoteView(noteId: id)
+                case .todo(let id):
+                    TodoView(todoId: id)
                 }
             }
         }
+        .onAppear {
+            dashboard.stackDepth = path.count
+        }
         .onChange(of: path.count) { _, count in
+            dashboard.stackDepth = count
             if count == 0 { dashboard.uiContext = .home() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .epsScrollHomeToTop)) { _ in
@@ -80,6 +86,8 @@ struct HomeView: View {
                 path.append(HomeDestination.schoolClass(id))
             } else if view == "note", let id = info["noteId"] as? String, !id.isEmpty {
                 path.append(HomeDestination.note(id))
+            } else if view == "todo", let id = info["todoId"] as? String, !id.isEmpty {
+                path.append(HomeDestination.todo(id))
             } else if view == "home" {
                 path = NavigationPath()
             }
@@ -125,9 +133,9 @@ struct HomeView: View {
         } else {
             VStack(spacing: 16) {
                 TodoPanel()
-                CompletedPanel()
                 ClassesPanel()
                 NotesPanel(path: $path)
+                CompletedPanel()
             }
         }
     }

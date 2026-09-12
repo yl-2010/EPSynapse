@@ -35,10 +35,13 @@ struct Profile: Codable, Equatable {
   var canvasConnected: Bool
   var onedriveConnected: Bool
   var outlookConnected: Bool
+  var teamsConnected: Bool
   var onedriveEmail: String
   var outlookEmail: String
+  var teamsEmail: String
   var onedrivePending: DevicePending?
   var outlookPending: DevicePending?
+  var teamsPending: DevicePending?
   var modelKeySet: Bool
   var modelProvider: String
   var modelKeyHint: String
@@ -57,10 +60,13 @@ struct Profile: Codable, Equatable {
     canvasConnected: Bool = false,
     onedriveConnected: Bool = false,
     outlookConnected: Bool = false,
+    teamsConnected: Bool = false,
     onedriveEmail: String = "",
     outlookEmail: String = "",
+    teamsEmail: String = "",
     onedrivePending: DevicePending? = nil,
     outlookPending: DevicePending? = nil,
+    teamsPending: DevicePending? = nil,
     modelKeySet: Bool = false,
     modelProvider: String = "groq",
     modelKeyHint: String = "",
@@ -78,10 +84,13 @@ struct Profile: Codable, Equatable {
     self.canvasConnected = canvasConnected
     self.onedriveConnected = onedriveConnected
     self.outlookConnected = outlookConnected
+    self.teamsConnected = teamsConnected
     self.onedriveEmail = onedriveEmail
     self.outlookEmail = outlookEmail
+    self.teamsEmail = teamsEmail
     self.onedrivePending = onedrivePending
     self.outlookPending = outlookPending
+    self.teamsPending = teamsPending
     self.modelKeySet = modelKeySet
     self.modelProvider = modelProvider
     self.modelKeyHint = modelKeyHint
@@ -102,10 +111,13 @@ struct Profile: Codable, Equatable {
     canvasConnected = c.bool(.canvasConnected)
     onedriveConnected = c.bool(.onedriveConnected)
     outlookConnected = c.bool(.outlookConnected)
+    teamsConnected = c.bool(.teamsConnected)
     onedriveEmail = c.string(.onedriveEmail)
     outlookEmail = c.string(.outlookEmail)
+    teamsEmail = c.string(.teamsEmail)
     onedrivePending = try c.decodeIfPresent(DevicePending.self, forKey: .onedrivePending)
     outlookPending = try c.decodeIfPresent(DevicePending.self, forKey: .outlookPending)
+    teamsPending = try c.decodeIfPresent(DevicePending.self, forKey: .teamsPending)
     modelKeySet = c.bool(.modelKeySet)
     modelProvider = c.string(.modelProvider)
     if modelProvider.isEmpty { modelProvider = "groq" }
@@ -193,6 +205,8 @@ struct Assignment: Codable, Identifiable, Equatable {
   var done: Bool
   var plannerOverrideId: String
   var plannableType: String
+  var description: String
+  var classId: String
 
   init(
     id: String = "",
@@ -205,7 +219,9 @@ struct Assignment: Codable, Identifiable, Equatable {
     tag: String = "",
     done: Bool = false,
     plannerOverrideId: String = "",
-    plannableType: String = "assignment"
+    plannableType: String = "assignment",
+    description: String = "",
+    classId: String = ""
   ) {
     self.id = id
     self.canvasId = canvasId
@@ -218,6 +234,8 @@ struct Assignment: Codable, Identifiable, Equatable {
     self.done = done
     self.plannerOverrideId = plannerOverrideId
     self.plannableType = plannableType
+    self.description = description
+    self.classId = classId
   }
 
   init(from decoder: Decoder) throws {
@@ -236,6 +254,9 @@ struct Assignment: Codable, Identifiable, Equatable {
       let value = c.string(.plannableType)
       return value.isEmpty ? "assignment" : value
     }()
+    description = c.string(.description)
+    let decodedClass = c.string(.classId)
+    classId = decodedClass.isEmpty ? courseId : decodedClass
   }
 }
 
@@ -245,6 +266,7 @@ struct DriveFile: Codable, Identifiable, Equatable {
   var webUrl: String
   var source: String
   var classId: String
+  var todoId: String
   var contentType: String
   var text: String
 
@@ -254,6 +276,7 @@ struct DriveFile: Codable, Identifiable, Equatable {
     webUrl: String = "",
     source: String = "",
     classId: String = "",
+    todoId: String = "",
     contentType: String = "",
     text: String = ""
   ) {
@@ -262,6 +285,7 @@ struct DriveFile: Codable, Identifiable, Equatable {
     self.webUrl = webUrl
     self.source = source
     self.classId = classId
+    self.todoId = todoId
     self.contentType = contentType
     self.text = text
   }
@@ -273,6 +297,7 @@ struct DriveFile: Codable, Identifiable, Equatable {
     webUrl = c.string(.webUrl)
     source = c.string(.source)
     classId = c.string(.classId)
+    todoId = c.string(.todoId)
     contentType = c.string(.contentType)
     text = c.string(.text)
   }
@@ -284,6 +309,7 @@ struct DriveFile: Codable, Identifiable, Equatable {
     try c.encode(webUrl, forKey: .webUrl)
     try c.encode(source, forKey: .source)
     try c.encode(classId, forKey: .classId)
+    try c.encode(todoId, forKey: .todoId)
     try c.encode(contentType, forKey: .contentType)
     try c.encode(text, forKey: .text)
   }
@@ -293,7 +319,7 @@ struct DriveFile: Codable, Identifiable, Equatable {
   }
 
   private enum CodingKeys: String, CodingKey {
-    case id, name, webUrl, source, classId, contentType, text
+    case id, name, webUrl, source, classId, todoId, contentType, text
   }
 }
 
@@ -466,6 +492,8 @@ struct AgentUIContext: Codable, Equatable {
   var noteTitle: String
   var noteSubject: String
   var noteText: String
+  var todoId: String
+  var todoTitle: String
 
   init(
     client: String = "ios",
@@ -477,7 +505,9 @@ struct AgentUIContext: Codable, Equatable {
     noteId: String = "",
     noteTitle: String = "",
     noteSubject: String = "",
-    noteText: String = ""
+    noteText: String = "",
+    todoId: String = "",
+    todoTitle: String = ""
   ) {
     self.client = client
     self.view = view
@@ -489,6 +519,8 @@ struct AgentUIContext: Codable, Equatable {
     self.noteTitle = noteTitle
     self.noteSubject = noteSubject
     self.noteText = noteText
+    self.todoId = todoId
+    self.todoTitle = todoTitle
   }
 
   static func home() -> AgentUIContext {
@@ -519,6 +551,17 @@ struct AgentUIContext: Codable, Equatable {
       noteTitle: String(title.prefix(200)),
       noteSubject: row.subject,
       noteText: String(row.text.prefix(1500))
+    )
+  }
+
+  static func todo(_ item: Assignment) -> AgentUIContext {
+    AgentUIContext(
+      view: "todo",
+      path: "/todo/\(item.id)",
+      classId: item.classId.isEmpty ? item.courseId : item.classId,
+      className: item.courseName,
+      todoId: item.id,
+      todoTitle: item.title
     )
   }
 }

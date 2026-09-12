@@ -12,6 +12,7 @@ final class DashboardStore: ObservableObject {
   @Published var assignments: [Assignment] = []
   @Published var files: [DriveFile] = []
   @Published var classFiles: [DriveFile] = []
+  @Published var todoFiles: [DriveFile] = []
   @Published var localFiles: [DriveFile] = []
   @Published var messages: [MailMessage] = []
   @Published var filesError = ""
@@ -27,6 +28,7 @@ final class DashboardStore: ObservableObject {
   @Published var typeFilter: Set<String> = Set(DashboardStore.tags)
   @Published var isLoading = false
   @Published var uiContext: AgentUIContext = .home()
+  @Published var stackDepth = 0
 
   var displayedClasses: [SchoolClass] {
     if !scheduleClasses.isEmpty { return scheduleClasses }
@@ -69,6 +71,7 @@ final class DashboardStore: ObservableObject {
       assignments = []
       files = []
       classFiles = []
+      todoFiles = []
       messages = []
       filesError = ""
       mailError = ""
@@ -82,6 +85,7 @@ final class DashboardStore: ObservableObject {
     }()
     async let fetchedAssignments: [Assignment] = self.loadAssignments(sessionId: sid)
     async let fetchedClassFiles: [DriveFile] = self.loadClassFiles(sessionId: sid)
+    async let fetchedTodoFiles: [DriveFile] = self.loadTodoFiles(sessionId: sid)
     async let fetchedSchedule: (classes: [SchoolClass], meetings: [ScheduleMeeting]) = self.loadSchedule(
       sessionId: sid
     )
@@ -90,6 +94,7 @@ final class DashboardStore: ObservableObject {
     courses = await fetchedCourses
     assignments = await fetchedAssignments
     classFiles = await fetchedClassFiles
+    todoFiles = await fetchedTodoFiles
     files = []
     messages = []
     filesError = ""
@@ -108,6 +113,10 @@ final class DashboardStore: ObservableObject {
     notes.first { $0.id == id }
   }
 
+  func assignment(id: String) -> Assignment? {
+    assignments.first { $0.id == id }
+  }
+
   func assignments(for schoolClass: SchoolClass) -> [Assignment] {
     assignments.filter { Self.assignment($0, matches: schoolClass) }
   }
@@ -122,6 +131,29 @@ final class DashboardStore: ObservableObject {
     let matched = hint.isEmpty ? [] : pool.filter { $0.name.lowercased().contains(hint) }
     var seen = Set<String>()
     return (owned + matched).filter { seen.insert($0.id).inserted }
+  }
+
+  func files(forTodo item: Assignment) -> [DriveFile] {
+    let owned = todoFiles.filter { file in
+      !file.todoId.isEmpty && (
+        file.todoId == item.id || file.todoId.caseInsensitiveCompare(item.id) == .orderedSame
+      )
+    }
+    let hint = item.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    let pool = allFiles + todoFiles
+    let matched = hint.isEmpty ? [] : pool.filter { $0.name.lowercased().contains(hint) }
+    var seen = Set<String>()
+    return (owned + matched).filter { seen.insert($0.id).inserted }
+  }
+
+  func refreshTodoFiles(todoId: String, session: SessionStore) async {
+    guard !session.sessionId.isEmpty else { return }
+    do {
+      let wrapped = try await api.listTodoFiles(todoId: todoId, sessionId: session.sessionId)
+      mergeTodoFiles(wrapped.files)
+    } catch {
+      /* cached list is enough if the route is not up yet */
+    }
   }
 
   func importLocalFile(from url: URL) {
@@ -439,6 +471,19 @@ final class DashboardStore: ObservableObject {
   private func loadClassFiles(sessionId: String) async -> [DriveFile] {
     let wrapped: FilesResponse? = try? await api.listClassFiles(classId: "", sessionId: sessionId)
     return wrapped?.files ?? []
+  }
+
+  private func loadTodoFiles(sessionId: String) async -> [DriveFile] {
+    let wrapped: FilesResponse? = try? await api.listTodoFiles(todoId: "", sessionId: sessionId)
+    return wrapped?.files ?? []
+  }
+
+  private func mergeTodoFiles(_ incoming: [DriveFile]) {
+    var seen = Dictionary(uniqueKeysWithValues: todoFiles.map { ($0.id, $0) })
+    for file in incoming {
+      seen[file.id] = file
+    }
+    todoFiles = Array(seen.values)
   }
 
   func deleteNote(id: String, session: SessionStore) async -> Bool {

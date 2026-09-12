@@ -5,6 +5,10 @@ struct ChatHistoryOverlay: View {
     @State private var interceptClose = false
     @State private var closeStart: CGFloat = 0
     @State private var closeEngaged = false
+    @State private var panelMounted = false
+    @State private var panelWarming = false
+    @State private var didWarm = false
+    @State private var hapticGate = EPSHalfwayHapticGate(threshold: 0.5)
 
     var body: some View {
         GeometryReader { geo in
@@ -15,6 +19,8 @@ struct ChatHistoryOverlay: View {
             let width = Self.panelWidth(for: geo.size)
             let height = Self.panelHeight(for: geo.size, top: top, bottom: bottom)
             let travel = width + leading
+            let showPanel = chat.historyDragging || chat.historyReveal >= 1 || panelMounted
+            let mountPanel = showPanel || panelWarming
 
             ZStack(alignment: .topLeading) {
                 Color.black
@@ -24,25 +30,57 @@ struct ChatHistoryOverlay: View {
                         chat.setHistoryOpen(false)
                     }
 
-                ChatHistoryPanel()
-                    .frame(width: width)
-                    .frame(height: height)
-                    .epsGlassRounded(cornerRadius: 22, interactive: false, clear: true)
-                    .padding(.top, top)
-                    .padding(.leading, leading)
-                    .offset(x: (chat.historyReveal - 1) * travel)
+                if mountPanel {
+                    ChatHistoryPanel()
+                        .frame(width: width)
+                        .frame(height: height)
+                        .epsGlassRounded(cornerRadius: 22, interactive: false)
+                        .padding(.top, top)
+                        .padding(.leading, leading)
+                        .offset(x: (chat.historyReveal - 1) * travel)
+                        .accessibilityHidden(!showPanel)
+                        .transition(.identity)
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .task(id: travel) {
                 chat.historyPanelWidth = travel
             }
+            .onAppear {
+                warmUpIfNeeded()
+            }
             .onChange(of: chat.historyReveal) { _, value in
-                if value >= 1 { interceptClose = true }
-                if value <= 0 { interceptClose = false }
+                if value >= 1 {
+                    interceptClose = true
+                    panelMounted = true
+                }
+                if value <= 0 {
+                    interceptClose = false
+                    if !chat.historyDragging && !panelWarming {
+                        panelMounted = false
+                    }
+                }
+            }
+            .onChange(of: chat.historyDragging) { _, dragging in
+                if dragging { panelMounted = true }
             }
             .simultaneousGesture(closeDrag(travel: travel))
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ignoresSafeArea()
-        .allowsHitTesting(chat.historyDragging && interceptClose || chat.historyReveal > 0.5)
+        .modifier(
+            EPSProgressMonitor(progress: chat.historyReveal) { progress in
+                hapticGate.handle(progress)
+            }
+        )
+        .allowsHitTesting(overlayHits)
+    }
+
+    private var overlayHits: Bool {
+        if chat.historyDragging {
+            return interceptClose || chat.historyReveal > 0.5
+        }
+        return chat.historyReveal > 0.5
     }
 
     static func panelWidth(for size: CGSize) -> CGFloat {
@@ -80,6 +118,22 @@ struct ChatHistoryOverlay: View {
         return min(preferred, available)
     }
 
+    /// Build the panel once off-screen after the overlay appears, then drop it.
+    /// First Liquid Glass construction is slow on a cold launch; doing it at
+    /// idle keeps the first real swipe from drawing an empty sheet.
+    private func warmUpIfNeeded() {
+        guard !didWarm else { return }
+        didWarm = true
+        panelWarming = true
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            panelWarming = false
+            if chat.historyReveal <= 0, !chat.historyDragging {
+                panelMounted = false
+            }
+        }
+    }
+
     private func closeDrag(travel: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 12, coordinateSpace: .local)
             .onChanged { value in
@@ -90,9 +144,13 @@ struct ChatHistoryOverlay: View {
                     closeEngaged = true
                     closeStart = chat.historyReveal
                     chat.historyDragging = true
+                    panelMounted = true
+                    hapticGate.reset()
                     EPSHaptics.swipeBegin()
+                    hapticGate.handle(closeStart)
                 }
                 follow(start: closeStart, dx: dx, travel: travel)
+                hapticGate.handle(min(max(chat.historyReveal, 0), 1))
             }
             .onEnded { value in
                 guard closeEngaged else { return }
@@ -121,6 +179,9 @@ struct ChatHistoryOverlay: View {
             open = Self.linear(chat.historyReveal) >= 0.5
         }
         chat.setHistoryOpen(open)
+        if !open {
+            panelMounted = chat.historyReveal > 0.01
+        }
     }
 
     static func rubber(_ raw: CGFloat) -> CGFloat {
@@ -138,16 +199,25 @@ struct ChatHistoryOverlay: View {
 
 struct ChatHistoryOpenModifier: ViewModifier {
     @EnvironmentObject private var chat: ChatStore
+    @EnvironmentObject private var dashboard: DashboardStore
     @State private var startReveal: CGFloat = 0
     @State private var engaged = false
+    @State private var hapticGate = EPSHalfwayHapticGate(threshold: 0.5)
 
     func body(content: Content) -> some View {
         content.simultaneousGesture(openDrag)
     }
 
+    private var blocksHistoryOpen: Bool {
+        if dashboard.stackDepth > 0 { return true }
+        let view = dashboard.uiContext.view.lowercased()
+        return view == "class" || view == "note" || view == "todo"
+    }
+
     private var openDrag: some Gesture {
         DragGesture(minimumDistance: 12)
             .onChanged { value in
+                guard !blocksHistoryOpen else { return }
                 let dx = value.translation.width
                 let dy = value.translation.height
                 if !engaged {
@@ -155,7 +225,9 @@ struct ChatHistoryOpenModifier: ViewModifier {
                     engaged = true
                     startReveal = chat.historyReveal
                     chat.historyDragging = true
+                    hapticGate.reset()
                     EPSHaptics.swipeBegin()
+                    hapticGate.handle(startReveal)
                     Task { await chat.loadList() }
                 }
                 let travel = max(chat.historyPanelWidth, 1)
@@ -165,6 +237,7 @@ struct ChatHistoryOpenModifier: ViewModifier {
                 withTransaction(transaction) {
                     chat.historyReveal = ChatHistoryOverlay.rubber(raw)
                 }
+                hapticGate.handle(min(max(chat.historyReveal, 0), 1))
             }
             .onEnded { value in
                 guard engaged else { return }

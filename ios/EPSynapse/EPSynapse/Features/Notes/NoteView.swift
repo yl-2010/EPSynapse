@@ -52,6 +52,7 @@ struct NoteView: View {
         .epsVerticalScrollOnly()
         .toolbar(.hidden, for: .navigationBar)
         .navigationBarBackButtonHidden(true)
+        .epsSwipeBackHaptics()
         .task {
             await dashboard.refreshNote(id: noteId, session: session)
             hydrate()

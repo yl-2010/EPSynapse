@@ -16,6 +16,10 @@ struct ClassView: View {
         dashboard.schoolClass(id: classId)
     }
 
+    private var isWide: Bool {
+        AdaptiveLayout.isWideLayout(horizontal: horizontalSizeClass, vertical: verticalSizeClass)
+    }
+
     private var pagePad: CGFloat {
         AdaptiveLayout.pagePadding(horizontal: horizontalSizeClass, vertical: verticalSizeClass)
     }
@@ -53,10 +57,25 @@ struct ClassView: View {
                     if !schoolClass.canvasLink.isEmpty {
                         canvasButton(schoolClass.canvasLink)
                     }
-                    todoPanel
-                    completedPanel
-                    notesPanel
-                    filesPanel
+                    if isWide {
+                        HStack(alignment: .top, spacing: 16) {
+                            VStack(spacing: 16) {
+                                todoPanel
+                                completedPanel
+                            }
+                            .frame(maxWidth: .infinity, alignment: .top)
+                            VStack(spacing: 16) {
+                                notesPanel
+                                filesPanel
+                            }
+                            .frame(maxWidth: .infinity, alignment: .top)
+                        }
+                    } else {
+                        todoPanel
+                        notesPanel
+                        filesPanel
+                        completedPanel
+                    }
                 } else {
                     EmptyLine("This class is gone from the schedule.")
                 }
@@ -71,6 +90,7 @@ struct ClassView: View {
         .epsVerticalScrollOnly()
         .toolbar(.hidden, for: .navigationBar)
         .navigationBarBackButtonHidden(true)
+        .epsSwipeBackHaptics()
         .sheet(item: $htmlFile) { file in
             ClassHTMLSheet(file: file)
         }

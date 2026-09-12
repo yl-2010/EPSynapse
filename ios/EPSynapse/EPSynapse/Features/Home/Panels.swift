@@ -244,7 +244,6 @@ struct TodoRows<Row: View>: View {
 
 struct TodoRow: View {
     var item: Assignment
-    @Environment(\.openURL) private var openURL
     @EnvironmentObject private var session: SessionStore
     @EnvironmentObject private var dashboard: DashboardStore
     @State private var hovering = false
@@ -255,11 +254,7 @@ struct TodoRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
             checkbox
-            Button {
-                if let url = URL(string: item.canvasLink), !item.canvasLink.isEmpty {
-                    openURL(url)
-                }
-            } label: {
+            NavigationLink(value: HomeDestination.todo(item.id)) {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         EPSTagChip(tag: item.tag)
@@ -283,6 +278,7 @@ struct TodoRow: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.plain)
+            .epsHapticNavigation()
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 8)

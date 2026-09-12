@@ -140,6 +140,13 @@ struct APIClient {
     return try await request(query, sessionId: sessionId)
   }
 
+  func listTodoFiles(todoId: String, sessionId: String) async throws -> FilesResponse {
+    let query = todoId.isEmpty
+      ? "/v1/me/todo-files?text=1"
+      : "/v1/me/todo-files?todoId=\(Self.pathValue(todoId))&text=1"
+    return try await request(query, sessionId: sessionId)
+  }
+
   func uploadMultipart<T: Decodable>(
     _ path: String,
     fileURL: URL,
