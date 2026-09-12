@@ -32,7 +32,10 @@ final class ChatStore: ObservableObject {
         busy = false
         wantsChatOpen = true
         guard !snapshot.isEmpty else { return }
-        Task { await persist(turns: snapshot, sessionId: sid) }
+        Task {
+            await persist(turns: snapshot, sessionId: sid)
+            if let sid { await markRead(sid) }
+        }
     }
 
     func persistCurrent() async {
@@ -89,9 +92,13 @@ final class ChatStore: ObservableObject {
     }
 
     func setHistoryOpen(_ open: Bool) {
+        let wasOpen = historyReveal > 0.5
         historyDragging = false
         withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
             historyReveal = open ? 1 : 0
+        }
+        if wasOpen && !open, !busy, let sid = currentSessionId {
+            Task { await markRead(sid) }
         }
     }
 
@@ -109,8 +116,18 @@ final class ChatStore: ObservableObject {
                     ChatPersistBody(sessionId: sessionId, messages: messages, title: title),
                     sessionId: auth
                 )
-                currentSessionId = saved.sessionId
-                upsert(ChatListItem(saved), messages: messages)
+                if Self.shouldAdoptSession(current: currentSessionId, persisted: sessionId, saved: saved.sessionId) {
+                    currentSessionId = saved.sessionId
+                }
+                let existing = cachedThread(id: saved.sessionId)
+                let lastRead = Self.lastReadOnPersist(existing: existing, now: ChatISODate.date(from: saved.updated))
+                var item = ChatListItem(saved)
+                item.unread = saved.unread
+                item.working = busy && saved.sessionId == currentSessionId
+                upsert(item, messages: messages, started: existing?.started, lastRead: lastRead)
+                if currentSessionId == saved.sessionId, historyReveal < 0.5, !busy {
+                    await markRead(saved.sessionId)
+                }
                 return
             } catch {
                 // Signed out or the Mac API is down. Keep the thread on device.
@@ -118,19 +135,24 @@ final class ChatStore: ObservableObject {
         }
 
         let id = sessionId?.isEmpty == false ? sessionId! : UUID().uuidString.lowercased()
-        if currentSessionId == nil || currentSessionId == sessionId {
+        if Self.shouldAdoptSession(current: currentSessionId, persisted: sessionId, saved: id) {
             currentSessionId = id
         }
         let now = Date()
+        let existing = cachedThread(id: id)
+        let lastRead = Self.lastReadOnPersist(existing: existing, now: now)
         let item = ChatListItem(
             sessionId: id,
             title: title,
             preview: messages.last?.content ?? "",
             updated: now,
-            unread: false,
+            unread: Self.isUnread(updated: now, lastRead: lastRead),
             working: busy && id == currentSessionId
         )
-        upsert(item, messages: messages, started: cachedThread(id: id)?.started)
+        upsert(item, messages: messages, started: existing?.started, lastRead: lastRead)
+        if currentSessionId == id, historyReveal < 0.5, !busy {
+            await markRead(id)
+        }
     }
 
     private func loadRemoteChat(_ id: String) async -> [ChatTurn]? {
@@ -149,6 +171,7 @@ final class ChatStore: ObservableObject {
         chats = items.map { item in
             var copy = item
             copy.working = busy && item.sessionId == currentSessionId
+            if copy.working { copy.unread = false }
             return copy
         }
         mergeCache(from: rows)
@@ -161,16 +184,22 @@ final class ChatStore: ObservableObject {
                 title: cached.title,
                 preview: cached.preview,
                 updated: ChatISODate.date(from: cached.updated),
-                unread: cached.unread,
+                unread: Self.cachedUnread(cached),
                 working: busy && cached.sessionId == currentSessionId
             )
         }
         .sorted { $0.updated > $1.updated }
     }
 
-    private func upsert(_ item: ChatListItem, messages: [ChatMessageBody], started: String? = nil) {
+    private func upsert(
+        _ item: ChatListItem,
+        messages: [ChatMessageBody],
+        started: String? = nil,
+        lastRead: String? = nil
+    ) {
         var next = item
         next.working = busy && item.sessionId == currentSessionId
+        if next.working { next.unread = false }
         if let index = chats.firstIndex(where: { $0.sessionId == item.sessionId }) {
             chats[index] = next
         } else {
@@ -180,13 +209,15 @@ final class ChatStore: ObservableObject {
 
         var cache = loadCache()
         let startedISO = started ?? cache.first(where: { $0.sessionId == item.sessionId })?.started ?? ChatISODate.string(from: item.updated)
+        let keptRead = lastRead ?? cache.first(where: { $0.sessionId == item.sessionId })?.lastRead
         let row = CachedChat(
             sessionId: item.sessionId,
             title: item.title,
             preview: item.preview,
             started: startedISO,
             updated: ChatISODate.string(from: item.updated),
-            unread: item.unread,
+            lastRead: keptRead,
+            unread: next.unread,
             messages: messages
         )
         if let index = cache.firstIndex(where: { $0.sessionId == item.sessionId }) {
@@ -201,7 +232,12 @@ final class ChatStore: ObservableObject {
     private func refreshWorking() {
         chats = chats.map { item in
             var copy = item
-            copy.working = busy && item.sessionId == currentSessionId
+            let workingNow = busy && item.sessionId == currentSessionId
+            if copy.working && !workingNow {
+                copy.unread = true
+            }
+            copy.working = workingNow
+            if workingNow { copy.unread = false }
             return copy
         }
     }
@@ -216,6 +252,7 @@ final class ChatStore: ObservableObject {
         var cache = loadCache()
         guard let index = cache.firstIndex(where: { $0.sessionId == sessionId }) else { return }
         cache[index].unread = false
+        cache[index].lastRead = ChatISODate.string(from: Date())
         saveCache(cache)
     }
 
@@ -228,6 +265,9 @@ final class ChatStore: ObservableObject {
                 cache[index].started = row.started.isEmpty ? cache[index].started : row.started
                 cache[index].updated = row.updated
                 cache[index].unread = row.unread
+                if !row.unread {
+                    cache[index].lastRead = row.updated
+                }
             } else {
                 cache.append(
                     CachedChat(
@@ -236,6 +276,7 @@ final class ChatStore: ObservableObject {
                         preview: row.preview,
                         started: row.started,
                         updated: row.updated,
+                        lastRead: row.unread ? nil : row.updated,
                         unread: row.unread,
                         messages: []
                     )
@@ -269,6 +310,32 @@ final class ChatStore: ObservableObject {
         if text.count <= 72 { return text }
         return String(text.prefix(72))
     }
+
+    static func shouldAdoptSession(current: String?, persisted: String?, saved: String) -> Bool {
+        if let current, !current.isEmpty {
+            return current == persisted || current == saved
+        }
+        return persisted == nil || persisted?.isEmpty == true
+    }
+
+    static func lastReadOnPersist(existing: CachedChat?, now: Date) -> String {
+        guard let existing else { return ChatISODate.string(from: now) }
+        if let kept = existing.lastRead, !kept.isEmpty { return kept }
+        if !existing.updated.isEmpty { return existing.updated }
+        return ChatISODate.string(from: now)
+    }
+
+    static func isUnread(updated: Date, lastRead: String) -> Bool {
+        guard !lastRead.isEmpty else { return false }
+        return updated > ChatISODate.date(from: lastRead)
+    }
+
+    static func cachedUnread(_ cached: CachedChat) -> Bool {
+        if let lastRead = cached.lastRead, !lastRead.isEmpty {
+            return isUnread(updated: ChatISODate.date(from: cached.updated), lastRead: lastRead)
+        }
+        return cached.unread
+    }
 }
 
 private struct CachedChat: Codable {
@@ -277,6 +344,7 @@ private struct CachedChat: Codable {
     var preview: String
     var started: String
     var updated: String
+    var lastRead: String?
     var unread: Bool
     var messages: [ChatMessageBody]
 }

@@ -73,6 +73,7 @@ import {
   upsertGoogleStudent,
 } from "./students.js";
 import {
+  chatHistoryIsUnread,
   listChats,
   loadChat,
   markChatRead,
@@ -869,6 +870,7 @@ app.post("/v1/agent/chats", async (req, res) => {
       preview: chat.preview,
       started: chat.started,
       updated: chat.updated,
+      unread: chatHistoryIsUnread(chat.updated, chat.lastRead),
     });
   } catch (err) {
     return fail(res, err, err.status || 400);

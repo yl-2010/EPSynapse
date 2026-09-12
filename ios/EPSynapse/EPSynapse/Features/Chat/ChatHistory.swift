@@ -8,6 +8,8 @@ struct ChatListItem: Identifiable, Equatable, Hashable {
     var updated: Date
     var unread: Bool
     var working: Bool
+    var isUnread: Bool { unread && !working }
+    var isWorking: Bool { working }
 
     init(
         sessionId: String,
@@ -161,6 +163,10 @@ struct ChatHistoryPanel: View {
                                 ChatHistoryRowLabel(item: item, showAge: section.showAge)
                             }
                             .buttonStyle(ChatHistoryRowButtonStyle())
+                            .accessibilityLabel(item.title)
+                            .accessibilityValue(
+                                item.isWorking ? "Working" : item.isUnread ? "Unread" : ""
+                            )
                         }
                     }
                 }
@@ -178,11 +184,23 @@ struct ChatHistoryRowLabel: View {
     var showAge: Bool
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            if item.unread || item.working {
-                ChatHistoryStatusDot(working: item.working)
-                    .alignmentGuide(.firstTextBaseline) { dim in dim.height * 0.72 }
+        Group {
+            if item.isWorking || item.isUnread {
+                HStack(alignment: .center, spacing: 8) {
+                    ChatHistoryStatusDot(working: item.isWorking)
+                    titleAndAge
+                }
+            } else {
+                titleAndAge
             }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .epsGlassRounded(cornerRadius: 14, interactive: true)
+    }
+
+    private var titleAndAge: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(item.title)
                 .font(.body)
                 .foregroundStyle(EPSTheme.fg)
@@ -195,9 +213,6 @@ struct ChatHistoryRowLabel: View {
                     .monospacedDigit()
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .epsGlassRounded(cornerRadius: 14, interactive: true)
     }
 }
 
@@ -212,24 +227,28 @@ struct ChatHistoryRowButtonStyle: ButtonStyle {
 
 struct ChatHistoryStatusDot: View {
     var working: Bool
-    @State private var pulse = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var dimmed = false
 
     var body: some View {
         Circle()
             .fill(EPSTheme.accent)
             .frame(width: 8, height: 8)
-            .opacity(working && pulse ? 0.35 : 1)
-            .onAppear { spinIfNeeded() }
+            .opacity(working && !reduceMotion && dimmed ? 0.25 : 1)
+            .onAppear(perform: syncPulse)
             .onChange(of: working) { _, _ in
-                pulse = false
-                spinIfNeeded()
+                syncPulse()
+            }
+            .onChange(of: reduceMotion) { _, _ in
+                syncPulse()
             }
     }
 
-    private func spinIfNeeded() {
-        guard working else { return }
-        withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
-            pulse = true
+    private func syncPulse() {
+        dimmed = false
+        guard working, !reduceMotion else { return }
+        withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
+            dimmed = true
         }
     }
 }

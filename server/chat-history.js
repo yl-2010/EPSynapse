@@ -71,6 +71,20 @@ function previewFromMessages(messages) {
   return "";
 }
 
+export function chatHistoryIsUnread(updated, lastRead) {
+  const u = Date.parse(String(updated || ""));
+  const r = Date.parse(String(lastRead || ""));
+  if (!Number.isFinite(u) || !Number.isFinite(r)) return false;
+  return u > r;
+}
+
+function lastReadOnPersist(existing, now) {
+  if (!existing) return now;
+  const kept = String(existing.lastRead || "").trim();
+  if (kept) return kept;
+  return String(existing.updated || now);
+}
+
 function publicRow(chat) {
   const updated = String(chat.updated || "");
   const lastRead = String(chat.lastRead || "");
@@ -80,7 +94,7 @@ function publicRow(chat) {
     preview: chat.preview || "",
     started: chat.started || updated,
     updated,
-    unread: Boolean(lastRead && updated && lastRead < updated),
+    unread: chatHistoryIsUnread(updated, lastRead),
   };
 }
 
@@ -122,7 +136,7 @@ export async function persistChat({ ownerId, sessionId, messages, title }) {
     preview: previewFromMessages(clean),
     started: existing?.started || now,
     updated: now,
-    lastRead: now,
+    lastRead: lastReadOnPersist(existing, now),
     messages: clean,
   };
   await writeChatFile(owner, chat);

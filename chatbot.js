@@ -269,7 +269,7 @@
       preview: chat.preview || previewFromMessages(chat.messages),
       started: chat.started || new Date().toISOString(),
       updated: chat.updated || new Date().toISOString(),
-      lastRead: chat.lastRead || new Date().toISOString(),
+      lastRead: chat.lastRead || chat.updated || new Date().toISOString(),
       messages: Array.isArray(chat.messages) ? chat.messages.slice(-MAX_SAVED) : [],
     };
     bag.chats = [next, ...bag.chats.filter((c) => c.sessionId !== next.sessionId)].slice(0, 80);
@@ -317,13 +317,14 @@
     if (!messages.length) return;
     if (!sessionId) sessionId = newChatId();
     const now = new Date().toISOString();
+    const existing = readLocalBag().chats.find((c) => c.sessionId === sessionId);
     const row = {
       sessionId,
       title: titleFromMessages(messages),
       preview: previewFromMessages(messages),
-      started: readLocalBag().chats.find((c) => c.sessionId === sessionId)?.started || now,
+      started: existing?.started || now,
       updated: now,
-      lastRead: now,
+      lastRead: lastReadOnPersist(existing, now),
       messages: messages.slice(-MAX_SAVED),
     };
     upsertLocalThread(row);
@@ -407,7 +408,34 @@
     });
   }
 
-  function hideHistory() {
+  function chatHistoryIsUnread(updated, lastRead) {
+    const u = Date.parse(String(updated || ""));
+    const r = Date.parse(String(lastRead || ""));
+    if (!Number.isFinite(u) || !Number.isFinite(r)) return false;
+    return u > r;
+  }
+
+  function lastReadOnPersist(existing, now) {
+    if (!existing) return now;
+    const kept = String(existing.lastRead || "").trim();
+    if (kept) return kept;
+    return String(existing.updated || now);
+  }
+
+  function withWorkingStatus(chats) {
+    return (chats || []).map((row) => {
+      const sid = String(row?.sessionId || "");
+      const isWorking = Boolean(busy && sid && sid === sessionId);
+      return {
+        ...row,
+        working: isWorking,
+        unread: isWorking ? false : Boolean(row?.unread),
+      };
+    });
+  }
+
+  function hideHistory(opts = {}) {
+    const wasShowing = showingHistory;
     showingHistory = false;
     syncHistoryChrome();
     if (messagesEl) messagesEl.hidden = false;
@@ -415,6 +443,9 @@
       historyEl.hidden = true;
       historyEl.setAttribute("aria-hidden", "true");
       historyEl.innerHTML = "";
+    }
+    if (opts.markVisibleRead && wasShowing && sessionId && !busy) {
+      markChatRead(sessionId);
     }
   }
 
@@ -438,15 +469,18 @@
       preview: c.preview,
       updated: c.updated,
       started: c.started,
-      unread: Boolean(c.lastRead && c.updated && c.lastRead < c.updated),
+      unread: chatHistoryIsUnread(c.updated, c.lastRead),
     }));
   }
 
   function applyHistoryDot(row, chat) {
-    const unread = Boolean(chat?.unread);
+    const working = Boolean(chat?.working);
+    const unread = Boolean(chat?.unread) && !working;
     let dot = row.querySelector(".yan-chat-history-dot");
-    if (!unread) {
+    const title = String(row.querySelector(".yan-chat-history-title")?.textContent || "Chat");
+    if (!working && !unread) {
       dot?.remove();
+      row.setAttribute("aria-label", title);
       return;
     }
     if (!dot) {
@@ -455,12 +489,43 @@
       dot.setAttribute("aria-hidden", "true");
       row.insertBefore(dot, row.firstChild);
     }
+    dot.classList.toggle("is-working", working);
+    dot.classList.toggle("is-unread", unread);
+    row.setAttribute("aria-label", working ? `${title}, working` : `${title}, unread`);
+  }
+
+  async function markChatRead(sid) {
+    const id = String(sid || "").trim();
+    if (!id) return;
+    const now = new Date().toISOString();
+    const bag = readLocalBag();
+    const chat = bag.chats.find((c) => c.sessionId === id);
+    if (chat) {
+      chat.lastRead = now;
+      writeLocalBag(bag);
+    }
+    if (showingHistory && historyEl) {
+      const row = historyEl.querySelector(
+        `.yan-chat-history-row[data-session-id="${CSS.escape(id)}"]`
+      );
+      if (row) applyHistoryDot(row, { unread: false, working: busy && id === sessionId });
+    }
+    try {
+      await fetch(apiBase() + "/v1/agent/chats/" + encodeURIComponent(id) + "/read", {
+        method: "POST",
+        credentials: "include",
+        headers: authHeaders(),
+        body: "{}",
+      });
+    } catch {
+      /* list refresh will catch up */
+    }
   }
 
   async function renderHistory() {
     if (!historyEl) return;
     const fetchGen = ++historyFetchGen;
-    const chats = await listThreads();
+    const chats = withWorkingStatus(await listThreads());
     if (fetchGen !== historyFetchGen || !showingHistory) return;
     historyEl.innerHTML = "";
     if (!chats.length) {
@@ -518,7 +583,7 @@
   }
 
   function toggleHistory() {
-    if (showingHistory) hideHistory();
+    if (showingHistory) hideHistory({ markVisibleRead: true });
     else showHistory();
   }
 
@@ -526,6 +591,7 @@
     const id = String(sid || "").trim();
     if (!id) return;
     hideHistory();
+    markChatRead(id);
     if (id === sessionId && messages.length) {
       paintMessages(messages);
       setState("panel");
@@ -554,16 +620,6 @@
     bag.currentId = id;
     writeLocalBag(bag);
     setState("panel");
-    try {
-      await fetch(apiBase() + "/v1/agent/chats/" + encodeURIComponent(id) + "/read", {
-        method: "POST",
-        credentials: "include",
-        headers: authHeaders(),
-        body: "{}",
-      });
-    } catch {
-      /* ignore */
-    }
   }
 
   function openChat() {
@@ -585,7 +641,9 @@
       return;
     }
     hideHistory();
+    const oldId = sessionId;
     if (messages.length) await persistThread();
+    if (oldId) await markChatRead(oldId);
     messages = [];
     sessionId = "";
     preferPanel = false;
@@ -689,7 +747,7 @@
       if (!answer) slot.body.textContent = "The model returned an empty reply.";
       messages.push({ role: "assistant", content: answer || "" });
       saveChat();
-      persistThread();
+      await persistThread();
     } catch {
       slot.body.textContent = "Could not reach api.epsynapse.com.";
       if (slot.think) slot.think.remove();
@@ -697,6 +755,8 @@
     } finally {
       busy = false;
       root.classList.remove("is-busy");
+      if (showingHistory) renderHistory();
+      else if (sessionId) markChatRead(sessionId);
       if (input && state() !== "closed") input.focus({ preventScroll: true });
     }
   }
@@ -741,7 +801,7 @@
     if (sid) openHistoryChat(sid);
   });
   input?.addEventListener("focus", () => {
-    if (showingHistory) hideHistory();
+    if (showingHistory) hideHistory({ markVisibleRead: true });
   });
   form?.addEventListener("submit", (event) => {
     event.preventDefault();
