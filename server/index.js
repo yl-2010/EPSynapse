@@ -9,7 +9,9 @@ import express from "express";
 import cors from "cors";
 import {
   PROVIDERS,
+  consumeSse,
   explainUpstreamError,
+  extractChatDelta,
   publicAgentConfig,
   resolveApiKey,
   sanitizeMessages,
@@ -785,6 +787,7 @@ app.post("/v1/agent/chat", async (req, res) => {
 
   res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
   res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Content-Encoding", "identity");
   res.setHeader("Connection", "keep-alive");
   res.setHeader("X-Accel-Buffering", "no");
   res.setHeader("X-Agent-Source", source);
@@ -795,13 +798,32 @@ app.post("/v1/agent/chat", async (req, res) => {
     return res.end();
   }
 
+  const decoder = new TextDecoder();
+  let buf = "";
+  const writeDelta = (event) => {
+    if (!event || event === "[DONE]") return;
+    let json;
+    try {
+      json = JSON.parse(event);
+    } catch {
+      return;
+    }
+    const delta = extractChatDelta(json);
+    if (!delta.content && !delta.reasoning) return;
+    res.write(`data: ${JSON.stringify({ choices: [{ delta }] })}\n\n`);
+  };
+
   const reader = upstream.body.getReader();
   try {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      res.write(value);
+      buf += decoder.decode(value, { stream: true });
+      buf = consumeSse(buf, writeDelta);
     }
+    buf += decoder.decode();
+    consumeSse(`${buf}\n\n`, writeDelta);
+    res.write("data: [DONE]\n\n");
   } catch {
     // Client hung up or the upstream stream died. Fine.
   } finally {

@@ -122,28 +122,59 @@
     root.classList.add("is-composer-tall");
   }
 
+  function textFromModelField(value) {
+    if (typeof value === "string") return value;
+    if (typeof value === "number" || typeof value === "boolean") return String(value);
+    if (Array.isArray(value)) return value.map(textFromModelField).join("");
+    if (value && typeof value === "object") {
+      return (
+        textFromModelField(value.text) ||
+        textFromModelField(value.content) ||
+        textFromModelField(value.reasoning) ||
+        ""
+      );
+    }
+    return "";
+  }
+
+  function deltaFromEvent(event) {
+    if (!event || event === "[DONE]") return null;
+    try {
+      const json = JSON.parse(event);
+      const choice = json && json.choices && json.choices[0];
+      if (!choice) return null;
+      const src = choice.delta || choice.message || {};
+      const content = textFromModelField(src.content);
+      const reasoning =
+        textFromModelField(src.reasoning) || textFromModelField(src.reasoning_content);
+      if (!content && !reasoning) return null;
+      return { content, reasoning };
+    } catch {
+      return null;
+    }
+  }
+
   function parseSseChunk(buffer, onDelta) {
     const parts = buffer.split("\n");
     const rest = parts.pop();
     let event = "";
+    const emit = (raw) => {
+      const delta = deltaFromEvent(raw);
+      if (delta) onDelta(delta);
+    };
     parts.forEach((line) => {
       line = line.replace(/\r$/, "");
-      if (line.indexOf("data:") === 0) event += line.slice(5).trim();
-      else if (line === "") {
-        if (event && event !== "[DONE]") {
-          try {
-            const json = JSON.parse(event);
-            const delta = json.choices && json.choices[0] && json.choices[0].delta;
-            if (delta) {
-              onDelta({
-                content: delta.content || "",
-                reasoning: delta.reasoning || delta.reasoning_content || "",
-              });
-            }
-          } catch {
-            /* torn JSON frame */
-          }
+      if (line.indexOf("data:") === 0) {
+        const chunk = line.slice(5).trim();
+        if (chunk.indexOf("{") === 0 || chunk === "[DONE]") {
+          if (event) emit(event);
+          event = "";
+          emit(chunk);
+        } else {
+          event += chunk;
         }
+      } else if (line === "") {
+        emit(event);
         event = "";
       }
     });
@@ -638,6 +669,21 @@
             slot.body.textContent = answer;
           }
         });
+      }
+      buf = parseSseChunk(buf + "\n\n", (delta) => {
+        if (delta.reasoning) {
+          thought += delta.reasoning;
+          if (slot.think) slot.think.textContent = thought;
+        }
+        if (delta.content) {
+          answer += delta.content;
+          slot.body.textContent = answer;
+        }
+      });
+      if (!answer && thought) {
+        answer = thought;
+        thought = "";
+        slot.body.textContent = answer;
       }
       if (!thought && slot.think) slot.think.remove();
       if (!answer) slot.body.textContent = "The model returned an empty reply.";

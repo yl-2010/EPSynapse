@@ -125,3 +125,52 @@ export function explainUpstreamError(status, text) {
   const clipped = String(text || "").replace(/\s+/g, " ").slice(0, 240);
   return clipped || `Provider returned ${status}.`;
 }
+
+export function textFromModelField(value) {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return value.map(textFromModelField).join("");
+  if (value && typeof value === "object") {
+    return (
+      textFromModelField(value.text) ||
+      textFromModelField(value.content) ||
+      textFromModelField(value.reasoning) ||
+      ""
+    );
+  }
+  return "";
+}
+
+export function extractChatDelta(json) {
+  const choice = json && Array.isArray(json.choices) ? json.choices[0] : null;
+  if (!choice) return { content: "", reasoning: "" };
+  const src = choice.delta || choice.message || {};
+  return {
+    content: textFromModelField(src.content),
+    reasoning:
+      textFromModelField(src.reasoning) || textFromModelField(src.reasoning_content),
+  };
+}
+
+export function consumeSse(buffer, onEvent) {
+  const parts = String(buffer || "").split("\n");
+  const rest = parts.pop();
+  let event = "";
+  for (const raw of parts) {
+    const line = raw.replace(/\r$/, "");
+    if (line.startsWith("data:")) {
+      const chunk = line.slice(5).trim();
+      if (chunk.startsWith("{") || chunk === "[DONE]") {
+        if (event) onEvent(event);
+        event = "";
+        onEvent(chunk);
+      } else {
+        event += chunk;
+      }
+    } else if (line === "") {
+      if (event) onEvent(event);
+      event = "";
+    }
+  }
+  return (event ? `data: ${event}\n` : "") + rest;
+}

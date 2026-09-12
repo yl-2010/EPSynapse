@@ -328,7 +328,13 @@ struct ChatOverlay: View {
                 turn.thinking = ""
             }
             if turn.content.isEmpty {
-                turn.content = fallback
+                let thought = turn.thinking.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !thought.isEmpty {
+                    turn.content = thought
+                    turn.thinking = ""
+                } else {
+                    turn.content = fallback
+                }
             }
         }
         chat.busy = false

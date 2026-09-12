@@ -101,6 +101,8 @@ struct APIClient {
       timeout: 90
     )
     request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+    request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
+    request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
     if !apiKey.isEmpty {
       request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
     }
@@ -115,18 +117,12 @@ struct APIClient {
       throw apiError(status: http.statusCode, data: collected)
     }
 
-    var payload = ""
     for try await line in bytes.lines {
       let trimmed = line.trimmingCharacters(in: CharacterSet(charactersIn: "\r"))
-      if trimmed.hasPrefix("data:") {
-        let chunk = trimmed.dropFirst(5).trimmingCharacters(in: .whitespaces)
-        payload += chunk
-      } else if trimmed.isEmpty {
-        emitChatDelta(payload, onDelta: onDelta)
-        payload = ""
-      }
+      guard trimmed.hasPrefix("data:") else { continue }
+      let chunk = trimmed.dropFirst(5).trimmingCharacters(in: .whitespaces)
+      emitChatDelta(chunk, onDelta: onDelta)
     }
-    emitChatDelta(payload, onDelta: onDelta)
   }
 
   private func perform(
@@ -203,14 +199,34 @@ struct APIClient {
     let event = raw.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !event.isEmpty, event != "[DONE]" else { return }
     guard let data = event.data(using: .utf8),
-          let chunk = try? decoder.decode(ChatStreamChunk.self, from: data),
-          let delta = chunk.choices.first?.delta
+          let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let choices = obj["choices"] as? [[String: Any]]
     else { return }
-    let content = delta.content ?? ""
-    let reasoning = delta.reasoning ?? delta.reasoning_content ?? ""
+    let choice = choices.first ?? [:]
+    let src = (choice["delta"] as? [String: Any]) ?? (choice["message"] as? [String: Any]) ?? [:]
+    let content = textFromModelField(src["content"])
+    let reasoning = textFromModelField(src["reasoning"]).isEmpty
+      ? textFromModelField(src["reasoning_content"])
+      : textFromModelField(src["reasoning"])
     if !content.isEmpty || !reasoning.isEmpty {
       onDelta(content, reasoning)
     }
+  }
+
+  private func textFromModelField(_ value: Any?) -> String {
+    if let text = value as? String { return text }
+    if let number = value as? NSNumber { return number.stringValue }
+    if let parts = value as? [Any] {
+      return parts.map { textFromModelField($0) }.joined()
+    }
+    if let obj = value as? [String: Any] {
+      let direct = textFromModelField(obj["text"])
+      if !direct.isEmpty { return direct }
+      let content = textFromModelField(obj["content"])
+      if !content.isEmpty { return content }
+      return textFromModelField(obj["reasoning"])
+    }
+    return ""
   }
 
   private static func plistString(_ key: String) -> String? {
@@ -242,18 +258,4 @@ private struct AnyEncodable: Encodable {
 
 private struct ServerErrorBody: Decodable {
   var error: String?
-}
-
-private struct ChatStreamChunk: Decodable {
-  struct Choice: Decodable {
-    struct Delta: Decodable {
-      var content: String?
-      var reasoning: String?
-      var reasoning_content: String?
-    }
-
-    var delta: Delta?
-  }
-
-  var choices: [Choice] = []
 }
