@@ -34,6 +34,7 @@ struct NoteView: View {
                 backRow
                 if let note {
                     textCard(note.text)
+                    votesCard(note)
                     orchestratorCard(note)
                     subjectCard
                     deleteButton
@@ -97,6 +98,43 @@ struct NoteView: View {
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    private func votesCard(_ note: ClassifiedNote) -> some View {
+        EPSPanel(title: "Classifiers") {
+            VStack(alignment: .leading, spacing: 10) {
+                voteRow("BERT", note.votes.zeroShot, correct: note.orchestrator.baseBertCorrect)
+                voteRow("Fine-tuned BERT", note.votes.fineTuned, correct: note.orchestrator.fineTunedBertCorrect)
+            }
+        }
+    }
+
+    private func voteRow(_ label: String, _ vote: NoteVote?, correct: Bool?) -> some View {
+        let bits = [vote?.confidenceLabel ?? "", correctLabel(correct)].filter { !$0.isEmpty }
+        return VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(EPSTheme.muted)
+            if let vote, !vote.subject.isEmpty {
+                Text(vote.subject)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(EPSTheme.fg)
+                if !bits.isEmpty {
+                    Text(bits.joined(separator: " · "))
+                        .font(.caption)
+                        .foregroundStyle(EPSTheme.muted)
+                }
+            } else {
+                Text("No vote")
+                    .font(.body)
+                    .foregroundStyle(EPSTheme.muted)
+            }
+        }
+    }
+
+    private func correctLabel(_ correct: Bool?) -> String {
+        guard let correct else { return "" }
+        return correct ? "correct" : "wrong"
     }
 
     private func orchestratorCard(_ note: ClassifiedNote) -> some View {

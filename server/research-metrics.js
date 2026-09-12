@@ -17,9 +17,8 @@ const DEFAULT_FROZEN_PATHS = [
 ];
 
 const ARM_META = {
-  zero_shot: { label: "Zero-shot BERT", voteKey: "baseBert" },
+  zero_shot: { label: "BERT", voteKey: "baseBert" },
   fine_tuned: { label: "Fine-tuned BERT", voteKey: "fineTunedBert" },
-  student_key: { label: "Student-key model", voteKey: "studentKey" },
 };
 
 const ARM_KEYS = Object.keys(ARM_META);
@@ -180,7 +179,6 @@ function emptyFrozen() {
     arms: {
       zero_shot: arm("zero_shot", ARM_META.zero_shot.label),
       fine_tuned: arm("fine_tuned", ARM_META.fine_tuned.label),
-      student_key: arm("student_key", ARM_META.student_key.label),
     },
     updated_at: null,
   };

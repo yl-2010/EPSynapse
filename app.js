@@ -2071,6 +2071,20 @@
     refreshTodoFiles(t);
   }
 
+  function classifierVoteHtml(label, vote, correct) {
+    if (!vote || !vote.subject) {
+      return `<p class="edu-empty">${escapeHtml(label)}: no vote</p>`;
+    }
+    const pct =
+      typeof vote.confidence === "number" && Number.isFinite(vote.confidence)
+        ? ` · ${Math.round(vote.confidence * 100)}%`
+        : "";
+    let judged = "";
+    if (correct === true) judged = " · correct";
+    if (correct === false) judged = " · wrong";
+    return `<p>${escapeHtml(label)}: ${escapeHtml(vote.subject)}${escapeHtml(pct)}${escapeHtml(judged)}</p>`;
+  }
+
   function subjectOptions(selected) {
     const names = homeClasses()
       .map((c) => String(c.name || "").trim())
@@ -2113,6 +2127,8 @@
       return;
     }
     const gold = note.userGoldSubject || note.subject || "";
+    const votes = note.votes || {};
+    const orch = note.orchestrator || {};
     appEl.classList.add("is-settled");
     appEl.innerHTML = `
       <p class="edu-home-mark"><a class="edu-home-research" data-route href="/">Back</a></p>
@@ -2127,6 +2143,18 @@
           ${panelHtml("Note", `<pre class="edu-note-body">${escapeHtml(note.text || "")}</pre>`, "lg-edu-note-text")}
         </div>
         <div class="edu-col edu-col--side">
+          ${panelHtml(
+            "Classifiers",
+            `${classifierVoteHtml("BERT", votes.baseBert || votes.zeroShot, orch.baseBertCorrect)}
+             ${classifierVoteHtml("Fine-tuned BERT", votes.fineTunedBert || votes.fineTuned, orch.fineTunedBertCorrect)}`,
+            "lg-edu-note-votes"
+          )}
+          ${panelHtml(
+            "Orchestrator",
+            `<p>${escapeHtml(orch.subject || note.subject || "Other")}</p>
+             ${orch.rationale ? `<p class="edu-empty">${escapeHtml(orch.rationale)}</p>` : ""}`,
+            "lg-edu-note-orch"
+          )}
           ${panelHtml(
             "Class",
             `<form class="edu-notes-form" id="note-gold">

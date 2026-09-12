@@ -1363,11 +1363,21 @@ struct NoteOrchestrator: Equatable {
   var subject: String
   var confidence: Double?
   var rationale: String
+  var baseBertCorrect: Bool?
+  var fineTunedBertCorrect: Bool?
 
-  init(subject: String = "", confidence: Double? = nil, rationale: String = "") {
+  init(
+    subject: String = "",
+    confidence: Double? = nil,
+    rationale: String = "",
+    baseBertCorrect: Bool? = nil,
+    fineTunedBertCorrect: Bool? = nil
+  ) {
     self.subject = subject
     self.confidence = confidence
     self.rationale = rationale
+    self.baseBertCorrect = baseBertCorrect
+    self.fineTunedBertCorrect = fineTunedBertCorrect
   }
 }
 
@@ -1377,6 +1387,8 @@ extension NoteOrchestrator: Codable {
       subject = text
       confidence = nil
       rationale = ""
+      baseBertCorrect = nil
+      fineTunedBertCorrect = nil
       return
     }
     let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -1390,6 +1402,8 @@ extension NoteOrchestrator: Codable {
     } else {
       confidence = nil
     }
+    baseBertCorrect = try? c.decodeIfPresent(Bool.self, forKey: .baseBertCorrect)
+    fineTunedBertCorrect = try? c.decodeIfPresent(Bool.self, forKey: .fineTunedBertCorrect)
   }
 
   func encode(to encoder: Encoder) throws {
@@ -1399,10 +1413,12 @@ extension NoteOrchestrator: Codable {
     if !rationale.isEmpty {
       try c.encode(rationale, forKey: .rationale)
     }
+    try c.encodeIfPresent(baseBertCorrect, forKey: .baseBertCorrect)
+    try c.encodeIfPresent(fineTunedBertCorrect, forKey: .fineTunedBertCorrect)
   }
 
   private enum CodingKeys: String, CodingKey {
-    case subject, confidence, rationale
+    case subject, confidence, rationale, baseBertCorrect, fineTunedBertCorrect
   }
 }
 

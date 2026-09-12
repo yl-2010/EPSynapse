@@ -1,6 +1,6 @@
 /**
  * Eight-subject taxonomy for the EPSynapse notes classifier.
- * Student-key orchestrator may also pick Other.
+ * BERT votes these labels. The student-key orchestrator may also pick Other.
  */
 
 export const FIXED_SUBJECTS = [

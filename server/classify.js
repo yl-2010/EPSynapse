@@ -1,21 +1,19 @@
 /**
- * EPSynapse notes classifier ensemble.
- * BERT sidecar + student-key model, then student-key orchestrator.
+ * EPSynapse notes classifier.
+ * BERT vs fine-tuned BERT, then the student's model maps onto their classes.
  */
 
+import * as agent from "./agent.js";
 import {
   PROVIDERS,
   MISSING_KEY_ERROR,
   explainUpstreamError,
-  fetchWithKeyCycle,
-  resolveApiKeys,
   textFromModelField,
   upstreamHeaders,
 } from "./agent.js";
 import { classifyWithBert, normalizeBertVote } from "./bert.js";
 import { matchClassForSubject } from "./schedule.js";
 import {
-  FIXED_SUBJECTS,
   OTHER_SUBJECT,
   SUBJECTS_PLUS_OTHER,
   normalizeSubjectLabel,
@@ -39,12 +37,6 @@ export function extractJsonObject(text) {
     }
   }
   return null;
-}
-
-function clampToFixedSubject(raw) {
-  const normalized = normalizeSubjectLabel(raw);
-  if (normalized && FIXED_SUBJECTS.includes(normalized)) return normalized;
-  return FIXED_SUBJECTS[0];
 }
 
 function clampToAllowedSubject(raw) {
@@ -92,10 +84,50 @@ function classLine(klass) {
   return `- ${bits.join(" · ")}`;
 }
 
+function parseCorrectFlag(value) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value !== "string") return null;
+  const t = value.trim().toLowerCase();
+  if (["true", "yes", "correct", "right"].includes(t)) return true;
+  if (["false", "no", "incorrect", "wrong"].includes(t)) return false;
+  return null;
+}
+
+function resolveStudentKeys(req, providerId, student) {
+  if (typeof agent.resolveApiKeys === "function") {
+    const resolved = agent.resolveApiKeys(req, providerId, student);
+    return { keys: resolved.keys || [], source: resolved.source || "" };
+  }
+  const resolved = agent.resolveApiKey(req, providerId, student);
+  return {
+    keys: resolved?.key ? [resolved.key] : [],
+    source: resolved?.source || "",
+  };
+}
+
+function postJson(provider, useKey, system, user, extra) {
+  return fetch(provider.url, {
+    method: "POST",
+    headers: upstreamHeaders(provider, useKey),
+    body: JSON.stringify({
+      model: provider.model,
+      stream: false,
+      temperature: 0.1,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+      ...extra,
+    }),
+    signal: AbortSignal.timeout(60_000),
+  });
+}
+
 async function completeJson(req, student, system, user) {
   const providerId = String(student?.modelProvider || "groq");
   const provider = PROVIDERS[providerId] || PROVIDERS.groq;
-  const { keys, source } = resolveApiKeys(req, provider.id, student);
+  const { keys, source } = resolveStudentKeys(req, provider.id, student);
   if (!keys.length) {
     const err = new Error(MISSING_KEY_ERROR);
     err.status = 401;
@@ -109,24 +141,14 @@ async function completeJson(req, student, system, user) {
   const started = Date.now();
   let upstream;
   try {
-    const cycled = await fetchWithKeyCycle(keys, (useKey) =>
-      fetch(provider.url, {
-        method: "POST",
-        headers: upstreamHeaders(provider, useKey),
-        body: JSON.stringify({
-          model: provider.model,
-          stream: false,
-          temperature: 0.1,
-          messages: [
-            { role: "system", content: system },
-            { role: "user", content: user },
-          ],
-          ...extra,
-        }),
-        signal: AbortSignal.timeout(60_000),
-      })
-    );
-    upstream = cycled.response;
+    if (typeof agent.fetchWithKeyCycle === "function") {
+      const cycled = await agent.fetchWithKeyCycle(keys, (useKey) =>
+        postJson(provider, useKey, system, user, extra)
+      );
+      upstream = cycled.response;
+    } else {
+      upstream = await postJson(provider, keys[0], system, user, extra);
+    }
   } catch (err) {
     const timedOut = err && err.name === "TimeoutError";
     const fail = new Error(timedOut ? "The model timed out. Try again." : "Could not reach the model host.");
@@ -142,7 +164,11 @@ async function completeJson(req, student, system, user) {
 
   const text = await upstream.text().catch(() => "");
   if (!upstream.ok) {
-    const fail = new Error(explainUpstreamError(upstream.status, text, { keyCount: keys.length }));
+    const extraErr =
+      typeof explainUpstreamError === "function"
+        ? explainUpstreamError(upstream.status, text, { keyCount: keys.length })
+        : `Model host returned ${upstream.status}`;
+    const fail = new Error(extraErr);
     fail.status = upstream.status === 401 ? 401 : 502;
     throw fail;
   }
@@ -164,37 +190,6 @@ async function completeJson(req, student, system, user) {
   };
 }
 
-export async function classifyWithStudentKey(rawText, { req, student } = {}) {
-  const system = [
-    "You classify student study notes into academic subjects.",
-    `You MUST pick exactly one of these eight subjects: ${FIXED_SUBJECTS.join(", ")}.`,
-    `Do not invent subjects. Do not use "${OTHER_SUBJECT}" or any custom label.`,
-    "If the notes are a poor fit, still choose the closest of the eight.",
-    "Respond with a single JSON object only, no markdown.",
-    'Schema: {"subject": string, "confidence": number, "rationale": string}',
-    "confidence is 0..1.",
-  ].join(" ");
-
-  const result = await completeJson(
-    req,
-    student,
-    system,
-    ["Notes:", String(rawText || "").slice(0, 12000)].join("\n")
-  );
-  const parsed = extractJsonObject(result.content) || {};
-  let confidence = Number(parsed.confidence);
-  if (!Number.isFinite(confidence)) confidence = 0.5;
-  confidence = Math.max(0, Math.min(1, confidence));
-  return {
-    subject: clampToFixedSubject(parsed.subject),
-    confidence,
-    rationale: typeof parsed.rationale === "string" ? parsed.rationale : "",
-    model: result.model,
-    latencyMs: result.latencyMs,
-    source: result.source,
-  };
-}
-
 function agreementSubject(votes) {
   const scored = new Map();
   const bump = (vote, weight) => {
@@ -204,7 +199,6 @@ function agreementSubject(votes) {
     scored.set(key, (scored.get(key) || 0) + weight * (0.5 + conf));
   };
   bump(votes.baseBert, 1);
-  bump(votes.studentKey, 1.1);
   const ft = votes.fineTunedBert;
   const ftWeight = ft && typeof ft.confidence === "number" && ft.confidence >= 0.7 ? 1.8 : 1.15;
   bump(ft, ftWeight);
@@ -225,24 +219,28 @@ export async function orchestrateWithStudentKey(rawText, votes, { req, student, 
   const allowed = usingClasses ? [...classNames, OTHER_SUBJECT] : SUBJECTS_PLUS_OTHER;
   const system = usingClasses
     ? [
-        "You are an orchestrator that picks which of this student's classes these notes belong to.",
-        `Pick exactly one of: ${allowed.join(", ")}.`,
+        "You orchestrate two subject classifiers for student notes.",
+        "BERT and fine-tuned BERT each voted a coarse academic subject.",
+        "First decide whether each vote is correct for these notes.",
+        `Then pick exactly one of this student's classes: ${allowed.join(", ")}.`,
         "Do not invent a class name.",
-        "The three votes are coarse academic subjects. Map them onto the student's actual class list.",
-        "Prefer a class that matches the votes and the note content.",
+        "Map a correct coarse subject onto the matching class.",
+        "If both votes are wrong, still pick the best class from the notes.",
         "Use Other only when none of the classes fit.",
         "Respond with a single JSON object only, no markdown.",
-        'Schema: {"subject": string, "confidence": number, "rationale": string}',
+        'Schema: {"baseBertCorrect": boolean, "fineTunedBertCorrect": boolean, "subject": string, "confidence": number, "rationale": string}',
         "confidence is 0..1.",
       ].join(" ")
     : [
-        "You are an orchestrator that picks the final academic subject for student notes.",
-        `Pick exactly one of: ${SUBJECTS_PLUS_OTHER.join(", ")}.`,
+        "You orchestrate two subject classifiers for student notes.",
+        "BERT and fine-tuned BERT each voted a coarse academic subject.",
+        "First decide whether each vote is correct for these notes.",
+        `Then pick exactly one of: ${SUBJECTS_PLUS_OTHER.join(", ")}.`,
         "Do not invent a new subject name.",
-        "Prefer agreement among the three votes.",
-        "Weigh fine-tuned BERT highly when its confidence is strong.",
+        "Prefer a vote you judged correct. If they agree and both look right, use that subject.",
+        "If they disagree, trust the notes.",
         "Respond with a single JSON object only, no markdown.",
-        'Schema: {"subject": string, "confidence": number, "rationale": string}',
+        'Schema: {"baseBertCorrect": boolean, "fineTunedBertCorrect": boolean, "subject": string, "confidence": number, "rationale": string}',
         "confidence is 0..1.",
       ].join(" ");
 
@@ -252,12 +250,11 @@ export async function orchestrateWithStudentKey(rawText, votes, { req, student, 
 
   const user = [
     ...classBlock,
-    "Votes (JSON):",
+    "Classifier votes (JSON):",
     JSON.stringify(
       {
         baseBert: votes.baseBert,
         fineTunedBert: votes.fineTunedBert,
-        studentKey: votes.studentKey,
       },
       null,
       2
@@ -280,17 +277,13 @@ export async function orchestrateWithStudentKey(rawText, votes, { req, student, 
     rationale: typeof parsed.rationale === "string" ? parsed.rationale : "",
     model: result.model,
     latencyMs: result.latencyMs,
+    baseBertCorrect: parseCorrectFlag(parsed.baseBertCorrect),
+    fineTunedBertCorrect: parseCorrectFlag(parsed.fineTunedBertCorrect),
   };
 }
 
 export async function classifyEnsemble(rawText, { req, student, classes } = {}) {
-  const [studentVote, bertResult] = await Promise.all([
-    classifyWithStudentKey(rawText, { req, student }).catch((err) => ({
-      error: err?.message || "student-key model failed",
-      status: err?.status || 502,
-    })),
-    classifyWithBert(rawText),
-  ]);
+  const bertResult = await classifyWithBert(rawText);
 
   let bertStatus = { status: "ok" };
   let baseBert = null;
@@ -310,22 +303,10 @@ export async function classifyEnsemble(rawText, { req, student, classes } = {}) 
     }
   }
 
-  const studentKey =
-    studentVote && studentVote.subject
-      ? {
-          subject: studentVote.subject,
-          confidence: studentVote.confidence,
-          rationale: studentVote.rationale || "",
-          model: studentVote.model,
-          latencyMs: studentVote.latencyMs,
-        }
-      : null;
-
-  const votes = { baseBert, fineTunedBert, studentKey };
+  const votes = { baseBert, fineTunedBert };
 
   let orchestrator;
   try {
-    if (!studentKey) throw new Error(studentVote?.error || "No student-key vote.");
     orchestrator = await orchestrateWithStudentKey(rawText, votes, { req, student, classes });
   } catch (err) {
     const agreed = agreementSubject(votes);
@@ -334,16 +315,17 @@ export async function classifyEnsemble(rawText, { req, student, classes } = {}) 
       : agreed;
     const conf =
       (fineTunedBert && fineTunedBert.confidence) ||
-      (studentKey && studentKey.confidence) ||
       (baseBert && baseBert.confidence) ||
       0.4;
     orchestrator = {
       subject: fallback,
       confidence: conf,
-      rationale: `Orchestrator used vote agreement (${err?.message || "no student key"}).`,
-      model: studentVote?.model || "",
+      rationale: `Orchestrator used BERT agreement (${err?.message || "no student key"}).`,
+      model: "",
       latencyMs: 0,
       degraded: true,
+      baseBertCorrect: null,
+      fineTunedBertCorrect: null,
     };
   }
 
@@ -356,6 +338,5 @@ export async function classifyEnsemble(rawText, { req, student, classes } = {}) 
     votes,
     orchestrator,
     bert: bertStatus,
-    studentKeyError: studentVote?.error || null,
   };
 }

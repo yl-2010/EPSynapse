@@ -1,8 +1,7 @@
 (() => {
   const ARMS = [
-    { key: "zero_shot", label: "Zero-shot BERT" },
+    { key: "zero_shot", label: "BERT" },
     { key: "fine_tuned", label: "Fine-tuned BERT" },
-    { key: "student_key", label: "Student-key model" },
   ];
   const METRICS = [
     { key: "accuracy", label: "Accuracy", color: "var(--research-acc)" },
