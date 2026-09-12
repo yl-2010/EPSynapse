@@ -36,11 +36,10 @@ targets:
       - path: EPSynapse
         excludes:
           - Info.plist
-          - Assets.xcassets
-          - LaunchScreen.storyboard
-    resources:
       - path: EPSynapse/Assets.xcassets
+        buildPhase: resources
       - path: EPSynapse/LaunchScreen.storyboard
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jype.epsynapse

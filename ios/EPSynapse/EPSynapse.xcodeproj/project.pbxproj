@@ -26,12 +26,14 @@
 		6BBF05D2B8EAABF7C905058A /* ChatOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 083CC9E2B8BA48AEA4876689 /* ChatOverlay.swift */; };
 		7EA85D7AFE3D8CE315294C1D /* SettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38378331DA95509DDF83EA11 /* SettingsSheet.swift */; };
 		82034A6D465FAE115757D44E /* ChatStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B8C2538723B2F0C9785D1D8 /* ChatStore.swift */; };
+		A0596F306476110AD51BAA71 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 29B721DF81564BD885DDC63C /* LaunchScreen.storyboard */; };
 		A99A08DB40E235E1245F8150 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FE3FA4CABABD9581D9D60A3 /* HomeView.swift */; };
 		AB155A99C431C77E575913FF /* KeyboardDismiss.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D8EA86A99899D8FB4FC8FDA /* KeyboardDismiss.swift */; };
 		B867302471945E2A703774E7 /* Mark.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26437E9A27791C15BDCBCABF /* Mark.swift */; };
 		C88B394A86285350CF8C2D1E /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = F34BB0DB83964EF98A568E2D /* Theme.swift */; };
 		D3D30776A5DB5C63992823C0 /* ChatHistoryOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BD05068815821D26AC8B738 /* ChatHistoryOverlay.swift */; };
 		D41EF186DAC050B047A1A3EB /* SessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4130A4ED23C8BF8A9677E84A /* SessionStore.swift */; };
+		D717A15E876855079B62FBE5 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F11548AEFE616C278BCE0826 /* Assets.xcassets */; };
 		DA7CFF3120B71B599F451341 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 2C5D40BDA4E60405BFEEF1FE /* GoogleSignIn */; };
 		E842FB99C4EA4655145E3C69 /* Panels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8388796443CE474081A8311E /* Panels.swift */; };
 		F5AF63727273D49042BF02D7 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C870AD9003B84236B411ED /* RootView.swift */; };
@@ -48,6 +50,7 @@
 		1D49D863B71A593DE3C0AA9F /* NotesPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesPanel.swift; sourceTree = "<group>"; };
 		26437E9A27791C15BDCBCABF /* Mark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Mark.swift; sourceTree = "<group>"; };
 		28FED0FE7D3B4CD1D4A773DC /* ClassView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClassView.swift; sourceTree = "<group>"; };
+		29B721DF81564BD885DDC63C /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		3510B483F129606F547B9C6B /* HomeDestination.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeDestination.swift; sourceTree = "<group>"; };
 		38378331DA95509DDF83EA11 /* SettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsSheet.swift; sourceTree = "<group>"; };
 		3D3C406C38500C0E4C7C942B /* EPSynapseApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPSynapseApp.swift; sourceTree = "<group>"; };
@@ -66,6 +69,7 @@
 		B3AF0A19753DC997EE55CAA3 /* Markdown.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Markdown.swift; sourceTree = "<group>"; };
 		B771AFED5734D5E80A1F3FEB /* CornerChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CornerChrome.swift; sourceTree = "<group>"; };
 		CA51BAECBAEAC04BE7BB1C76 /* ChatHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatHistory.swift; sourceTree = "<group>"; };
+		F11548AEFE616C278BCE0826 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		F1F03974FD1C8B336D0073D8 /* AppLoadingScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLoadingScreen.swift; sourceTree = "<group>"; };
 		F34BB0DB83964EF98A568E2D /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		FBA3E1253E1D0707195E2512 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
@@ -142,6 +146,8 @@
 				6F0BBFD4C09234AF3D28DEC4 /* Design */,
 				2E98D4B37B65C7D0891EEB57 /* Features */,
 				9D738995BB654AE7B72609E8 /* Networking */,
+				F11548AEFE616C278BCE0826 /* Assets.xcassets */,
+				29B721DF81564BD885DDC63C /* LaunchScreen.storyboard */,
 			);
 			path = EPSynapse;
 			sourceTree = "<group>";
@@ -223,6 +229,7 @@
 			buildConfigurationList = D64D0DBC61DF83239AE6779E /* Build configuration list for PBXNativeTarget "EPSynapse" */;
 			buildPhases = (
 				626B7E7BDDED1724AFF6BED9 /* Sources */,
+				06086BB7DC7202203FBA8284 /* Resources */,
 				ACC28199963FE32EF76FDD2C /* Frameworks */,
 			);
 			buildRules = (
@@ -274,6 +281,18 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		06086BB7DC7202203FBA8284 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D717A15E876855079B62FBE5 /* Assets.xcassets in Resources */,
+				A0596F306476110AD51BAA71 /* LaunchScreen.storyboard in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		626B7E7BDDED1724AFF6BED9 /* Sources */ = {
