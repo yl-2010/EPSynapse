@@ -1,4 +1,5 @@
 import SwiftUI
+import WebKit
 
 struct ClassView: View {
     var classId: String
@@ -9,6 +10,7 @@ struct ClassView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @State private var todoExpanded = false
+    @State private var htmlFile: DriveFile?
 
     private var schoolClass: SchoolClass? {
         dashboard.schoolClass(id: classId)
@@ -54,6 +56,7 @@ struct ClassView: View {
                     todoPanel
                     completedPanel
                     notesPanel
+                    filesPanel
                 } else {
                     EmptyLine("This class is gone from the schedule.")
                 }
@@ -68,6 +71,9 @@ struct ClassView: View {
         .epsVerticalScrollOnly()
         .toolbar(.hidden, for: .navigationBar)
         .navigationBarBackButtonHidden(true)
+        .sheet(item: $htmlFile) { file in
+            ClassHTMLSheet(file: file)
+        }
     }
 
     private var backRow: some View {
@@ -178,6 +184,41 @@ struct ClassView: View {
         }
     }
 
+    private var classFiles: [DriveFile] {
+        guard let schoolClass else { return [] }
+        return dashboard.files(for: schoolClass)
+    }
+
+    private var filesPanel: some View {
+        EPSPanel(title: "Files") {
+            if classFiles.isEmpty {
+                EmptyLine("No files on this class yet")
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(classFiles) { file in
+                        Button {
+                            EPSHaptics.tap()
+                            if file.isHTML, !file.text.isEmpty {
+                                htmlFile = file
+                            } else if let url = URL(string: file.webUrl), !file.webUrl.isEmpty {
+                                openURL(url)
+                            } else if file.isHTML {
+                                htmlFile = file
+                            }
+                        } label: {
+                            Text(file.name)
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(EPSTheme.fg)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.vertical, 6)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+
     private var goldLabel: Color {
         Color(uiColor: UIColor { traits in
             traits.userInterfaceStyle == .dark
@@ -212,5 +253,39 @@ struct ClassNoteRow: View {
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 8)
+    }
+}
+
+struct ClassHTMLSheet: View {
+    var file: DriveFile
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ClassHTMLWebView(html: file.text)
+                .ignoresSafeArea(edges: .bottom)
+                .navigationTitle(file.name)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Close") { dismiss() }
+                    }
+                }
+        }
+    }
+}
+
+struct ClassHTMLWebView: UIViewRepresentable {
+    var html: String
+
+    func makeUIView(context: Context) -> WKWebView {
+        let view = WKWebView(frame: .zero)
+        view.isOpaque = false
+        view.backgroundColor = .clear
+        return view
+    }
+
+    func updateUIView(_ uiView: WKWebView, context: Context) {
+        uiView.loadHTMLString(html, baseURL: nil)
     }
 }

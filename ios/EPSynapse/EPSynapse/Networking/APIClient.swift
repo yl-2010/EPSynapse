@@ -127,6 +127,19 @@ struct APIClient {
     )
   }
 
+  func deleteNote(id: String, sessionId: String) async throws {
+    _ = try await requestRaw(
+      "/v1/me/notes/\(Self.pathValue(id))",
+      method: "DELETE",
+      sessionId: sessionId
+    )
+  }
+
+  func listClassFiles(classId: String, sessionId: String) async throws -> FilesResponse {
+    let query = classId.isEmpty ? "/v1/me/class-files?text=1" : "/v1/me/class-files?classId=\(Self.pathValue(classId))&text=1"
+    return try await request(query, sessionId: sessionId)
+  }
+
   func uploadMultipart<T: Decodable>(
     _ path: String,
     fileURL: URL,
@@ -153,7 +166,8 @@ struct APIClient {
     messages: [[String: String]],
     sessionId: String,
     apiKey: String,
-    onDelta: (_ content: String, _ reasoning: String) -> Void
+    onDelta: (_ content: String, _ reasoning: String) -> Void,
+    onEvent: ((_ event: [String: Any]) -> Void)? = nil
   ) async throws {
     var request = try makeRequest(
       "/v1/agent/chat",
@@ -183,7 +197,7 @@ struct APIClient {
       let trimmed = line.trimmingCharacters(in: CharacterSet(charactersIn: "\r"))
       guard trimmed.hasPrefix("data:") else { continue }
       let chunk = trimmed.dropFirst(5).trimmingCharacters(in: .whitespaces)
-      emitChatDelta(chunk, onDelta: onDelta)
+      emitChatDelta(chunk, onDelta: onDelta, onEvent: onEvent)
     }
   }
 
@@ -332,13 +346,19 @@ struct APIClient {
 
   private func emitChatDelta(
     _ raw: String,
-    onDelta: (_ content: String, _ reasoning: String) -> Void
+    onDelta: (_ content: String, _ reasoning: String) -> Void,
+    onEvent: ((_ event: [String: Any]) -> Void)?
   ) {
     let event = raw.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !event.isEmpty, event != "[DONE]" else { return }
     guard let data = event.data(using: .utf8),
-          let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-          let choices = obj["choices"] as? [[String: Any]]
+          let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else { return }
+    if let type = obj["type"] as? String, !type.isEmpty {
+      onEvent?(obj)
+      return
+    }
+    guard let choices = obj["choices"] as? [[String: Any]]
     else { return }
     let choice = choices.first ?? [:]
     let src = (choice["delta"] as? [String: Any]) ?? (choice["message"] as? [String: Any]) ?? [:]

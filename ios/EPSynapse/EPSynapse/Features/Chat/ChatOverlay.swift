@@ -4,6 +4,7 @@ import UIKit
 struct ChatOverlay: View {
     @EnvironmentObject private var session: SessionStore
     @EnvironmentObject private var chat: ChatStore
+    @EnvironmentObject private var dashboard: DashboardStore
     @Environment(\.colorScheme) private var colorScheme
 
     @State private var isOpen = false
@@ -355,8 +356,8 @@ struct ChatOverlay: View {
                     provider: session.provider,
                     messages: Array(history),
                     sessionId: session.sessionId,
-                    apiKey: session.modelKey
-                ) { content, reasoning in
+                    apiKey: session.modelKey,
+                    onDelta: { content, reasoning in
                     Task { @MainActor in
                         chat.mutateTurn(id: assistantId) { turn in
                             if !reasoning.isEmpty {
@@ -371,7 +372,24 @@ struct ChatOverlay: View {
                             }
                         }
                     }
-                }
+                    },
+                    onEvent: { event in
+                        Task { @MainActor in
+                            let type = event["type"] as? String ?? ""
+                            if type == "status", let text = event["text"] as? String, !text.isEmpty {
+                                chat.mutateTurn(id: assistantId) { turn in
+                                    turn.thinking = text
+                                }
+                            }
+                            if type == "mutation" {
+                                await dashboard.load(from: session)
+                            }
+                            if type == "navigate" {
+                                NotificationCenter.default.post(name: .epsAgentNavigate, object: event)
+                            }
+                        }
+                    }
+                )
                 await MainActor.run {
                     finishAssistant(assistantId, fallback: "The model returned an empty reply.")
                 }

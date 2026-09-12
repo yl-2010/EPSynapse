@@ -244,12 +244,26 @@ struct DriveFile: Codable, Identifiable, Equatable {
   var name: String
   var webUrl: String
   var source: String
+  var classId: String
+  var contentType: String
+  var text: String
 
-  init(id: String = "", name: String = "", webUrl: String = "", source: String = "") {
+  init(
+    id: String = "",
+    name: String = "",
+    webUrl: String = "",
+    source: String = "",
+    classId: String = "",
+    contentType: String = "",
+    text: String = ""
+  ) {
     self.id = id
     self.name = name
     self.webUrl = webUrl
     self.source = source
+    self.classId = classId
+    self.contentType = contentType
+    self.text = text
   }
 
   init(from decoder: Decoder) throws {
@@ -258,6 +272,9 @@ struct DriveFile: Codable, Identifiable, Equatable {
     name = c.string(.name)
     webUrl = c.string(.webUrl)
     source = c.string(.source)
+    classId = c.string(.classId)
+    contentType = c.string(.contentType)
+    text = c.string(.text)
   }
 
   func encode(to encoder: Encoder) throws {
@@ -266,10 +283,17 @@ struct DriveFile: Codable, Identifiable, Equatable {
     try c.encode(name, forKey: .name)
     try c.encode(webUrl, forKey: .webUrl)
     try c.encode(source, forKey: .source)
+    try c.encode(classId, forKey: .classId)
+    try c.encode(contentType, forKey: .contentType)
+    try c.encode(text, forKey: .text)
+  }
+
+  var isHTML: Bool {
+    name.lowercased().hasSuffix(".html") || name.lowercased().hasSuffix(".htm") || contentType.contains("html")
   }
 
   private enum CodingKeys: String, CodingKey {
-    case id, name, webUrl, source
+    case id, name, webUrl, source, classId, contentType, text
   }
 }
 

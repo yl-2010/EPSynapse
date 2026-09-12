@@ -823,6 +823,7 @@
     routeAndRender();
     window.scrollTo(0, 0);
   }
+  window.__epsynapseGoTo = goTo;
 
   function goHome() {
     closeSheet();
@@ -1475,6 +1476,9 @@
 
   function fileHref(f) {
     if (f.dataUrl) return f.dataUrl;
+    if (String(f.id || "").startsWith("class:")) {
+      return `${apiBase}/v1/me/class-files/file?id=${encodeURIComponent(f.id)}`;
+    }
     if (f.webUrl) return f.webUrl;
     if (String(f.id || "").startsWith("local:")) return "#";
     return `${apiBase}/v1/me/onedrive/file?id=${encodeURIComponent(f.id || "")}`;
@@ -1483,8 +1487,12 @@
   function fileTile(f, i) {
     const href = fileHref(f);
     const vault = String(f.id || "").startsWith("vault:");
+    const klass = String(f.id || "").startsWith("class:");
+    const html = /\.html?$/i.test(f.name || "") || /html/i.test(f.contentType || "");
     const vaultAttr = vault ? ` data-vault-id="${escapeHtml(f.id)}"` : "";
-    return `<a class="edu-file-tile" href="${escapeHtml(href)}" target="_blank" rel="noopener" data-filter-id="lg-file-${i}" title="${escapeHtml(f.name)}"${vaultAttr}><span class="edu-file-name">${escapeHtml(f.name)}</span></a>`;
+    const classAttr = klass ? ` data-class-file="${escapeHtml(f.id)}"` : "";
+    const htmlAttr = html && klass ? ` data-html-file="1"` : "";
+    return `<a class="edu-file-tile" href="${escapeHtml(href)}" target="_blank" rel="noopener" data-filter-id="lg-file-${i}" title="${escapeHtml(f.name)}"${vaultAttr}${classAttr}${htmlAttr}><span class="edu-file-name">${escapeHtml(f.name)}</span></a>`;
   }
 
   function filesToolsHtml() {
@@ -1802,11 +1810,21 @@
         </div>
         <div class="edu-col edu-col--side">
           ${panelHtml("Notes", listOrEmpty(noteRows, "No notes for this class yet"), "lg-edu-class-notes")}
+          ${panelHtml(
+            "Files",
+            filesPanelBody(
+              (lastHome.classFiles || []).map(fileTile).join(""),
+              "No files on this class yet. Ask the agent to add one, including an HTML page.",
+              lastHome.classFilesError
+            ),
+            "lg-edu-class-files"
+          )}
         </div>
       </div>
     `;
     if (typeof window.reinitLiquidGlass === "function") window.reinitLiquidGlass();
     paintAssignmentFilters();
+    refreshClassFiles(klass);
   }
 
   function subjectOptions(selected) {
@@ -1874,6 +1892,12 @@
               <p class="edu-empty" id="note-gold-status"></p>
             </form>`,
             "lg-edu-note-gold"
+          )}
+          ${panelHtml(
+            "Delete",
+            `<button type="button" class="edu-sheet-btn" data-delete-note="${escapeHtml(note.id)}" data-liquid-glass="rounded" data-filter-id="lg-edu-note-del">Delete note</button>
+             <p class="edu-empty" id="note-delete-status"></p>`,
+            "lg-edu-note-del"
           )}
         </div>
       </div>
@@ -2013,9 +2037,9 @@
     const gradeFetch = me?.canvasConnected
       ? api("/v1/me/canvas/grades").then((r) => r.grades || []).catch(() => [])
       : Promise.resolve([]);
-    const assignments = me?.canvasConnected
-      ? api("/v1/me/canvas/assignments").then((r) => r.assignments || []).catch(() => [])
-      : Promise.resolve([]);
+    const assignments = api("/v1/me/canvas/assignments")
+      .then((r) => r.assignments || [])
+      .catch(() => []);
     const schedule = api("/v1/me/schedule")
       .then((r) => r)
       .catch(() => ({ classes: [], meetings: [] }));
@@ -2053,27 +2077,38 @@
       meetings: sched.meetings || [],
       notes: await notes,
       grades: (gradeRows.length ? gradeRows : mergedCourses).map((c) => ({ ...c, work: undefined })),
-      classFiles: [],
+      classFiles: lastHome.classFiles || [],
       classFilesFor: "",
-      classFilesError: "",
+      classFilesError: lastHome.classFilesError || "",
     };
     routeAndRender();
   }
 
   async function refreshClassFiles(klass) {
-    const name = String(klass?.name || "").trim();
-    if (!name) return;
-    if (lastHome.classFilesFor === name || classFilesInFlight === name) return;
-    classFilesInFlight = name;
+    const key = String(klass?.id || klass?.name || "").trim();
+    if (!key) return;
+    if (lastHome.classFilesFor === key || classFilesInFlight === key) return;
+    classFilesInFlight = key;
     try {
-      const r = await api(`/v1/me/onedrive/files?q=${encodeURIComponent(name)}`, { timeoutMs: 20000 });
-      lastHome.classFiles = Array.isArray(r.files) ? r.files : [];
-      lastHome.classFilesError = r.error || "";
-      lastHome.classFilesFor = name;
+      const owned = await api(
+        `/v1/me/class-files?classId=${encodeURIComponent(klass.id || key)}&text=1`,
+        { timeoutMs: 20000 }
+      ).catch(() => ({ files: [] }));
+      const name = String(klass?.name || "").trim();
+      const drive = name
+        ? await api(`/v1/me/onedrive/files?q=${encodeURIComponent(name)}`, { timeoutMs: 20000 }).catch(
+            () => ({ files: [], error: "" })
+          )
+        : { files: [], error: "" };
+      const local = Array.isArray(owned.files) ? owned.files : [];
+      const remote = Array.isArray(drive.files) ? drive.files : [];
+      lastHome.classFiles = [...local, ...remote];
+      lastHome.classFilesError = drive.error || "";
+      lastHome.classFilesFor = key;
     } catch (err) {
       lastHome.classFiles = [];
       lastHome.classFilesError = err.message || "Could not load files.";
-      lastHome.classFilesFor = name;
+      lastHome.classFilesFor = key;
     } finally {
       classFilesInFlight = "";
     }
@@ -2788,6 +2823,24 @@
     }
   });
 
+  appEl.addEventListener("click", async (ev) => {
+    const del = ev.target.closest("[data-delete-note]");
+    if (!del) return;
+    ev.preventDefault();
+    const id = del.getAttribute("data-delete-note");
+    const status = document.getElementById("note-delete-status");
+    if (!id) return;
+    if (!window.confirm("Delete this note?")) return;
+    if (status) status.textContent = "Deleting…";
+    try {
+      await api(`/v1/me/notes/${encodeURIComponent(id)}`, { method: "DELETE" });
+      lastHome.notes = (lastHome.notes || []).filter((n) => n.id !== id);
+      goTo("/");
+    } catch (err) {
+      if (status) status.textContent = err.message || "Could not delete.";
+    }
+  });
+
   appEl.addEventListener("click", (ev) => {
     const a = ev.target.closest("a[data-route]");
     if (!a) return;
@@ -2964,6 +3017,15 @@
     } catch {
       /* picker still works locally until they save again */
     }
+  });
+
+  window.addEventListener("epsynapse-agent-mutation", () => {
+    lastHome.classFilesFor = "";
+    loadDashboard();
+  });
+  window.addEventListener("epsynapse-agent-navigate", (ev) => {
+    const href = ev.detail?.href;
+    if (href) goTo(href);
   });
 
   boot();

@@ -3,6 +3,7 @@ import SwiftUI
 extension Notification.Name {
     static let epsOpenSettings = Notification.Name("eps.openSettings")
     static let epsScrollHomeToTop = Notification.Name("eps.scrollHomeToTop")
+    static let epsAgentNavigate = Notification.Name("eps.agentNavigate")
 }
 
 /// Logo, theme orb, settings, and chat pill.

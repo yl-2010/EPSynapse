@@ -36,6 +36,7 @@ struct NoteView: View {
                     textCard(note.text)
                     orchestratorCard(note)
                     subjectCard
+                    deleteButton
                     researchButton
                 } else {
                     EmptyLine("This note is gone.")
@@ -131,6 +132,26 @@ struct NoteView: View {
                     .foregroundStyle(EPSTheme.muted)
             }
         }
+    }
+
+    private var deleteButton: some View {
+        Button(role: .destructive) {
+            guard let note else { return }
+            Task {
+                if await dashboard.deleteNote(id: note.id, session: session) {
+                    EPSHaptics.tap()
+                    dismiss()
+                }
+            }
+        } label: {
+            Text("Delete note")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(EPSTheme.fg)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+        }
+        .buttonStyle(.plain)
+        .epsGlassRounded(cornerRadius: 14, interactive: true)
     }
 
     private var researchButton: some View {

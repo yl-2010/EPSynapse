@@ -173,6 +173,9 @@
     if (!event || event === "[DONE]") return null;
     try {
       const json = JSON.parse(event);
+      if (json && json.type === "mutation") return { mutation: json };
+      if (json && json.type === "navigate") return { navigate: json };
+      if (json && json.type === "status") return { status: String(json.text || "Working…") };
       const choice = json && json.choices && json.choices[0];
       if (!choice) return null;
       const src = choice.delta || choice.message || {};
@@ -855,22 +858,14 @@
       let buf = "";
       let answer = "";
       let thought = "";
-      while (true) {
-        const chunk = await reader.read();
-        if (chunk.done) break;
-        buf += decoder.decode(chunk.value, { stream: true });
-        buf = parseSseChunk(buf, (delta) => {
-          if (delta.reasoning) {
-            thought += delta.reasoning;
-            writeThinking(slot.think, thought);
-          }
-          if (delta.content) {
-            answer += delta.content;
-            writeBubble(slot.body, "assistant", answer);
-          }
-        });
-      }
-      buf = parseSseChunk(buf + "\n\n", (delta) => {
+      const applyChatDelta = (delta) => {
+        if (delta.status && slot.think) writeThinking(slot.think, delta.status);
+        if (delta.mutation) {
+          window.dispatchEvent(new CustomEvent("epsynapse-agent-mutation", { detail: delta.mutation }));
+        }
+        if (delta.navigate) {
+          window.dispatchEvent(new CustomEvent("epsynapse-agent-navigate", { detail: delta.navigate }));
+        }
         if (delta.reasoning) {
           thought += delta.reasoning;
           writeThinking(slot.think, thought);
@@ -879,7 +874,14 @@
           answer += delta.content;
           writeBubble(slot.body, "assistant", answer);
         }
-      });
+      };
+      while (true) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        buf += decoder.decode(chunk.value, { stream: true });
+        buf = parseSseChunk(buf, applyChatDelta);
+      }
+      buf = parseSseChunk(buf + "\n\n", applyChatDelta);
       if (!answer && thought) {
         answer = thought;
         thought = "";

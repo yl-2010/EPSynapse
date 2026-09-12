@@ -11,6 +11,7 @@ final class DashboardStore: ObservableObject {
   @Published var meetings: [ScheduleMeeting] = []
   @Published var assignments: [Assignment] = []
   @Published var files: [DriveFile] = []
+  @Published var classFiles: [DriveFile] = []
   @Published var localFiles: [DriveFile] = []
   @Published var messages: [MailMessage] = []
   @Published var filesError = ""
@@ -66,6 +67,7 @@ final class DashboardStore: ObservableObject {
       meetings = []
       assignments = []
       files = []
+      classFiles = []
       messages = []
       filesError = ""
       mailError = ""
@@ -77,10 +79,8 @@ final class DashboardStore: ObservableObject {
       guard me.canvasConnected else { return [] }
       return await self.loadCourses(sessionId: sid)
     }()
-    async let fetchedAssignments: [Assignment] = {
-      guard me.canvasConnected else { return [] }
-      return await self.loadAssignments(sessionId: sid)
-    }()
+    async let fetchedAssignments: [Assignment] = self.loadAssignments(sessionId: sid)
+    async let fetchedClassFiles: [DriveFile] = self.loadClassFiles(sessionId: sid)
     async let fetchedSchedule: (classes: [SchoolClass], meetings: [ScheduleMeeting]) = self.loadSchedule(
       sessionId: sid
     )
@@ -88,6 +88,7 @@ final class DashboardStore: ObservableObject {
 
     courses = await fetchedCourses
     assignments = await fetchedAssignments
+    classFiles = await fetchedClassFiles
     files = []
     messages = []
     filesError = ""
@@ -111,11 +112,15 @@ final class DashboardStore: ObservableObject {
   }
 
   func files(for schoolClass: SchoolClass) -> [DriveFile] {
+    let owned = classFiles.filter {
+      $0.classId == schoolClass.id ||
+        (!$0.classId.isEmpty && $0.classId.caseInsensitiveCompare(schoolClass.id) == .orderedSame)
+    }
     let pool = allFiles
     let hint = schoolClass.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    guard !hint.isEmpty else { return pool }
-    let matched = pool.filter { $0.name.lowercased().contains(hint) }
-    return matched.isEmpty ? pool : matched
+    let matched = hint.isEmpty ? [] : pool.filter { $0.name.lowercased().contains(hint) }
+    var seen = Set<String>()
+    return (owned + matched).filter { seen.insert($0.id).inserted }
   }
 
   func importLocalFile(from url: URL) {
@@ -428,6 +433,24 @@ final class DashboardStore: ObservableObject {
   private func loadAssignments(sessionId: String) async -> [Assignment] {
     let wrapped: AssignmentsResponse? = try? await api.request("/v1/me/canvas/assignments", sessionId: sessionId)
     return wrapped?.assignments ?? []
+  }
+
+  private func loadClassFiles(sessionId: String) async -> [DriveFile] {
+    let wrapped: FilesResponse? = try? await api.listClassFiles(classId: "", sessionId: sessionId)
+    return wrapped?.files ?? []
+  }
+
+  func deleteNote(id: String, session: SessionStore) async -> Bool {
+    let nid = id.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !nid.isEmpty, !session.sessionId.isEmpty else { return false }
+    do {
+      try await api.deleteNote(id: nid, sessionId: session.sessionId)
+      notes.removeAll { $0.id == nid }
+      return true
+    } catch {
+      notesStatus = (error as? APIError)?.message ?? "Could not delete that note."
+      return false
+    }
   }
 
   private static let importedIndexKey = "epsynapse.imported.files"

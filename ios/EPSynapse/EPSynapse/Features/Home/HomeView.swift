@@ -70,6 +70,17 @@ struct HomeView: View {
             }
             scrollToTopTick += 1
         }
+        .onReceive(NotificationCenter.default.publisher(for: .epsAgentNavigate)) { note in
+            guard let info = note.object as? [String: Any] else { return }
+            let view = (info["view"] as? String ?? "").lowercased()
+            if view == "class", let id = info["classId"] as? String, !id.isEmpty {
+                path.append(HomeDestination.schoolClass(id))
+            } else if view == "note", let id = info["noteId"] as? String, !id.isEmpty {
+                path.append(HomeDestination.note(id))
+            } else if view == "home" {
+                path = NavigationPath()
+            }
+        }
         .task {
             await session.boot()
             if session.isSignedIn {

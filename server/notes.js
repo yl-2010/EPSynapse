@@ -307,6 +307,45 @@ export async function patchNoteSubject(ownerId, id, subject, { student } = {}) {
   return note;
 }
 
+export async function updateNoteText(ownerId, id, rawText) {
+  const note = await loadNote(ownerId, id);
+  const text = String(rawText || "").trim();
+  if (!text) {
+    const err = new Error("Paste some notes first.");
+    err.status = 400;
+    throw err;
+  }
+  if (text.length > MAX_TEXT) {
+    const err = new Error("Note is too long.");
+    err.status = 400;
+    throw err;
+  }
+  note.text = text;
+  note.title = titleFromText(text);
+  note.updatedAt = new Date().toISOString();
+  await saveNote(ownerId, note);
+  const existing = await readJson(eventPath(ownerId, note.eventId));
+  const event = existing || researchEventFromNote(note);
+  event.textLength = text.length;
+  event.textPreview = text.replace(/\s+/g, " ").trim().slice(0, PREVIEW);
+  delete event.text;
+  await saveEvent(ownerId, event);
+  return note;
+}
+
+export async function deleteNote(ownerId, id) {
+  const note = await loadNote(ownerId, id);
+  await unlink(notePath(ownerId, note.id)).catch((err) => {
+    if (err && err.code !== "ENOENT") throw err;
+  });
+  if (note.eventId) {
+    await unlink(eventPath(ownerId, note.eventId)).catch(() => {});
+  }
+  return { ok: true, id: note.id };
+}
+
+export { publicNote, publicNoteRow };
+
 export function mountNotes(app, { requireStudent, fail }) {
   async function ownerFromReq(req, res) {
     const student = await requireStudent(req, res);
@@ -359,12 +398,28 @@ export function mountNotes(app, { requireStudent, fail }) {
     try {
       const ctx = await ownerFromReq(req, res);
       if (!ctx) return;
-      const note = await patchNoteSubject(ctx.ownerId, req.params.id, req.body?.subject, {
-        student: ctx.student,
-      });
+      let note = await loadNote(ctx.ownerId, req.params.id);
+      if (req.body?.text != null) {
+        note = await updateNoteText(ctx.ownerId, req.params.id, req.body.text);
+      }
+      if (req.body?.subject != null && String(req.body.subject).trim()) {
+        note = await patchNoteSubject(ctx.ownerId, req.params.id, req.body.subject, {
+          student: ctx.student,
+        });
+      }
       return res.json({ note: publicNote(note) });
     } catch (err) {
       return fail(res, err, err.status || 400);
+    }
+  });
+
+  app.delete("/v1/me/notes/:id", async (req, res) => {
+    try {
+      const ctx = await ownerFromReq(req, res);
+      if (!ctx) return;
+      return res.json(await deleteNote(ctx.ownerId, req.params.id));
+    } catch (err) {
+      return fail(res, err, err.status || 404);
     }
   });
 }

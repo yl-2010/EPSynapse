@@ -12,6 +12,9 @@ import {
   consumeSse,
   explainUpstreamError,
   extractChatDelta,
+  extractToolCalls,
+  finishedToolCalls,
+  mergeToolCallDeltas,
   publicAgentConfig,
   MISSING_KEY_ERROR,
   resolveApiKey,
@@ -19,6 +22,7 @@ import {
   upstreamBody,
   upstreamHeaders,
 } from "./agent.js";
+import { AGENT_TOOLS, executeAgentTool, navigateHref, normalizeNavigate } from "./agent-tools.js";
 import {
   applyScheduleToGrades,
   dashboardPayload,
@@ -94,9 +98,28 @@ import {
 } from "./chat-history.js";
 import multer from "multer";
 import { probeBertService } from "./bert.js";
-import { mountNotes } from "./notes.js";
+import { listNotes, mountNotes } from "./notes.js";
 import { mountResearch } from "./research-metrics.js";
 import { loadSchedule, mountSchedule } from "./schedule.js";
+import {
+  applyClassAliases,
+  hideCanvasTodo,
+  isLocalTodoId,
+  listAllClassFiles,
+  listClassFiles,
+  listTodos,
+  loadWorkspaceMeta,
+  mergeAssignments,
+  parseClassFileId,
+  patchTodo,
+  readClassFile,
+  renameClass,
+  writeClassFile,
+  deleteClassFile,
+  createTodo,
+  deleteTodo,
+  workspaceSnapshotBits,
+} from "./workspace.js";
 
 const PORT = Number(process.env.PORT || 3006);
 const HOST = process.env.HOST || "0.0.0.0";
@@ -388,7 +411,33 @@ async function liveSnapshot(student) {
     bits.push("Outlook: not connected.");
   }
 
-  return bits.join("\n").slice(0, 4000);
+  const ownerId = ownerIdForStudent(student);
+  if (ownerId) {
+    try {
+      const notes = await listNotes(ownerId);
+      if (notes.length) {
+        bits.push(
+          `Notes: ${notes
+            .slice(0, 8)
+            .map((n) => `${n.title || "Note"} [${n.subject || "unclassified"}] ${n.id}`)
+            .join("; ")}`
+        );
+      }
+    } catch {
+      /* notes are optional */
+    }
+    try {
+      bits.push(...(await workspaceSnapshotBits(ownerId)));
+    } catch {
+      /* workspace is optional */
+    }
+  }
+
+  bits.push(
+    "You can add, edit, check off, and delete notes and todos, add HTML or other files to a class, and rename classes. Use the tools."
+  );
+
+  return bits.join("\n").slice(0, 7000);
 }
 
 app.get("/health", async (_req, res) => {
@@ -597,7 +646,9 @@ app.get("/v1/me/canvas/courses", async (req, res) => {
       return res.status(400).json({ error: "Connect Canvas in settings first." });
     }
     const courses = await listCourses(student.canvasHost, student.canvasToken);
-    return res.json({ courses });
+    const ownerId = ownerIdForStudent(student);
+    const meta = ownerId ? await loadWorkspaceMeta(ownerId).catch(() => ({ classAliases: {} })) : { classAliases: {} };
+    return res.json({ courses: applyClassAliases(courses, meta.classAliases) });
   } catch (err) {
     return fail(res, err, err.status || 502);
   }
@@ -607,11 +658,14 @@ app.get("/v1/me/canvas/assignments", async (req, res) => {
   try {
     const student = await requireStudent(req, res);
     if (!student) return;
-    if (!student.canvasToken) {
-      return res.status(400).json({ error: "Connect Canvas in settings first." });
+    const ownerId = ownerIdForStudent(student);
+    let canvas = [];
+    if (student.canvasToken) {
+      canvas = await listAssignments(student.canvasHost, student.canvasToken).catch(() => []);
     }
-    const assignments = await listAssignments(student.canvasHost, student.canvasToken);
-    return res.json({ assignments });
+    const local = ownerId ? await listTodos(ownerId).catch(() => []) : [];
+    const meta = ownerId ? await loadWorkspaceMeta(ownerId).catch(() => ({ hiddenTodoIds: [] })) : { hiddenTodoIds: [] };
+    return res.json({ assignments: mergeAssignments(canvas, local, meta.hiddenTodoIds) });
   } catch (err) {
     return fail(res, err, err.status || 502);
   }
@@ -621,6 +675,10 @@ app.post("/v1/me/canvas/assignments/:id/complete", async (req, res) => {
   try {
     const student = await requireStudent(req, res);
     if (!student) return;
+    const ownerId = ownerIdForStudent(student);
+    if (ownerId && isLocalTodoId(req.params.id)) {
+      return res.json(await patchTodo(ownerId, req.params.id, { done: true }));
+    }
     if (!student.canvasToken) {
       return res.status(400).json({ error: "Connect Canvas in settings first." });
     }
@@ -640,6 +698,10 @@ app.post("/v1/me/canvas/assignments/:id/incomplete", async (req, res) => {
   try {
     const student = await requireStudent(req, res);
     if (!student) return;
+    const ownerId = ownerIdForStudent(student);
+    if (ownerId && isLocalTodoId(req.params.id)) {
+      return res.json(await patchTodo(ownerId, req.params.id, { done: false }));
+    }
     if (!student.canvasToken) {
       return res.status(400).json({ error: "Connect Canvas in settings first." });
     }
@@ -1037,6 +1099,140 @@ app.put("/v1/me/onedrive/file", async (req, res) => {
   }
 });
 
+async function ownerFromStudent(req, res) {
+  const student = await requireStudent(req, res);
+  if (!student) return null;
+  const ownerId = ownerIdForStudent(student);
+  if (!ownerId) {
+    res.status(401).json({ error: "Sign in with Google first." });
+    return null;
+  }
+  return { student, ownerId };
+}
+
+app.get("/v1/me/todos", async (req, res) => {
+  try {
+    const ctx = await ownerFromStudent(req, res);
+    if (!ctx) return;
+    return res.json({ todos: await listTodos(ctx.ownerId) });
+  } catch (err) {
+    return fail(res, err);
+  }
+});
+
+app.post("/v1/me/todos", async (req, res) => {
+  try {
+    const ctx = await ownerFromStudent(req, res);
+    if (!ctx) return;
+    return res.json({ todo: await createTodo(ctx.ownerId, req.body || {}) });
+  } catch (err) {
+    return fail(res, err, err.status || 400);
+  }
+});
+
+app.patch("/v1/me/todos/:id", async (req, res) => {
+  try {
+    const ctx = await ownerFromStudent(req, res);
+    if (!ctx) return;
+    return res.json({ todo: await patchTodo(ctx.ownerId, req.params.id, req.body || {}) });
+  } catch (err) {
+    return fail(res, err, err.status || 400);
+  }
+});
+
+app.delete("/v1/me/todos/:id", async (req, res) => {
+  try {
+    const ctx = await ownerFromStudent(req, res);
+    if (!ctx) return;
+    if (!isLocalTodoId(req.params.id)) {
+      return res.json(await hideCanvasTodo(ctx.ownerId, req.params.id));
+    }
+    return res.json(await deleteTodo(ctx.ownerId, req.params.id));
+  } catch (err) {
+    return fail(res, err, err.status || 404);
+  }
+});
+
+app.patch("/v1/me/classes/:id", async (req, res) => {
+  try {
+    const ctx = await ownerFromStudent(req, res);
+    if (!ctx) return;
+    return res.json(await renameClass(ctx.ownerId, req.params.id, req.body?.name));
+  } catch (err) {
+    return fail(res, err, err.status || 400);
+  }
+});
+
+app.get("/v1/me/class-files", async (req, res) => {
+  try {
+    const ctx = await ownerFromStudent(req, res);
+    if (!ctx) return;
+    const classId = String(req.query.classId || "").trim();
+    const includeText = /^(1|true|yes)$/i.test(String(req.query.text || "1"));
+    const files = classId
+      ? await listClassFiles(ctx.ownerId, classId, { includeText })
+      : await listAllClassFiles(ctx.ownerId, { includeText });
+    return res.json({ files, classId });
+  } catch (err) {
+    return fail(res, err, err.status || 404);
+  }
+});
+
+app.put("/v1/me/class-files", async (req, res) => {
+  try {
+    const ctx = await ownerFromStudent(req, res);
+    if (!ctx) return;
+    const classId = String(req.body?.classId || req.query.classId || "").trim();
+    let content = req.body?.content;
+    if (req.body?.encoding === "base64") {
+      content = Buffer.from(String(content || ""), "base64");
+    }
+    const file = await writeClassFile(ctx.ownerId, classId, {
+      name: req.body?.name,
+      content,
+      contentType: req.body?.contentType,
+    });
+    return res.json({ file });
+  } catch (err) {
+    return fail(res, err, err.status || 400);
+  }
+});
+
+app.get("/v1/me/class-files/file", async (req, res) => {
+  try {
+    const ctx = await ownerFromStudent(req, res);
+    if (!ctx) return;
+    const parsed = parseClassFileId(req.query.id) || {
+      classId: String(req.query.classId || "").trim(),
+      name: String(req.query.name || "").trim(),
+    };
+    const file = await readClassFile(ctx.ownerId, parsed.classId, parsed.name);
+    const inline = /html|text|json|javascript|svg/i.test(file.contentType);
+    res.setHeader("Content-Type", file.contentType);
+    res.setHeader(
+      "Content-Disposition",
+      `${inline ? "inline" : "attachment"}; filename="${String(file.name || "file").replace(/"/g, "")}"`
+    );
+    return res.send(file.buffer);
+  } catch (err) {
+    return fail(res, err, err.status || 404);
+  }
+});
+
+app.delete("/v1/me/class-files/file", async (req, res) => {
+  try {
+    const ctx = await ownerFromStudent(req, res);
+    if (!ctx) return;
+    const parsed = parseClassFileId(req.query.id) || {
+      classId: String(req.body?.classId || req.query.classId || "").trim(),
+      name: String(req.body?.name || req.query.name || "").trim(),
+    };
+    return res.json(await deleteClassFile(ctx.ownerId, parsed.classId, parsed.name));
+  } catch (err) {
+    return fail(res, err, err.status || 404);
+  }
+});
+
 app.get("/v1/agent/config", (_req, res) => {
   res.json(publicAgentConfig());
 });
@@ -1070,72 +1266,210 @@ app.post("/v1/agent/chat", async (req, res) => {
     snapshot = "";
   }
 
-  let upstream;
-  try {
-    upstream = await fetch(provider.url, {
-      method: "POST",
-      headers: upstreamHeaders(provider, key),
-      body: JSON.stringify(upstreamBody(provider, messages, snapshot)),
-      signal: AbortSignal.timeout(90_000),
-    });
-  } catch (err) {
-    const timedOut = err && err.name === "TimeoutError";
-    return res.status(502).json({
-      error: timedOut ? "The model timed out. Try again." : "Could not reach the model host.",
-    });
-  }
-
-  if (!upstream.ok) {
-    const text = await upstream.text().catch(() => "");
-    return res.status(upstream.status === 401 ? 401 : 502).json({
-      error: explainUpstreamError(upstream.status, text),
-    });
-  }
-
-  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
-  res.setHeader("Cache-Control", "no-cache, no-transform");
-  res.setHeader("Content-Encoding", "identity");
-  res.setHeader("Connection", "keep-alive");
-  res.setHeader("X-Accel-Buffering", "no");
-  res.setHeader("X-Agent-Source", source);
-  res.setHeader("X-Agent-Provider", provider.id);
-  res.flushHeaders?.();
-
-  if (!upstream.body) {
-    return res.end();
-  }
-
-  const decoder = new TextDecoder();
-  let buf = "";
-  const writeDelta = (event) => {
-    if (!event || event === "[DONE]") return;
-    let json;
-    try {
-      json = JSON.parse(event);
-    } catch {
+  const ownerId = ownerIdForStudent(student);
+  const writeSseHeaders = () => {
+    if (res.headersSent) return;
+    res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Content-Encoding", "identity");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.setHeader("X-Agent-Source", source);
+    res.setHeader("X-Agent-Provider", provider.id);
+    res.flushHeaders?.();
+  };
+  const writeEvent = (payload) => {
+    writeSseHeaders();
+    if (payload === "[DONE]") {
+      res.write("data: [DONE]\n\n");
       return;
     }
-    const delta = extractChatDelta(json);
-    if (!delta.content && !delta.reasoning) return;
-    res.write(`data: ${JSON.stringify({ choices: [{ delta }] })}\n\n`);
+    res.write(`data: ${JSON.stringify(payload)}\n\n`);
   };
 
-  const reader = upstream.body.getReader();
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-      buf = consumeSse(buf, writeDelta);
+  const fetchUpstream = async (convo, { tools = true } = {}) => {
+    return fetch(provider.url, {
+      method: "POST",
+      headers: upstreamHeaders(provider, key),
+      body: JSON.stringify(
+        upstreamBody(provider, convo, snapshot, tools ? { tools: AGENT_TOOLS } : {})
+      ),
+      signal: AbortSignal.timeout(90_000),
+    });
+  };
+
+  const pipePlainStream = async (upstream) => {
+    writeSseHeaders();
+    if (!upstream.body) {
+      writeEvent("[DONE]");
+      return;
     }
-    buf += decoder.decode();
-    consumeSse(`${buf}\n\n`, writeDelta);
-    res.write("data: [DONE]\n\n");
+    const decoder = new TextDecoder();
+    let buf = "";
+    const writeDelta = (event) => {
+      if (!event || event === "[DONE]") return;
+      let json;
+      try {
+        json = JSON.parse(event);
+      } catch {
+        return;
+      }
+      const delta = extractChatDelta(json);
+      if (!delta.content && !delta.reasoning) return;
+      writeEvent({ choices: [{ delta }] });
+    };
+    const reader = upstream.body.getReader();
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        buf = consumeSse(buf, writeDelta);
+      }
+      buf += decoder.decode();
+      consumeSse(`${buf}\n\n`, writeDelta);
+      writeEvent("[DONE]");
+    } finally {
+      reader.releaseLock();
+    }
+  };
+
+  const readToolRound = async (upstream) => {
+    if (!upstream.body) return { content: "", reasoning: "", toolCalls: [] };
+    const decoder = new TextDecoder();
+    let buf = "";
+    let content = "";
+    let reasoning = "";
+    let toolCalls = [];
+    const onEvent = (event) => {
+      if (!event || event === "[DONE]") return;
+      let json;
+      try {
+        json = JSON.parse(event);
+      } catch {
+        return;
+      }
+      const delta = extractChatDelta(json);
+      if (delta.content) content += delta.content;
+      if (delta.reasoning) reasoning += delta.reasoning;
+      toolCalls = mergeToolCallDeltas(toolCalls, extractToolCalls(json));
+    };
+    const reader = upstream.body.getReader();
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        buf = consumeSse(buf, onEvent);
+      }
+      buf += decoder.decode();
+      consumeSse(`${buf}\n\n`, onEvent);
+    } finally {
+      reader.releaseLock();
+    }
+    if (!content && !reasoning && !toolCalls.length && buf.trim().startsWith("{")) {
+      try {
+        const json = JSON.parse(buf);
+        const delta = extractChatDelta(json);
+        content = delta.content || "";
+        reasoning = delta.reasoning || "";
+        toolCalls = mergeToolCallDeltas(toolCalls, extractToolCalls(json));
+      } catch {
+        /* leftover was not a full JSON body */
+      }
+    }
+    return { content, reasoning, toolCalls: finishedToolCalls(toolCalls) };
+  };
+
+  let convo = messages.map((m) => ({ role: m.role, content: m.content }));
+  const kinds = new Set();
+  let navigate = null;
+
+  try {
+    for (let round = 0; round < 8; round += 1) {
+      let upstream;
+      try {
+        upstream = await fetchUpstream(convo, { tools: true });
+      } catch (err) {
+        const timedOut = err && err.name === "TimeoutError";
+        if (res.headersSent) {
+          writeEvent({ choices: [{ delta: { content: timedOut ? "The model timed out. Try again." : "Could not reach the model host." } }] });
+          writeEvent("[DONE]");
+          return res.end();
+        }
+        return res.status(502).json({
+          error: timedOut ? "The model timed out. Try again." : "Could not reach the model host.",
+        });
+      }
+
+      if (!upstream.ok) {
+        const text = await upstream.text().catch(() => "");
+        if (round === 0 && /tool/i.test(text)) {
+          let fallback;
+          try {
+            fallback = await fetchUpstream(convo, { tools: false });
+          } catch {
+            fallback = null;
+          }
+          if (fallback?.ok) {
+            await pipePlainStream(fallback);
+            return res.end();
+          }
+        }
+        if (res.headersSent) {
+          writeEvent({ choices: [{ delta: { content: explainUpstreamError(upstream.status, text) } }] });
+          writeEvent("[DONE]");
+          return res.end();
+        }
+        return res.status(upstream.status === 401 ? 401 : 502).json({
+          error: explainUpstreamError(upstream.status, text),
+        });
+      }
+
+      const roundOut = await readToolRound(upstream);
+      if (!roundOut.toolCalls.length) {
+        if (kinds.size) writeEvent({ type: "mutation", kinds: [...kinds] });
+        if (navigate) writeEvent({ type: "navigate", ...navigate, href: navigateHref(navigate) });
+        if (roundOut.reasoning) writeEvent({ choices: [{ delta: { reasoning: roundOut.reasoning } }] });
+        if (roundOut.content) writeEvent({ choices: [{ delta: { content: roundOut.content } }] });
+        writeEvent("[DONE]");
+        return res.end();
+      }
+
+      writeSseHeaders();
+      writeEvent({ type: "status", text: "Working…" });
+      convo.push({
+        role: "assistant",
+        content: roundOut.content || "",
+        tool_calls: roundOut.toolCalls,
+      });
+      for (const call of roundOut.toolCalls) {
+        const result = await executeAgentTool(call, { ownerId, student, req });
+        (result.kinds || []).forEach((k) => kinds.add(k));
+        const nextNav = normalizeNavigate(result.navigate);
+        if (nextNav) navigate = nextNav;
+        convo.push({
+          role: "tool",
+          tool_call_id: call.id || `call_${round}`,
+          content: result.text,
+        });
+      }
+    }
+    if (kinds.size) writeEvent({ type: "mutation", kinds: [...kinds] });
+    if (navigate) writeEvent({ type: "navigate", ...navigate, href: navigateHref(navigate) });
+    writeEvent({ choices: [{ delta: { content: "Stopped after too many tool steps." } }] });
+    writeEvent("[DONE]");
+    return res.end();
   } catch {
-    // Client hung up or the upstream stream died. Fine.
-  } finally {
-    reader.releaseLock();
-    res.end();
+    if (!res.headersSent) {
+      return res.status(502).json({ error: "Could not reach the model host." });
+    }
+    try {
+      writeEvent("[DONE]");
+    } catch {
+      /* hung up */
+    }
+    return res.end();
   }
 });
 

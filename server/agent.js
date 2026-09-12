@@ -8,10 +8,13 @@ export const SYSTEM_PROMPT = [
   "You are the EPSynapse personal agent for Eastside Prep students.",
   "Be direct and useful. Skip filler.",
   "Help with school life: classes, homework planning, LPC, EBC, clubs, college-counseling questions they can take to an adult.",
-  "If a live student snapshot is attached, use it. Do not invent courses, due dates, grades, files, or emails that are not in the snapshot.",
+  "You can change the student's dashboard with tools: add/update/delete notes, add/update/check/uncheck/delete todos, add or replace class files including standalone HTML, delete class files, and rename classes.",
+  "When they ask you to do one of those things, call the tool. Do not tell them to tap a button instead.",
+  "If a live student snapshot is attached, use it. Do not invent courses, due dates, grades, files, or emails that are not in the snapshot or a tool result.",
+  "After a create, call open_page so the site or app lands on that class or note.",
   "If they want mail sent, tell them to use the Mail panel Send button. You cannot send from chat.",
   "If there is no snapshot, say you do not have live school data yet.",
-  "If they ask you to remember something, work only with what is already in this conversation.",
+  "School mutations: 1-3 short lines. No period when the reply is one word, one phrase, or one sentence.",
   "Write the bubble in markdown: headings, lists, bold, italics, code, tables. For math use LaTeX: $inline$ and $$display$$, or \\(inline\\) and \\[display\\]. Never HTML tags or markdown images.",
 ].join(" ");
 
@@ -106,17 +109,48 @@ export function upstreamHeaders(provider, key) {
   };
 }
 
-export function upstreamBody(provider, messages, snapshot = "") {
+export function systemPromptWithSnapshot(snapshot = "") {
   const extra = String(snapshot || "").trim();
-  const system = extra
-    ? `${SYSTEM_PROMPT}\n\nLive student snapshot:\n${extra}`
-    : SYSTEM_PROMPT;
+  return extra ? `${SYSTEM_PROMPT}\n\nLive student snapshot:\n${extra}` : SYSTEM_PROMPT;
+}
+
+export function upstreamBody(provider, messages, snapshot = "", extras = {}) {
   return {
     model: provider.model,
-    stream: true,
-    messages: [{ role: "system", content: system }, ...messages],
+    stream: extras.stream !== false,
+    messages: [{ role: "system", content: systemPromptWithSnapshot(snapshot) }, ...messages],
+    ...(extras.tools ? { tools: extras.tools, tool_choice: extras.toolChoice || "auto" } : {}),
     ...(provider.extraBody || {}),
   };
+}
+
+export function extractToolCalls(json) {
+  const choice = json && Array.isArray(json.choices) ? json.choices[0] : null;
+  if (!choice) return [];
+  const src = choice.delta || choice.message || {};
+  const raw = src.tool_calls || src.toolCalls;
+  return Array.isArray(raw) ? raw : [];
+}
+
+export function mergeToolCallDeltas(acc, deltas) {
+  const next = acc.slice();
+  for (const part of deltas || []) {
+    const index = Number.isInteger(part.index) ? part.index : next.length ? next.length - 1 : 0;
+    while (next.length <= index) {
+      next.push({ id: "", type: "function", function: { name: "", arguments: "" } });
+    }
+    const row = next[index];
+    if (part.id) row.id = part.id;
+    if (part.type) row.type = part.type;
+    const fn = part.function || {};
+    if (fn.name) row.function.name += fn.name;
+    if (fn.arguments) row.function.arguments += fn.arguments;
+  }
+  return next;
+}
+
+export function finishedToolCalls(calls) {
+  return (calls || []).filter((c) => c?.function?.name);
 }
 
 export function explainUpstreamError(status, text) {

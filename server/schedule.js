@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { ownerIdForStudent } from "./chat-history.js";
 import { prettyCourseName } from "./canvas.js";
+import { applyClassAliases, loadWorkspaceMeta } from "./workspace.js";
 import { subjectFromCourseName } from "./subjects.js";
 
 const require = createRequire(import.meta.url);
@@ -590,7 +591,13 @@ export function mountSchedule(app, { requireStudent, fail, upload }) {
         return res.status(401).json({ error: "Sign in with Google first." });
       }
       const stored = await loadSchedule(ownerId);
-      return res.json(publicSchedule(stored));
+      const meta = await loadWorkspaceMeta(ownerId).catch(() => ({ classAliases: {} }));
+      return res.json(
+        publicSchedule({
+          ...stored,
+          classes: applyClassAliases(stored.classes || [], meta.classAliases),
+        })
+      );
     } catch (err) {
       return fail(res, err);
     }
