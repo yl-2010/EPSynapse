@@ -139,11 +139,10 @@ function numOrNull(v) {
 }
 
 function pickNum(...vals) {
-  for (const v of vals) {
-    const n = numOrNull(v);
-    if (n != null) return n;
-  }
-  return null;
+  const nums = vals.map(numOrNull).filter((n) => n != null);
+  if (!nums.length) return null;
+  const nonzero = nums.find((n) => n !== 0);
+  return nonzero != null ? nonzero : 0;
 }
 
 function pickLetter(...vals) {
@@ -152,6 +151,31 @@ function pickLetter(...vals) {
     if (s && s !== "—" && s !== "-") return s;
   }
   return "";
+}
+
+function letterFromPercent(score) {
+  const n = numOrNull(score);
+  if (n == null) return "";
+  if (n >= 93) return "A";
+  if (n >= 90) return "A-";
+  if (n >= 87) return "B+";
+  if (n >= 83) return "B";
+  if (n >= 80) return "B-";
+  if (n >= 77) return "C+";
+  if (n >= 73) return "C";
+  if (n >= 70) return "C-";
+  if (n >= 67) return "D+";
+  if (n >= 63) return "D";
+  if (n >= 60) return "D-";
+  return "F";
+}
+
+function preferScore(a, b) {
+  if (a == null) return b ?? null;
+  if (b == null) return a;
+  if (a === 0 && b !== 0) return b;
+  if (b === 0 && a !== 0) return a;
+  return a;
 }
 
 function studentEnrollment(course) {
@@ -174,27 +198,28 @@ function scoresFromEnrollment(enr) {
     };
   }
   const g = enr.grades || {};
+  // Current / unposted current only. Final treats missing work as 0 and
+  // is not what Canvas shows the student as their grade.
+  const currentScore = pickNum(
+    g.current_score,
+    enr.computed_current_score,
+    g.unposted_current_score,
+    enr.computed_unposted_current_score,
+    enr.current_period_computed_current_score,
+    enr.current_period_computed_unposted_current_score
+  );
+  const currentGrade = pickLetter(
+    g.current_grade,
+    enr.computed_current_grade,
+    enr.computed_current_letter_grade,
+    g.unposted_current_grade,
+    enr.computed_unposted_current_grade,
+    enr.current_period_computed_current_grade,
+    letterFromPercent(currentScore)
+  );
   return {
-    currentScore: pickNum(
-      g.current_score,
-      enr.computed_current_score,
-      enr.current_period_computed_current_score,
-      g.unposted_current_score,
-      enr.computed_unposted_current_score,
-      enr.current_period_computed_unposted_current_score,
-      g.final_score,
-      enr.computed_final_score
-    ),
-    currentGrade: pickLetter(
-      g.current_grade,
-      enr.computed_current_grade,
-      enr.computed_current_letter_grade,
-      enr.current_period_computed_current_grade,
-      g.unposted_current_grade,
-      enr.computed_unposted_current_grade,
-      g.final_grade,
-      enr.computed_final_grade
-    ),
+    currentScore,
+    currentGrade,
     finalScore: pickNum(g.final_score, enr.computed_final_score),
     finalGrade: pickLetter(g.final_grade, enr.computed_final_grade),
     htmlUrl: String(g.html_url || enr.html_url || "").trim(),
@@ -218,11 +243,15 @@ function mapCourse(c) {
 
 function mergeScores(course, enr) {
   const scored = scoresFromEnrollment(enr);
+  const currentScore = preferScore(course.currentScore, scored.currentScore);
   return {
     ...course,
-    currentScore: course.currentScore != null ? course.currentScore : scored.currentScore,
-    currentGrade: course.currentGrade || scored.currentGrade,
-    finalScore: course.finalScore != null ? course.finalScore : scored.finalScore,
+    currentScore,
+    currentGrade:
+      course.currentGrade ||
+      scored.currentGrade ||
+      letterFromPercent(currentScore),
+    finalScore: preferScore(course.finalScore, scored.finalScore),
     finalGrade: course.finalGrade || scored.finalGrade,
     htmlUrl: course.htmlUrl || scored.htmlUrl,
   };
@@ -265,7 +294,10 @@ async function attachEnrollmentGrades(host, token, courses) {
     }
     const next = scoresFromEnrollment(e);
     const old = scoresFromEnrollment(prev);
-    if (old.currentScore == null && next.currentScore != null) byCourse.set(id, e);
+    if (preferScore(old.currentScore, next.currentScore) === next.currentScore &&
+        next.currentScore !== old.currentScore) {
+      byCourse.set(id, e);
+    }
   }
   return courses.map((c) => mergeScores(c, byCourse.get(String(c.id))));
 }
