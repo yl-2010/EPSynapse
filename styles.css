@@ -45,6 +45,14 @@
   --corner-orb: 120px;
   --corner-orb-gap: 0.75rem;
   --google-size: 270px;
+  --tone-rose: #c45b6a;
+  --tone-amber: #c49214;
+  --tone-lime: #5f8f38;
+  --tone-teal: #2a8a82;
+  --tone-sky: #3a73a0;
+  --tone-indigo: #675896;
+  --tone-orchid: #a85d90;
+  --tone-slate: #5a6d82;
 }
 
 @property --lg-read-blur {
@@ -83,6 +91,14 @@
     --lg-outer-shadow: rgba(0, 0, 0, 0.5);
     --lg-fallback-tint: 0.14;
     --lg-fallback-shine: rgba(255, 255, 255, 0.3);
+    --tone-rose: #e48892;
+    --tone-amber: #e0b44a;
+    --tone-lime: #8fbf5a;
+    --tone-teal: #4cbcb0;
+    --tone-sky: #6aa8d4;
+    --tone-indigo: #9b8ad4;
+    --tone-orchid: #d48bbc;
+    --tone-slate: #8fa0b4;
   }
 }
 
@@ -110,6 +126,14 @@ html[data-resolved-theme="dark"] {
   --lg-outer-shadow: rgba(0, 0, 0, 0.5);
   --lg-fallback-tint: 0.14;
   --lg-fallback-shine: rgba(255, 255, 255, 0.3);
+  --tone-rose: #e48892;
+  --tone-amber: #e0b44a;
+  --tone-lime: #8fbf5a;
+  --tone-teal: #4cbcb0;
+  --tone-sky: #6aa8d4;
+  --tone-indigo: #9b8ad4;
+  --tone-orchid: #d48bbc;
+  --tone-slate: #8fa0b4;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -215,7 +239,7 @@ html.lg-chrome .edu-vote {
 
 html.lg-chrome .edu-row {
   content-visibility: auto;
-  contain-intrinsic-size: auto 2.85rem;
+  contain-intrinsic-size: auto 3.2rem;
 }
 
 html.lg-chrome .edu-file-tile {
@@ -1311,6 +1335,96 @@ html[data-resolved-theme="light"] .edu-filter.is-on {
 
 .edu-class-row.is-current .edu-meta {
   color: color-mix(in srgb, var(--accent) 75%, var(--muted));
+}
+
+.edu-tone-rose { --card: var(--tone-rose); }
+.edu-tone-amber { --card: var(--tone-amber); }
+.edu-tone-lime { --card: var(--tone-lime); }
+.edu-tone-teal { --card: var(--tone-teal); }
+.edu-tone-sky { --card: var(--tone-sky); }
+.edu-tone-indigo { --card: var(--tone-indigo); }
+.edu-tone-orchid { --card: var(--tone-orchid); }
+.edu-tone-slate { --card: var(--tone-slate); }
+
+.edu-card {
+  background: color-mix(in srgb, var(--card) 16%, transparent);
+  box-shadow:
+    inset 3px 0 0 color-mix(in srgb, var(--card) 78%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--card) 22%, transparent);
+}
+
+.edu-row.edu-card {
+  padding: 0.68rem 0.8rem 0.68rem 0.85rem;
+  border-radius: 12px;
+}
+
+.edu-list:has(> .edu-card:not([data-tag])) {
+  gap: 0.42rem;
+}
+
+.edu-row.edu-card[data-tag]:not(.is-filter-hidden):not(.is-collapse-hidden) {
+  margin-bottom: 0.42rem;
+}
+
+.edu-row.edu-card:hover {
+  background: color-mix(in srgb, var(--card) 24%, transparent);
+}
+
+.edu-card .edu-period {
+  color: var(--card);
+  background: color-mix(in srgb, var(--card) 16%, transparent);
+  border-radius: 7px;
+  height: 1.4rem;
+}
+
+.edu-todo.is-done.edu-card {
+  background: color-mix(in srgb, var(--card) 9%, transparent);
+}
+
+.edu-class-row.is-current.edu-card {
+  color: inherit;
+  background: color-mix(in srgb, var(--card) 28%, transparent);
+  box-shadow:
+    inset 3px 0 0 var(--card),
+    inset 0 0 0 1px color-mix(in srgb, var(--card) 40%, transparent);
+}
+
+.edu-class-row.is-current.edu-card .edu-meta {
+  color: color-mix(in srgb, var(--card) 62%, var(--muted));
+}
+
+.edu-hero--class.edu-card {
+  padding: 0.85rem 1rem 0.95rem;
+  border-radius: 16px;
+  margin-bottom: 1rem;
+}
+
+.edu-hero--class .edu-period {
+  color: var(--card);
+}
+
+html[data-resolved-theme="dark"] .edu-card {
+  background: color-mix(in srgb, var(--card) 20%, transparent);
+}
+
+html[data-resolved-theme="dark"] .edu-row.edu-card:hover {
+  background: color-mix(in srgb, var(--card) 28%, transparent);
+}
+
+html[data-resolved-theme="dark"] .edu-todo.is-done.edu-card {
+  background: color-mix(in srgb, var(--card) 12%, transparent);
+}
+
+html[data-resolved-theme="light"] .edu-card {
+  background: color-mix(in srgb, var(--card) 16%, transparent);
+}
+
+html[data-resolved-theme="light"] .edu-row.edu-card:hover {
+  background: color-mix(in srgb, var(--card) 24%, transparent);
+}
+
+html[data-resolved-theme="light"] .edu-todo.is-done.edu-card {
+  background: color-mix(in srgb, var(--card) 9%, transparent);
 }
 
 /* Liquid-glass circle checkbox */

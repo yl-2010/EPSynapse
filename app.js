@@ -26,6 +26,17 @@
   let odPollInFlight = false;
   let olPollInFlight = false;
   const TAGS = ["CW", "HW", "QA", "MA"];
+  const PERIOD_TONES = {
+    A: "rose",
+    B: "amber",
+    C: "lime",
+    D: "teal",
+    E: "sky",
+    F: "indigo",
+    G: "orchid",
+    H: "slate",
+  };
+  const TONE_CYCLE = ["rose", "amber", "lime", "teal", "sky", "indigo", "orchid", "slate"];
   const typeFilter = new Set(TAGS);
   const TODOS_COLLAPSED_LIMIT = 6;
   let todoExpanded = true;
@@ -1082,6 +1093,41 @@
     return /^[A-H]$/.test(p) ? p : "";
   }
 
+  function hashTone(raw) {
+    const s = String(raw || "class");
+    let h = 2166136261;
+    for (let i = 0; i < s.length; i += 1) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return TONE_CYCLE[h % TONE_CYCLE.length];
+  }
+
+  function classTone(klass) {
+    const letter = periodLetter(klass?.period);
+    if (PERIOD_TONES[letter]) return PERIOD_TONES[letter];
+    return hashTone(klass?.id || klass?.canvasCourseId || klass?.courseId || klass?.name || "");
+  }
+
+  function cardClass(tone) {
+    const key = TONE_CYCLE.includes(tone) ? tone : "slate";
+    return `edu-card edu-tone-${key}`;
+  }
+
+  function classForWork(item) {
+    return (
+      (lastHome.classes || []).find((c) => classMatchesWork(c, item)) ||
+      (lastHome.courses || []).find((c) => classMatchesWork(c, item)) ||
+      null
+    );
+  }
+
+  function workTone(item) {
+    const klass = classForWork(item);
+    if (klass) return classTone(klass);
+    return hashTone(item?.courseId || item?.courseName || "");
+  }
+
   function isLetterGrade(raw) {
     return /^[ABCDF][+-]?$/i.test(String(raw || "").trim());
   }
@@ -1200,7 +1246,7 @@
   }
 
   function gradeRow(c) {
-    return `<li class="edu-row edu-class-row">
+    return `<li class="edu-row edu-class-row ${cardClass(classTone(c))}">
       <a class="edu-row-link" data-route href="/grades">
         <span class="edu-name">${periodTagHtml(c.period)}<span class="edu-hero-class-name">${escapeHtml(c.name)}</span></span>
         <span class="edu-meta edu-grade">${escapeHtml(formatCourseGrade(c))}</span>
@@ -1208,11 +1254,11 @@
     </li>`;
   }
 
-  function workRow(w) {
+  function workRow(w, tone) {
     const tag = w.tag || "HW";
     const href = w.canvasLink || "#";
     const late = w.late ? " is-late" : "";
-    return `<li class="edu-row${late}">
+    return `<li class="edu-row${late} ${cardClass(tone || workTone(w))}">
       <a class="edu-row-link" href="${escapeHtml(href)}" target="_blank" rel="noopener">
         <span class="edu-name"><span class="edu-tag edu-tag-${escapeHtml(tag)}">${escapeHtml(tag)}</span> ${escapeHtml(w.title)}</span>
         <span class="edu-meta edu-grade">${escapeHtml(formatWorkScore(w))}</span>
@@ -1238,7 +1284,7 @@
     const due = t.due ? `<span class="edu-meta">${escapeHtml(formatDue(t.due))}</span>` : "";
     const klass = t.courseName ? `<span class="edu-meta">${escapeHtml(t.courseName)}</span>` : "";
     const href = t.canvasLink || "#";
-    return `<li class="edu-row edu-todo${t.done ? " is-done" : ""}" data-id="${escapeHtml(t.id || t.canvasId || "")}" data-tag="${escapeHtml(tag)}">
+    return `<li class="edu-row edu-todo${t.done ? " is-done" : ""} ${cardClass(workTone(t))}" data-id="${escapeHtml(t.id || t.canvasId || "")}" data-tag="${escapeHtml(tag)}">
       <button type="button" class="edu-check${t.done ? " is-checked" : ""}" data-liquid-glass="circle" data-filter-id="lg-check-${escapeHtml(t.id)}" data-todo-id="${escapeHtml(t.id || t.canvasId || "")}" aria-label="${t.done ? "Completed" : "Mark complete"}"${t.done ? " disabled" : ""}><span class="edu-check-dot"></span></button>
       <a class="edu-row-link" href="${escapeHtml(href)}" target="_blank" rel="noopener">
         <span class="edu-name"><span class="edu-tag edu-tag-${escapeHtml(tag)}">${escapeHtml(tag)}</span> ${escapeHtml(t.title)}</span>
@@ -1268,7 +1314,7 @@
     const highlight = isCurrentClass(c);
     const href = classHref(c);
     const meta = c.courseCode || "";
-    return `<li class="edu-row edu-class-row${highlight ? " is-current" : ""}">
+    return `<li class="edu-row edu-class-row${highlight ? " is-current" : ""} ${cardClass(classTone(c))}">
       <a class="edu-row-link" data-route href="${escapeHtml(href)}">
         <span class="edu-name">${periodTagHtml(c.period)}<span class="edu-hero-class-name">${escapeHtml(fullerClassName(c.name, gradeForClass(c)?.name))}</span></span>
         <span class="edu-meta">${escapeHtml(meta)}</span>
@@ -1592,7 +1638,7 @@
     appEl.classList.add("is-settled");
     appEl.innerHTML = `
       <p class="edu-home-mark"><a class="edu-home-research" data-route href="/">Home</a></p>
-      <header class="edu-hero edu-hero--detail edu-hero--detail-canvas">
+      <header class="edu-hero edu-hero--detail edu-hero--detail-canvas edu-hero--class ${cardClass(classTone(klass))}">
         <div class="edu-hero-lead">
           <h1 class="edu-hero-title edu-hero-title--class">${period}<span class="edu-hero-class-name">${escapeHtml(fullerClassName(klass.name, courseGrade?.name))}</span></h1>
           <p class="edu-hero-sub">${escapeHtml(sub)}</p>
@@ -1742,7 +1788,7 @@
         const mark = `<span class="edu-grade-mark">${escapeHtml(formatCourseGrade(g))}</span>`;
         const body = g.work === undefined
           ? `<p class="edu-empty">Loading graded work…</p>`
-          : listOrEmpty((g.work || []).map(workRow).join(""), "No graded work yet");
+          : listOrEmpty((g.work || []).map((w) => workRow(w, classTone(g))).join(""), "No graded work yet");
         return panelHtml(title, body, `lg-grade-${g.id}`, "", mark);
       })
       .join("");
