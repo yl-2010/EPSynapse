@@ -478,15 +478,16 @@ html[data-resolved-theme="dark"] .edu-check.lg-refraction::after {
   border-radius: 50%;
 }
 
+.c-tl,
+.c-bl {
+  cursor: pointer;
+}
+
 .c-tl {
   top: var(--corner-pad);
   left: var(--corner-pad);
   width: var(--corner-orb);
   height: var(--corner-orb);
-  color: var(--accent);
-  box-shadow:
-    0 6px var(--lg-outer-shadow-blur) var(--lg-outer-shadow),
-    0 0 0 1.5px color-mix(in srgb, var(--accent) 50%, transparent);
 }
 
 .c-bl {
@@ -494,10 +495,6 @@ html[data-resolved-theme="dark"] .edu-check.lg-refraction::after {
   left: var(--corner-pad);
   width: var(--corner-orb);
   height: var(--corner-orb);
-  color: var(--accent);
-  box-shadow:
-    0 6px var(--lg-outer-shadow-blur) var(--lg-outer-shadow),
-    0 0 0 1.5px color-mix(in srgb, var(--accent) 50%, transparent);
 }
 
 .c-tr {
@@ -519,9 +516,6 @@ html[data-resolved-theme="dark"] .edu-check.lg-refraction::after {
   color: inherit;
   appearance: none;
   -webkit-appearance: none;
-  box-shadow:
-    0 6px var(--lg-outer-shadow-blur) var(--lg-outer-shadow),
-    0 0 0 1.5px color-mix(in srgb, var(--accent) 40%, transparent);
   transition:
     transform 0.55s cubic-bezier(0.34, 1.56, 0.64, 1),
     box-shadow 0.4s var(--ease);
@@ -1684,9 +1678,6 @@ html[data-resolved-theme="light"] .yan-chat {
 }
 .yan-chat.is-open .yan-chat-pill.corner {
   cursor: text;
-  box-shadow:
-    0 6px var(--lg-outer-shadow-blur) var(--lg-outer-shadow),
-    0 0 0 1.5px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 .yan-chat-pill.corner.lg-refraction::after {
   backdrop-filter: blur(var(--lg-read-blur)) var(--lg-filter);
