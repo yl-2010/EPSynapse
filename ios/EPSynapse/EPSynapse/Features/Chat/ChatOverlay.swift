@@ -503,7 +503,7 @@ final class AgentDismissInstaller: UIView, UIGestureRecognizerDelegate {
 }
 
 enum AgentKeyboardScrub {
-    private static weak var host: UIView?
+    private static var hosts: [UIView] = []
     private(set) static var coverage: CGFloat = 0
     private static var lastKeyboardFrame: CGRect = .zero
     private static var observers: [NSObjectProtocol] = []
@@ -526,20 +526,24 @@ enum AgentKeyboardScrub {
         if lastKeyboardFrame.height < 20 {
             lastKeyboardFrame = currentKeyboardFrame()
         }
-        host = findHost(matching: lastKeyboardFrame)
-        coverage = max(lastKeyboardFrame.height, host?.bounds.height ?? 0)
+        resolveHosts()
+        coverage = max(lastKeyboardFrame.height, hosts.first?.bounds.height ?? 0)
         if coverage < 20 { coverage = 0 }
     }
 
     static func setOffset(_ dy: CGFloat) {
+        if hosts.isEmpty { resolveHosts() }
+        let transform = CGAffineTransform(translationX: 0, y: max(0, dy))
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        host?.transform = CGAffineTransform(translationX: 0, y: max(0, dy))
+        for host in hosts {
+            host.transform = transform
+        }
         CATransaction.commit()
     }
 
     static func snapBack() {
-        let view = host
+        let views = hosts
         UIView.animate(
             withDuration: 0.32,
             delay: 0,
@@ -547,20 +551,25 @@ enum AgentKeyboardScrub {
             initialSpringVelocity: 0.4,
             options: [.allowUserInteraction, .beginFromCurrentState]
         ) {
-            view?.transform = .identity
+            for view in views {
+                view.transform = .identity
+            }
         }
-        host = nil
+        hosts = []
         coverage = 0
     }
 
     static func finishOffscreen(from dy: CGFloat, extra: CGFloat, duration: TimeInterval, then: @escaping () -> Void) {
-        let view = host
+        let views = hosts
         UIView.animate(
             withDuration: duration,
             delay: 0,
             options: [.curveEaseIn, .beginFromCurrentState]
         ) {
-            view?.transform = CGAffineTransform(translationX: 0, y: dy + extra)
+            let ty = dy + extra
+            for view in views {
+                view.transform = CGAffineTransform(translationX: 0, y: ty)
+            }
         } completion: { _ in
             commitHide()
             then()
@@ -572,18 +581,24 @@ enum AgentKeyboardScrub {
         CATransaction.setDisableActions(true)
         UIView.setAnimationsEnabled(false)
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-        host?.transform = .identity
+        resetHostTransforms()
         UIView.setAnimationsEnabled(true)
         CATransaction.commit()
-        host = nil
+        hosts = []
         coverage = 0
         lastKeyboardFrame = .zero
     }
 
     static func cancel() {
-        host?.transform = .identity
-        host = nil
+        resetHostTransforms()
+        hosts = []
         coverage = 0
+    }
+
+    private static func resetHostTransforms() {
+        for host in hosts {
+            host.transform = .identity
+        }
     }
 
     private static func listenIfNeeded() {
@@ -615,28 +630,57 @@ enum AgentKeyboardScrub {
 
     private static func currentKeyboardFrame() -> CGRect {
         if lastKeyboardFrame.height > 20 { return lastKeyboardFrame }
-        for scene in UIApplication.shared.connectedScenes {
-            guard let windowScene = scene as? UIWindowScene else { continue }
-            for window in windowScene.windows where NSStringFromClass(type(of: window)).contains("Keyboard") {
-                return window.convert(window.bounds, to: nil)
-            }
+        for window in allWindows() where isKeyboardChrome(window) {
+            return window.convert(window.bounds, to: nil)
         }
         return .zero
     }
 
-    private static func findHost(matching keyboardScreenFrame: CGRect) -> UIView? {
-        if let named = keyboardWindow() { return named }
-        guard keyboardScreenFrame.height > 20 else { return keyboardWindow() }
+    private static func resolveHosts() {
+        // One view only. Transforming a parent and child stacks the offset.
+        let host = firstSubview(named: "UIInputSetHostView")
+            ?? firstSubview(named: "UIInputSetContainerView")
+            ?? firstSubview(named: "UIKeyboard")
+            ?? frameMatchedHost()
+            ?? allWindows().first(where: isKeyboardChrome)
+            ?? overlappingKeyboardWindow()
+        hosts = host.map { [$0] } ?? []
+        if coverage < 20 {
+            coverage = max(lastKeyboardFrame.height, host?.bounds.height ?? 0)
+            if coverage < 20 { coverage = 0 }
+        }
+    }
+
+    private static func firstSubview(named snippet: String) -> UIView? {
+        for window in allWindows() {
+            if let match = firstSubview(in: window, named: snippet) { return match }
+        }
+        return nil
+    }
+
+    private static func firstSubview(in root: UIView, named snippet: String) -> UIView? {
+        if NSStringFromClass(type(of: root)).contains(snippet) { return root }
+        for sub in root.subviews {
+            if let match = firstSubview(in: sub, named: snippet) { return match }
+        }
+        return nil
+    }
+
+    private static func frameMatchedHost() -> UIView? {
+        let target = lastKeyboardFrame
+        guard target.height > 20 else { return nil }
 
         var best: UIView?
         var bestScore = CGFloat.greatestFiniteMagnitude
+        let key = keyWindow()
 
         func consider(_ view: UIView) {
+            if let key, view === key || view.isDescendant(of: key) { return }
             let frame = view.convert(view.bounds, to: nil)
-            guard frame.height > 30, frame.height < keyboardScreenFrame.height * 1.8 else { return }
-            let score = abs(frame.minY - keyboardScreenFrame.minY)
-                + abs(frame.maxY - keyboardScreenFrame.maxY)
-                + abs(frame.height - keyboardScreenFrame.height)
+            guard frame.height > 30, frame.height < target.height * 1.9 else { return }
+            let score = abs(frame.minY - target.minY)
+                + abs(frame.maxY - target.maxY)
+                + abs(frame.height - target.height)
             guard score < bestScore else { return }
             bestScore = score
             best = view
@@ -647,21 +691,48 @@ enum AgentKeyboardScrub {
             for sub in view.subviews { walk(sub) }
         }
 
-        for scene in UIApplication.shared.connectedScenes {
-            guard let windowScene = scene as? UIWindowScene else { continue }
-            for window in windowScene.windows { walk(window) }
+        for window in allWindows() where window !== key {
+            walk(window)
         }
-        if bestScore < 180 { return best }
-        return keyboardWindow()
+        return bestScore < 220 ? best : nil
     }
 
-    private static func keyboardWindow() -> UIWindow? {
+    private static func overlappingKeyboardWindow() -> UIWindow? {
+        let target = lastKeyboardFrame
+        guard target.height > 20 else { return nil }
+        let key = keyWindow()
+        for window in allWindows() {
+            if window === key || window.isHidden || window.alpha < 0.01 { continue }
+            let frame = window.convert(window.bounds, to: nil)
+            if frame.intersection(target).height > target.height * 0.45 {
+                return window
+            }
+        }
+        return nil
+    }
+
+    private static func isKeyboardChrome(_ window: UIWindow) -> Bool {
+        let name = NSStringFromClass(type(of: window))
+        return name.contains("Keyboard")
+            || name.contains("TextEffects")
+            || name.contains("RemoteKeyboard")
+            || name.contains("InputSet")
+            || name.contains("UIEditingOverlay")
+    }
+
+    private static func allWindows() -> [UIWindow] {
+        var windows: [UIWindow] = []
         for scene in UIApplication.shared.connectedScenes {
             guard let windowScene = scene as? UIWindowScene else { continue }
-            for window in windowScene.windows {
-                let name = NSStringFromClass(type(of: window))
-                if name.contains("Keyboard") { return window }
-            }
+            windows.append(contentsOf: windowScene.windows)
+        }
+        return windows
+    }
+
+    private static func keyWindow() -> UIWindow? {
+        for scene in UIApplication.shared.connectedScenes {
+            guard let windowScene = scene as? UIWindowScene else { continue }
+            if let key = windowScene.keyWindow { return key }
         }
         return nil
     }
