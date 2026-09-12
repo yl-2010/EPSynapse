@@ -2589,6 +2589,10 @@ html[data-resolved-theme="dark"] .edu-sheet-field {
   margin: 0.15rem 0 0.9rem;
 }
 
+.edu-sheet-actions[hidden] {
+  display: none !important;
+}
+
 .edu-sheet-btn {
   --lg-filter: none;
   --lg-tint-rgb: 232, 238, 246;
