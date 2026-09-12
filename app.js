@@ -192,7 +192,10 @@
       }
     }
     if (homeWrap) homeWrap.classList.toggle("is-in", inGoogle);
-    setStatus(statusEl, accountStatusText());
+    if (statusEl) {
+      statusEl.hidden = inGoogle;
+      if (!inGoogle) setStatus(statusEl, accountStatusText());
+    }
     applyAuthGate();
   }
 
@@ -412,9 +415,14 @@
     sheet.hidden = false;
     document.querySelector(".edu-sheet-body")?.scrollTo(0, 0);
     form.scrollTop = 0;
+    const keyEntry = document.getElementById("key-entry");
+    const canvasEntry = document.getElementById("canvas-entry");
+    if (keyEntry) delete keyEntry.dataset.replace;
+    if (canvasEntry) delete canvasEntry.dataset.replace;
     fillFormFromMe();
     paintAccount();
     refreshKeyStatus();
+    paintCanvasToken();
     paintOnedrive();
     paintOutlook();
     queueMicrotask(() => window.reinitLiquidGlass?.());
@@ -684,10 +692,12 @@
       return;
     }
     if (!me) {
-      setStatus(odStatus, "School OneDrive. Tap Connect, then sign in with @eastsideprep.org.");
+      setStatus(odStatus, "OneDrive");
       showOnedriveCode("", "");
       return;
     }
+    const odBtn = document.getElementById("onedrive-start");
+    if (odBtn) odBtn.hidden = Boolean(me.onedriveConnected);
     if (me.onedriveConnected) {
       setStatus(odStatus, me.onedriveEmail ? `OneDrive · ${me.onedriveEmail}` : "OneDrive connected");
       showOnedriveCode("", "");
@@ -695,14 +705,11 @@
     }
     const p = me.onedrivePending;
     if (p && (p.user_code || p.verification_uri)) {
-      setStatus(
-        odStatus,
-        "Enter this code on the Microsoft page, then sign in with your school email. Allow files access."
-      );
+      setStatus(odStatus, "Enter this code, then sign in with your school email.");
       showOnedriveCode(p.user_code, p.verification_uri || "https://login.microsoft.com/device");
       return;
     }
-    setStatus(odStatus, "School OneDrive. Tap Connect, then sign in with @eastsideprep.org.");
+    setStatus(odStatus, "OneDrive");
     showOnedriveCode("", "");
   }
 
@@ -732,10 +739,12 @@
       return;
     }
     if (!me) {
-      setStatus(olStatus, "School Outlook. Same Microsoft sign-in, mail only.");
+      setStatus(olStatus, "Outlook");
       showOutlookCode("", "");
       return;
     }
+    const olBtn = document.getElementById("outlook-start");
+    if (olBtn) olBtn.hidden = Boolean(me.outlookConnected);
     if (me.outlookConnected) {
       setStatus(olStatus, me.outlookEmail ? `Outlook · ${me.outlookEmail}` : "Outlook connected");
       showOutlookCode("", "");
@@ -743,25 +752,42 @@
     }
     const p = me.outlookPending;
     if (p && (p.user_code || p.verification_uri)) {
-      setStatus(
-        olStatus,
-        "Enter this code on the Microsoft page, then sign in with your school email. Allow mail access."
-      );
+      setStatus(olStatus, "Enter this code, then sign in with your school email.");
       showOutlookCode(p.user_code, p.verification_uri || "https://login.microsoft.com/device");
       return;
     }
-    setStatus(olStatus, "School Outlook. Same Microsoft sign-in, mail only.");
+    setStatus(olStatus, "Outlook");
     showOutlookCode("", "");
+  }
+
+  function paintCanvasToken() {
+    const entry = document.getElementById("canvas-entry");
+    const ready = document.getElementById("canvas-ready");
+    const connected = Boolean(me && me.canvasConnected);
+    const replacing = entry && entry.dataset.replace === "1";
+    if (entry) entry.hidden = connected && !replacing;
+    if (ready) ready.hidden = !connected;
   }
 
   function refreshKeyStatus() {
     const key = localStorage.getItem(LS_KEY) || "";
     const id = providerSel.value || localStorage.getItem(LS_PROV) || "groq";
-    if (key) {
-      setStatus(keyStatus, `Using your ${id} key · ends ${key.slice(-4)}`);
+    const entry = document.getElementById("key-entry");
+    const ready = document.getElementById("key-ready");
+    const readyLabel = document.getElementById("key-ready-label");
+    const replacing = entry && entry.dataset.replace === "1";
+    if (entry) entry.hidden = Boolean(key) && !replacing;
+    if (ready) ready.hidden = !key;
+    if (readyLabel) readyLabel.textContent = key ? `${id} · ends ${key.slice(-4)}` : "";
+    if (key && !replacing) {
+      setStatus(keyStatus, "");
       return;
     }
-    setStatus(keyStatus, "No model key. Groq is the short path: console.groq.com/keys");
+    if (key && replacing) {
+      setStatus(keyStatus, "Paste a new key to replace the one saved here.");
+      return;
+    }
+    setStatus(keyStatus, "");
   }
 
   function fillProviders(list) {
@@ -817,6 +843,7 @@
       }
     }
     paintAccount();
+    paintCanvasToken();
     paintOnedrive();
     paintOutlook();
     await initGoogle();
@@ -919,7 +946,10 @@
         body: JSON.stringify(payload),
       });
       form.canvasToken.value = "";
+      const canvasEntry = document.getElementById("canvas-entry");
+      if (canvasEntry) delete canvasEntry.dataset.replace;
       paintAccount();
+      paintCanvasToken();
       paintOnedrive();
       paintOutlook();
       await loadDashboard();
@@ -1091,7 +1121,25 @@
     localStorage.setItem(LS_KEY, key);
     localStorage.setItem(LS_PROV, providerSel.value || "groq");
     document.getElementById("modelKey").value = "";
+    const entry = document.getElementById("key-entry");
+    if (entry) delete entry.dataset.replace;
     refreshKeyStatus();
+  });
+
+  document.getElementById("key-replace")?.addEventListener("click", () => {
+    if (!signedInViaGoogle()) return;
+    const entry = document.getElementById("key-entry");
+    if (entry) entry.dataset.replace = "1";
+    refreshKeyStatus();
+    document.getElementById("modelKey")?.focus();
+  });
+
+  document.getElementById("canvas-replace")?.addEventListener("click", () => {
+    if (!signedInViaGoogle()) return;
+    const entry = document.getElementById("canvas-entry");
+    if (entry) entry.dataset.replace = "1";
+    paintCanvasToken();
+    form.canvasToken?.focus();
   });
 
   document.getElementById("key-clear").addEventListener("click", () => {
@@ -1101,6 +1149,8 @@
     }
     localStorage.removeItem(LS_KEY);
     document.getElementById("modelKey").value = "";
+    const entry = document.getElementById("key-entry");
+    if (entry) delete entry.dataset.replace;
     refreshKeyStatus();
   });
 

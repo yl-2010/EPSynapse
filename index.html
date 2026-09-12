@@ -18,7 +18,7 @@
     <title>EPSynapse</title>
     <meta name="description" content="EPSynapse student dashboard" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/styles.css?v=glass15" />
+    <link rel="stylesheet" href="/styles.css?v=glass16" />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
       .od-code {
@@ -252,7 +252,7 @@
     </div>
 
     <div id="settings-sheet" class="edu-sheet-backdrop" hidden>
-      <form class="edu-sheet" autocomplete="off">
+      <form class="edu-sheet edu-sheet--set" autocomplete="off">
         <div class="edu-sheet-head">
           <h2 class="edu-sheet-title">Settings</h2>
           <button
@@ -269,85 +269,116 @@
           </button>
         </div>
         <div class="edu-sheet-body">
-        <button type="button" id="google-redirect" class="google-native">
-          <span class="google-native-mark" aria-hidden="true">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path fill="#4285F4" d="M23.52 12.27c0-.86-.07-1.49-.23-2.14H12v3.89h6.55c-.13 1.1-.84 2.76-2.42 3.88l-.02.14 3.51 2.72.24.02c2.24-2.07 3.66-5.12 3.66-8.51z"/>
-              <path fill="#34A853" d="M12 24c3.2 0 5.89-1.05 7.85-2.86l-3.74-2.9c-1 .7-2.35 1.19-4.11 1.19-3.15 0-5.82-2.07-6.77-4.94l-.14.01-3.66 2.83-.05.13C3.35 21.33 7.36 24 12 24z"/>
-              <path fill="#FBBC05" d="M5.23 14.49A7.2 7.2 0 0 1 4.83 12c0-.87.15-1.71.39-2.49l-.01-.17-3.7-2.87-.12.06A11.97 11.97 0 0 0 0 12c0 1.94.47 3.78 1.39 5.47l3.84-2.98z"/>
-              <path fill="#EA4335" d="M12 4.77c2.22 0 3.72.96 4.57 1.76l3.34-3.26C17.88 1.19 15.2 0 12 0 7.36 0 3.35 2.67 1.39 6.53l3.83 2.98C6.17 6.84 8.85 4.77 12 4.77z"/>
-            </svg>
-          </span>
-          Sign in with Google
-        </button>
-        <div class="edu-google-account" id="google-profile" hidden>
-          <img class="edu-google-pic" id="google-picture" alt="" hidden />
-          <div class="edu-google-who">
-            <p class="edu-google-name" id="google-name"></p>
-            <p class="edu-google-email" id="google-email"></p>
+        <section class="set-block">
+          <button type="button" id="google-redirect" class="google-native">
+            <span class="google-native-mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path fill="#4285F4" d="M23.52 12.27c0-.86-.07-1.49-.23-2.14H12v3.89h6.55c-.13 1.1-.84 2.76-2.42 3.88l-.02.14 3.51 2.72.24.02c2.24-2.07 3.66-5.12 3.66-8.51z"/>
+                <path fill="#34A853" d="M12 24c3.2 0 5.89-1.05 7.85-2.86l-3.74-2.9c-1 .7-2.35 1.19-4.11 1.19-3.15 0-5.82-2.07-6.77-4.94l-.14.01-3.66 2.83-.05.13C3.35 21.33 7.36 24 12 24z"/>
+                <path fill="#FBBC05" d="M5.23 14.49A7.2 7.2 0 0 1 4.83 12c0-.87.15-1.71.39-2.49l-.01-.17-3.7-2.87-.12.06A11.97 11.97 0 0 0 0 12c0 1.94.47 3.78 1.39 5.47l3.84-2.98z"/>
+                <path fill="#EA4335" d="M12 4.77c2.22 0 3.72.96 4.57 1.76l3.34-3.26C17.88 1.19 15.2 0 12 0 7.36 0 3.35 2.67 1.39 6.53l3.83 2.98C6.17 6.84 8.85 4.77 12 4.77z"/>
+              </svg>
+            </span>
+            Sign in with Google
+          </button>
+          <div class="edu-google-account" id="google-profile" hidden>
+            <img class="edu-google-pic" id="google-picture" alt="" hidden />
+            <div class="edu-google-who">
+              <p class="edu-google-name" id="google-name"></p>
+              <p class="edu-google-email" id="google-email"></p>
+            </div>
+            <span id="google-signout-row" hidden>
+              <button type="button" id="google-signout" class="set-textbtn">Sign out</button>
+            </span>
           </div>
-        </div>
-        <div class="edu-sheet-actions" id="google-signout-row" hidden>
-          <button type="button" id="google-signout" class="edu-sheet-btn">Sign out</button>
-        </div>
-        <p class="edu-empty" id="settings-status">Sign in with Google. Then add school and student ID so the school can match you.</p>
+          <p class="set-hint" id="settings-status">Sign in with Google first.</p>
+        </section>
 
         <div id="settings-gated" class="edu-sheet-gated">
-        <div class="edu-school-search">
-          <label for="school">School</label>
-          <div class="edu-sheet-field">
-            <input id="school" name="school" value="Eastside Prep" maxlength="80" autocomplete="off" />
+        <section class="set-block">
+          <h3>School</h3>
+          <div class="edu-school-search">
+            <label for="school">School</label>
+            <div class="edu-sheet-field">
+              <input id="school" name="school" value="Eastside Prep" maxlength="80" autocomplete="off" />
+            </div>
+            <input type="hidden" id="schoolSlug" name="schoolSlug" value="" />
+            <ul id="school-results" class="edu-school-results" hidden role="listbox" aria-label="Schools"></ul>
           </div>
-          <input type="hidden" id="schoolSlug" name="schoolSlug" value="" />
-          <ul id="school-results" class="edu-school-results" hidden role="listbox" aria-label="Schools"></ul>
-        </div>
 
-        <label for="studentId">Student ID</label>
-        <div class="edu-sheet-field">
-          <input id="studentId" name="studentId" maxlength="80" />
-        </div>
-        <p class="edu-empty">Optional until you have it.</p>
+          <label for="studentId">Student ID</label>
+          <div class="edu-sheet-field">
+            <input id="studentId" name="studentId" maxlength="80" placeholder="Optional" />
+          </div>
 
-        <label for="canvasHost">Canvas URL</label>
-        <div class="edu-sheet-field">
-          <input id="canvasHost" name="canvasHost" value="https://eastsideprep.instructure.com" />
-        </div>
+          <label for="canvasHost">Canvas URL</label>
+          <div class="edu-sheet-field">
+            <input id="canvasHost" name="canvasHost" value="https://eastsideprep.instructure.com" />
+          </div>
 
-        <label for="canvasToken">Canvas access token</label>
-        <div class="edu-sheet-field">
-          <input id="canvasToken" name="canvasToken" type="password" autocomplete="off" />
-        </div>
-        <p class="edu-empty">Account → Settings → New Access Token</p>
+          <div id="canvas-ready" hidden>
+            <div class="set-row">
+              <p class="set-ready">Canvas connected</p>
+              <button type="button" id="canvas-replace" class="set-textbtn">Replace token</button>
+            </div>
+          </div>
+          <div id="canvas-entry">
+            <label for="canvasToken">Canvas token</label>
+            <div class="edu-sheet-field">
+              <input id="canvasToken" name="canvasToken" type="password" autocomplete="off" />
+            </div>
+            <p class="set-hint">Canvas → Account → Settings → New Access Token</p>
+          </div>
 
-        <div class="edu-sheet-actions">
-          <button type="submit" id="settings-save" class="edu-sheet-btn edu-sheet-btn--gold">Save</button>
-          <button type="button" id="onedrive-start" class="edu-sheet-btn">Connect OneDrive</button>
-        </div>
-        <p class="edu-empty" id="onedrive-status">School OneDrive. Tap Connect, then sign in with @eastsideprep.org.</p>
-        <p id="onedrive-code" class="od-code" hidden></p>
-        <a id="onedrive-open" class="edu-empty" href="https://login.microsoft.com/device" target="_blank" rel="noopener" hidden>Open Microsoft sign-in</a>
+          <div class="edu-sheet-actions">
+            <button type="submit" id="settings-save" class="edu-sheet-btn edu-sheet-btn--gold">Save</button>
+          </div>
+        </section>
 
-        <div class="edu-sheet-actions">
-          <button type="button" id="outlook-start" class="edu-sheet-btn">Connect Outlook</button>
-        </div>
-        <p class="edu-empty" id="outlook-status">School Outlook. Same Microsoft sign-in, mail only.</p>
-        <p id="outlook-code" class="od-code" hidden></p>
-        <a id="outlook-open" class="edu-empty" href="https://login.microsoft.com/device" target="_blank" rel="noopener" hidden>Open Microsoft sign-in</a>
+        <section class="set-block">
+          <h3>Microsoft</h3>
+          <div class="set-row">
+            <p class="set-hint" id="onedrive-status">OneDrive</p>
+            <button type="button" id="onedrive-start" class="edu-sheet-btn">Connect</button>
+          </div>
+          <p id="onedrive-code" class="od-code" hidden></p>
+          <a id="onedrive-open" class="set-link" href="https://login.microsoft.com/device" target="_blank" rel="noopener" hidden>Open Microsoft sign-in</a>
 
-        <label for="provider">Model</label>
-        <div class="edu-sheet-field">
-          <select id="provider" name="provider"></select>
-        </div>
+          <div class="set-row">
+            <p class="set-hint" id="outlook-status">Outlook</p>
+            <button type="button" id="outlook-start" class="edu-sheet-btn">Connect</button>
+          </div>
+          <p id="outlook-code" class="od-code" hidden></p>
+          <a id="outlook-open" class="set-link" href="https://login.microsoft.com/device" target="_blank" rel="noopener" hidden>Open Microsoft sign-in</a>
+        </section>
 
-        <label for="modelKey">Model key (stays in this browser)</label>
-        <div class="edu-sheet-field">
-          <input id="modelKey" name="modelKey" type="password" autocomplete="off" placeholder="Groq / Gemini / OpenRouter" />
-        </div>
-        <div class="edu-sheet-actions">
-          <button type="button" id="key-save" class="edu-sheet-btn edu-sheet-btn--gold">Save key</button>
-          <button type="button" id="key-clear" class="edu-sheet-btn">Clear key</button>
-        </div>
-        <p class="edu-empty" id="key-status"></p>
+        <section class="set-block">
+          <h3>Chat</h3>
+          <div id="key-ready" hidden>
+            <div class="set-row">
+              <p class="set-ready" id="key-ready-label"></p>
+              <div class="set-actions">
+                <button type="button" id="key-replace" class="set-textbtn">Replace</button>
+                <button type="button" id="key-clear" class="set-textbtn">Clear</button>
+              </div>
+            </div>
+          </div>
+          <div id="key-entry">
+            <label for="provider">Model</label>
+            <div class="edu-sheet-field">
+              <select id="provider" name="provider"></select>
+            </div>
+            <label for="modelKey">API key</label>
+            <div class="edu-sheet-field">
+              <input id="modelKey" name="modelKey" type="password" autocomplete="off" placeholder="gsk_…" />
+            </div>
+            <div class="edu-sheet-actions">
+              <button type="button" id="key-save" class="edu-sheet-btn edu-sheet-btn--gold">Save key</button>
+            </div>
+          </div>
+          <p class="set-hint" id="key-status"></p>
+          <a class="set-link" href="/groq">How to get a Groq key</a>
+        </section>
         </div>
         </div>
       </form>
@@ -368,7 +399,7 @@
 
     <script src="/liquid-glass.js?v=glass9"></script>
     <script src="/theme-orb.js?v=glass6"></script>
-    <script src="/app.js?v=glass14"></script>
+    <script src="/app.js?v=glass16"></script>
     <script src="/chatbot.js?v=glass10"></script>
   </body>
 </html>

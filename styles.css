@@ -3115,3 +3115,144 @@ html[data-auth="in"] #stage-out {
   text-underline-offset: 0.16em;
 }
 
+.edu-sheet--set .edu-sheet-body {
+  padding: 0.7rem 1.15rem 1.15rem;
+}
+
+.edu-sheet--set .edu-sheet-field {
+  margin: 0 0 0.62rem;
+}
+
+.edu-sheet--set .edu-sheet label {
+  margin: 0 0 0.26rem;
+  font-weight: 550;
+  color: var(--muted);
+}
+
+.edu-sheet--set .edu-google-account {
+  margin: 0;
+}
+
+.edu-sheet--set .google-native {
+  margin: 0;
+}
+
+.edu-sheet--set .edu-sheet-actions {
+  margin: 0.1rem 0 0;
+}
+
+.edu-sheet--set .edu-sheet-actions .edu-sheet-btn {
+  flex: 0 1 auto;
+  min-width: 7rem;
+}
+
+.set-block {
+  padding: 0.15rem 0 0.35rem;
+}
+
+.set-block + .set-block {
+  margin-top: 0.55rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid color-mix(in srgb, var(--fg) 10%, transparent);
+}
+
+.set-block h3 {
+  margin: 0 0 0.65rem;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.set-hint,
+.edu-sheet--set .edu-empty {
+  margin: 0;
+  padding: 0;
+  font-size: var(--text-footnote);
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.set-hint[hidden] {
+  display: none !important;
+}
+
+.set-ready {
+  margin: 0;
+  font-size: var(--text-subhead);
+  font-weight: 550;
+  color: var(--fg);
+}
+
+.set-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 2.4rem;
+  margin: 0 0 0.45rem;
+}
+
+.set-row .set-hint,
+.set-row .set-ready {
+  flex: 1;
+  min-width: 0;
+}
+
+.set-row .edu-sheet-btn {
+  flex: 0 0 auto;
+  min-width: 6.4rem;
+}
+
+.set-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 0 0 auto;
+}
+
+.set-textbtn {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--text-footnote);
+  font-weight: 550;
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 0.14em;
+  cursor: pointer;
+}
+
+.set-textbtn:hover {
+  color: var(--fg);
+}
+
+.set-link {
+  display: inline-block;
+  margin: 0.1rem 0 0;
+  font-size: var(--text-footnote);
+  font-weight: 550;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.set-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.14em;
+}
+
+.set-link[hidden] {
+  display: none !important;
+}
+
+#key-entry[hidden],
+#key-ready[hidden],
+#canvas-entry[hidden],
+#canvas-ready[hidden],
+.edu-sheet-btn[hidden] {
+  display: none !important;
+}
+
