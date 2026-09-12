@@ -1,0 +1,119 @@
+/**
+ * Student personal-agent proxy.
+ * Students paste their own free key. We never store it.
+ * Optional DEMO_GROQ_KEY covers the table if nobody has pasted one yet.
+ */
+
+export const SYSTEM_PROMPT = [
+  "You are the EPSynapse personal agent for Eastside Prep students.",
+  "Be direct and useful. Skip filler.",
+  "Help with school life: classes, homework planning, LPC, EBC, clubs, college-counseling questions they can take to an adult.",
+  "You do not have live school data unless they pasted it in this chat. Say so instead of inventing counts or policies.",
+  "If they ask you to remember something, work only with what is already in this conversation.",
+].join(" ");
+
+export const PROVIDERS = {
+  groq: {
+    id: "groq",
+    label: "Groq",
+    model: "openai/gpt-oss-120b",
+    url: "https://api.groq.com/openai/v1/chat/completions",
+    signup: "https://console.groq.com/keys",
+    signupLabel: "console.groq.com/keys",
+    blurb: "Google sign-in, no card. Reasoning model. About 1000 chats a day on the free tier.",
+    recommended: true,
+    extraBody: { reasoning_effort: "medium" },
+  },
+  gemini: {
+    id: "gemini",
+    label: "Gemini",
+    model: "gemini-2.5-flash",
+    url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+    signup: "https://aistudio.google.com/apikey",
+    signupLabel: "aistudio.google.com/apikey",
+    blurb: "School Google account. Stronger thinking. Google may use free-tier prompts to improve the product.",
+    extraBody: { reasoning_effort: "medium" },
+  },
+  openrouter: {
+    id: "openrouter",
+    label: "OpenRouter",
+    model: "openrouter/free",
+    url: "https://openrouter.ai/api/v1/chat/completions",
+    signup: "https://openrouter.ai/settings/keys",
+    signupLabel: "openrouter.ai/settings/keys",
+    blurb: "One key, rotating free models. Roughly 50 chats a day unless they add $10.",
+    extraHeaders: {
+      "HTTP-Referer": "https://epsynapse.com",
+      "X-Title": "EPSynapse",
+    },
+    extraBody: { reasoning: { enabled: true } },
+  },
+};
+
+const MAX_MESSAGES = 40;
+const MAX_CONTENT = 8000;
+const ALLOWED_ROLES = new Set(["user", "assistant"]);
+
+export function publicAgentConfig() {
+  return {
+    demo: { groq: Boolean(process.env.DEMO_GROQ_KEY) },
+    providers: Object.values(PROVIDERS).map((p) => ({
+      id: p.id,
+      label: p.label,
+      model: p.model,
+      signup: p.signup,
+      signupLabel: p.signupLabel,
+      blurb: p.blurb,
+      recommended: Boolean(p.recommended),
+    })),
+  };
+}
+
+export function resolveApiKey(req, providerId) {
+  const header = req.get("authorization") || "";
+  const bearer = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
+  if (bearer) return { key: bearer, source: "student" };
+  if (providerId === "groq" && process.env.DEMO_GROQ_KEY) {
+    return { key: process.env.DEMO_GROQ_KEY, source: "demo" };
+  }
+  return { key: "", source: "none" };
+}
+
+export function sanitizeMessages(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((m) => m && ALLOWED_ROLES.has(m.role) && typeof m.content === "string")
+    .slice(-MAX_MESSAGES)
+    .map((m) => ({
+      role: m.role,
+      content: m.content.slice(0, MAX_CONTENT),
+    }));
+}
+
+export function upstreamHeaders(provider, key) {
+  return {
+    Authorization: `Bearer ${key}`,
+    "Content-Type": "application/json",
+    ...(provider.extraHeaders || {}),
+  };
+}
+
+export function upstreamBody(provider, messages) {
+  return {
+    model: provider.model,
+    stream: true,
+    messages: [{ role: "system", content: SYSTEM_PROMPT }, ...messages],
+    ...(provider.extraBody || {}),
+  };
+}
+
+export function explainUpstreamError(status, text) {
+  if (status === 401 || status === 403) {
+    return "That key was rejected. Check you copied the whole key from the provider dashboard.";
+  }
+  if (status === 429) {
+    return "This key hit its free limit. Wait a bit, or try another provider.";
+  }
+  const clipped = String(text || "").replace(/\s+/g, " ").slice(0, 240);
+  return clipped || `Provider returned ${status}.`;
+}

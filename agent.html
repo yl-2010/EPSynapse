@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Personal agent — EPSynapse</title>
+    <meta
+      name="description"
+      content="Paste a free Groq or Gemini key and talk to a reasoning model. EPSynapse does not store the key."
+    />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --paper: #efe6d6;
+        --ink: #1c1612;
+        --rule: #c8b8a0;
+        --rust: #c4491f;
+        --fir: #2c4a3e;
+        --muted: #6a5d4e;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; min-height: 100%; }
+      body {
+        background:
+          radial-gradient(circle at 12% 8%, rgba(196, 73, 31, 0.07), transparent 32%),
+          radial-gradient(circle at 88% 92%, rgba(44, 74, 62, 0.08), transparent 36%),
+          var(--paper);
+        color: var(--ink);
+        font-family: "IBM Plex Mono", ui-monospace, monospace;
+        font-size: 14px;
+        line-height: 1.55;
+      }
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.18;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+      }
+      main {
+        position: relative;
+        max-width: 42rem;
+        margin: 0 auto;
+        padding: 3rem 1.25rem 5rem;
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+      }
+      .kicker {
+        color: var(--rust);
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        font-size: 11px;
+      }
+      h1 {
+        font-family: Fraunces, Georgia, serif;
+        font-size: clamp(2.2rem, 8vw, 3.4rem);
+        font-weight: 700;
+        line-height: 0.92;
+        letter-spacing: -0.03em;
+        margin: 0.35rem 0 0.55rem;
+      }
+      .lede { color: var(--muted); max-width: 36rem; margin: 0 0 1.2rem; }
+      a { color: inherit; }
+      .rule { height: 1px; background: var(--rule); border: 0; margin: 1.1rem 0; }
+      details.setup {
+        border: 1px solid var(--rule);
+        padding: 0.85rem 1rem;
+        margin-bottom: 1rem;
+      }
+      details.setup summary {
+        cursor: pointer;
+        font-weight: 500;
+      }
+      .how ol { margin: 0.7rem 0 0; padding-left: 1.2rem; }
+      .how li { margin: 0.35rem 0; }
+      .providers { display: grid; gap: 0.7rem; margin-top: 0.9rem; }
+      .providers article { border-top: 1px dashed var(--rule); padding-top: 0.65rem; }
+      .providers h2 {
+        font-size: 13px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        margin: 0 0 0.25rem;
+      }
+      .rec { color: var(--fir); font-weight: 500; }
+      .row {
+        display: grid;
+        grid-template-columns: 8.5rem 1fr;
+        gap: 0.55rem;
+        align-items: center;
+        margin: 0.45rem 0;
+      }
+      label { color: var(--muted); }
+      select, input[type="password"], input[type="text"], textarea {
+        width: 100%;
+        background: transparent;
+        color: var(--ink);
+        border: 1px solid var(--rule);
+        font: inherit;
+        padding: 0.45rem 0.55rem;
+      }
+      button {
+        font: inherit;
+        background: var(--ink);
+        color: var(--paper);
+        border: 0;
+        padding: 0.5rem 0.85rem;
+        cursor: pointer;
+      }
+      button.ghost {
+        background: transparent;
+        color: var(--ink);
+        border: 1px solid var(--rule);
+      }
+      button:disabled { opacity: 0.45; cursor: default; }
+      .actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.4rem; }
+      .status { color: var(--muted); margin: 0.55rem 0 0; min-height: 1.3em; }
+      .status.bad { color: var(--rust); }
+      .status.ok { color: var(--fir); }
+      #log {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 0.85rem;
+        margin: 0.2rem 0 1rem;
+      }
+      .msg { white-space: pre-wrap; word-break: break-word; }
+      .msg .who {
+        color: var(--muted);
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        margin-bottom: 0.2rem;
+      }
+      .msg.you .who { color: var(--rust); }
+      .think {
+        color: var(--muted);
+        border-left: 2px solid var(--rule);
+        padding-left: 0.65rem;
+        margin-bottom: 0.45rem;
+        font-size: 13px;
+      }
+      form.ask {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 0.5rem;
+        align-items: end;
+        position: sticky;
+        bottom: 0;
+        background: var(--paper);
+        padding: 0.6rem 0 0;
+      }
+      textarea { min-height: 4.2rem; resize: vertical; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="kicker"><a href="/">EPSynapse</a> · personal agent</p>
+      <h1>Your key, your model</h1>
+      <p class="lede">
+        Make a free account, paste the API key here, talk. The key stays in this browser.
+        EPSynapse only forwards each chat turn. We do not keep the key.
+      </p>
+
+      <details class="setup" id="setup" open>
+        <summary>Key and provider</summary>
+        <div class="how">
+          <ol>
+            <li>Open the signup link for Groq, Gemini, or OpenRouter. Google sign-in works. No card on Groq or Gemini.</li>
+            <li>Create an API key. Copy it once.</li>
+            <li>Paste it below and save. Then ask something.</li>
+          </ol>
+          <div class="providers" id="providers"></div>
+        </div>
+        <div class="row">
+          <label for="provider">Provider</label>
+          <select id="provider"></select>
+        </div>
+        <div class="row">
+          <label for="key">API key</label>
+          <input id="key" type="password" autocomplete="off" spellcheck="false" placeholder="Paste key" />
+        </div>
+        <div class="actions">
+          <button type="button" id="save">Save key</button>
+          <button type="button" class="ghost" id="clear">Clear key</button>
+        </div>
+        <p class="status" id="keyStatus"></p>
+      </details>
+
+      <hr class="rule" />
+      <div id="log"></div>
+      <form class="ask" id="ask">
+        <textarea id="prompt" rows="3" placeholder="Ask about homework load, LPC, or a class you cannot get into"></textarea>
+        <button type="submit" id="send">Send</button>
+      </form>
+    </main>
+    <script>
+      (function () {
+        var LS_KEY = "epsynapse.agent.key";
+        var LS_PROV = "epsynapse.agent.provider";
+        var apiBase = "";
+        var config = { providers: [], demo: { groq: false } };
+        var history = [];
+        var busy = false;
+
+        var setup = document.getElementById("setup");
+        var providersEl = document.getElementById("providers");
+        var providerSel = document.getElementById("provider");
+        var keyInput = document.getElementById("key");
+        var keyStatus = document.getElementById("keyStatus");
+        var log = document.getElementById("log");
+        var prompt = document.getElementById("prompt");
+        var send = document.getElementById("send");
+
+        function savedKey() {
+          return localStorage.getItem(LS_KEY) || "";
+        }
+
+        function providerId() {
+          return providerSel.value || localStorage.getItem(LS_PROV) || "groq";
+        }
+
+        function setStatus(text, kind) {
+          keyStatus.textContent = text;
+          keyStatus.className = "status" + (kind ? " " + kind : "");
+        }
+
+        function refreshStatus() {
+          var key = savedKey();
+          var id = providerId();
+          if (key) {
+            setStatus("Using your " + id + " key · ends " + key.slice(-4), "ok");
+            setup.open = false;
+            return;
+          }
+          if (id === "groq" && config.demo && config.demo.groq) {
+            setStatus("No student key yet. The table demo Groq key will answer for now.", "ok");
+            return;
+          }
+          setStatus("No key saved. Groq is the short path.", "");
+        }
+
+        function renderProviders(list) {
+          providersEl.innerHTML = "";
+          providerSel.innerHTML = "";
+          list.forEach(function (p) {
+            var art = document.createElement("article");
+            var h = document.createElement("h2");
+            h.textContent = p.label + (p.recommended ? "  · recommended" : "");
+            if (p.recommended) h.className = "rec";
+            var b = document.createElement("p");
+            b.style.margin = "0";
+            b.textContent = p.blurb;
+            var a = document.createElement("p");
+            a.style.margin = "0.25rem 0 0";
+            var link = document.createElement("a");
+            link.href = p.signup;
+            link.target = "_blank";
+            link.rel = "noopener";
+            link.textContent = p.signupLabel;
+            a.appendChild(link);
+            var model = document.createElement("p");
+            model.style.margin = "0.15rem 0 0";
+            model.style.color = "var(--muted)";
+            model.textContent = "Model " + p.model;
+            art.appendChild(h);
+            art.appendChild(b);
+            art.appendChild(a);
+            art.appendChild(model);
+            providersEl.appendChild(art);
+
+            var opt = document.createElement("option");
+            opt.value = p.id;
+            opt.textContent = p.label;
+            providerSel.appendChild(opt);
+          });
+          var chosen = localStorage.getItem(LS_PROV) || "groq";
+          if ([].some.call(providerSel.options, function (o) { return o.value === chosen; })) {
+            providerSel.value = chosen;
+          }
+        }
+
+        function addMsg(role, text, thinking) {
+          var wrap = document.createElement("div");
+          wrap.className = "msg " + (role === "user" ? "you" : "bot");
+          var who = document.createElement("div");
+          who.className = "who";
+          who.textContent = role === "user" ? "You" : "Agent";
+          wrap.appendChild(who);
+          var thinkEl = null;
+          if (thinking !== undefined) {
+            thinkEl = document.createElement("div");
+            thinkEl.className = "think";
+            thinkEl.textContent = thinking;
+            wrap.appendChild(thinkEl);
+          }
+          var body = document.createElement("div");
+          body.textContent = text || "";
+          wrap.appendChild(body);
+          log.appendChild(wrap);
+          wrap.scrollIntoView({ block: "end" });
+          return { body: body, think: thinkEl, wrap: wrap };
+        }
+
+        function parseSseChunk(buffer, onDelta) {
+          var parts = buffer.split("\n");
+          var rest = parts.pop();
+          var event = "";
+          parts.forEach(function (line) {
+            line = line.replace(/\r$/, "");
+            if (line.indexOf("data:") === 0) event += line.slice(5).trim();
+            else if (line === "") {
+              if (event && event !== "[DONE]") {
+                try {
+                  var json = JSON.parse(event);
+                  var delta = json.choices && json.choices[0] && json.choices[0].delta;
+                  if (delta) {
+                    onDelta({
+                      content: delta.content || "",
+                      reasoning: delta.reasoning || delta.reasoning_content || "",
+                    });
+                  }
+                } catch (e) {}
+              }
+              event = "";
+            }
+          });
+          return (event ? "data: " + event + "\n" : "") + rest;
+        }
+
+        document.getElementById("save").addEventListener("click", function () {
+          var key = keyInput.value.trim();
+          if (!key) {
+            setStatus("Paste a key first.", "bad");
+            return;
+          }
+          localStorage.setItem(LS_KEY, key);
+          localStorage.setItem(LS_PROV, providerId());
+          keyInput.value = "";
+          refreshStatus();
+        });
+
+        document.getElementById("clear").addEventListener("click", function () {
+          localStorage.removeItem(LS_KEY);
+          keyInput.value = "";
+          refreshStatus();
+        });
+
+        providerSel.addEventListener("change", function () {
+          localStorage.setItem(LS_PROV, providerId());
+          refreshStatus();
+        });
+
+        document.getElementById("ask").addEventListener("submit", async function (ev) {
+          ev.preventDefault();
+          if (busy) return;
+          var text = prompt.value.trim();
+          if (!text) return;
+          prompt.value = "";
+          history.push({ role: "user", content: text });
+          addMsg("user", text);
+          var slot = addMsg("assistant", "", "");
+          busy = true;
+          send.disabled = true;
+
+          var headers = { "Content-Type": "application/json" };
+          var key = savedKey();
+          if (key) headers.Authorization = "Bearer " + key;
+
+          try {
+            var res = await fetch(apiBase + "/v1/agent/chat", {
+              method: "POST",
+              headers: headers,
+              body: JSON.stringify({
+                provider: providerId(),
+                messages: history,
+              }),
+            });
+
+            if (!res.ok) {
+              var errBody = {};
+              try { errBody = await res.json(); } catch (e) {}
+              var err = errBody.error || "Chat failed.";
+              slot.body.textContent = err;
+              if (slot.think) slot.think.remove();
+              history.pop();
+              setStatus(err, "bad");
+              setup.open = true;
+              return;
+            }
+
+            var reader = res.body.getReader();
+            var decoder = new TextDecoder();
+            var buf = "";
+            var answer = "";
+            var thought = "";
+            while (true) {
+              var chunk = await reader.read();
+              if (chunk.done) break;
+              buf += decoder.decode(chunk.value, { stream: true });
+              buf = parseSseChunk(buf, function (delta) {
+                if (delta.reasoning) {
+                  thought += delta.reasoning;
+                  slot.think.textContent = thought;
+                }
+                if (delta.content) {
+                  answer += delta.content;
+                  slot.body.textContent = answer;
+                }
+              });
+            }
+            if (!thought && slot.think) slot.think.remove();
+            if (!answer) slot.body.textContent = "The model returned an empty reply.";
+            history.push({ role: "assistant", content: answer || "" });
+          } catch (err) {
+            slot.body.textContent = "Could not reach api.epsynapse.com.";
+            if (slot.think) slot.think.remove();
+            history.pop();
+            setStatus("Mac API not reachable.", "bad");
+          } finally {
+            busy = false;
+            send.disabled = false;
+            prompt.focus();
+          }
+        });
+
+        (async function init() {
+          try {
+            var runtime = await fetch("/runtime-config.json", { cache: "no-store" }).then(function (r) {
+              return r.json();
+            });
+            apiBase = runtime.apiBase || "";
+            config = await fetch(apiBase + "/v1/agent/config", { cache: "no-store" }).then(function (r) {
+              return r.json();
+            });
+            renderProviders(config.providers || []);
+            refreshStatus();
+          } catch (err) {
+            renderProviders([
+              {
+                id: "groq",
+                label: "Groq",
+                model: "openai/gpt-oss-120b",
+                signup: "https://console.groq.com/keys",
+                signupLabel: "console.groq.com/keys",
+                blurb: "Google sign-in, no card. Reasoning model.",
+                recommended: true,
+              },
+            ]);
+            setStatus("Mac API not reachable yet. You can still save a key.", "bad");
+          }
+        })();
+      })();
+    </script>
+  </body>
+</html>
