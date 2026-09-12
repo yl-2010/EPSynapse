@@ -863,9 +863,11 @@
       let buf = "";
       let answer = "";
       let thought = "";
+      let mutated = false;
       const applyChatDelta = (delta) => {
         if (delta.status && slot.think) writeThinking(slot.think, delta.status);
         if (delta.mutation) {
+          mutated = true;
           window.dispatchEvent(new CustomEvent("epsynapse-agent-mutation", { detail: delta.mutation }));
         }
         if (delta.navigate) {
@@ -893,7 +895,14 @@
         writeBubble(slot.body, "assistant", answer);
       }
       if (!thought && slot.think) slot.think.remove();
-      if (!answer) writeBubble(slot.body, "assistant", "The model returned an empty reply.");
+      if (mutated && /hit its free limit|limit reached|rate limit/i.test(answer)) {
+        answer = "Done";
+        writeBubble(slot.body, "assistant", answer);
+      }
+      if (!answer) {
+        answer = mutated ? "Done" : "The model returned an empty reply.";
+        writeBubble(slot.body, "assistant", answer);
+      }
       messages.push({ role: "assistant", content: answer || "" });
       saveChat();
       await persistThread();

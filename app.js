@@ -1674,8 +1674,9 @@
     const html = /\.html?$/i.test(f.name || "") || /html/i.test(f.contentType || "");
     const vaultAttr = vault ? ` data-vault-id="${escapeHtml(f.id)}"` : "";
     const classAttr = klass ? ` data-class-file="${escapeHtml(f.id)}"` : "";
+    const todoAttr = todoFile ? ` data-todo-file="${escapeHtml(f.id)}"` : "";
     const htmlAttr = html && (klass || todoFile) ? ` data-html-file="1"` : "";
-    return `<a class="edu-file-tile" href="${escapeHtml(href)}" target="_blank" rel="noopener" data-filter-id="lg-file-${i}" title="${escapeHtml(f.name)}"${vaultAttr}${classAttr}${htmlAttr}><span class="edu-file-name">${escapeHtml(f.name)}</span></a>`;
+    return `<a class="edu-file-tile" href="${escapeHtml(href)}" target="_blank" rel="noopener" data-filter-id="lg-file-${i}" title="${escapeHtml(f.name)}"${vaultAttr}${classAttr}${todoAttr}${htmlAttr}><span class="edu-file-name">${escapeHtml(f.name)}</span></a>`;
   }
 
   function filesToolsHtml() {
@@ -3294,6 +3295,90 @@
       document.getElementById("onedrive-upload")?.click();
     }
   });
+
+  let fileMenu = null;
+  let fileMenuId = "";
+
+  function hideFileMenu() {
+    if (!fileMenu) return;
+    fileMenu.hidden = true;
+    fileMenuId = "";
+  }
+
+  function ensureFileMenu() {
+    if (fileMenu) return fileMenu;
+    fileMenu = document.createElement("div");
+    fileMenu.className = "edu-file-menu";
+    fileMenu.hidden = true;
+    fileMenu.setAttribute("role", "menu");
+    fileMenu.dataset.liquidGlass = "rounded";
+    fileMenu.dataset.filterId = "lg-edu-file-menu";
+    fileMenu.innerHTML =
+      '<button type="button" class="edu-file-menu-item" role="menuitem" data-file-menu-delete>Delete</button>';
+    document.body.appendChild(fileMenu);
+    fileMenu.addEventListener("click", async (ev) => {
+      const del = ev.target.closest("[data-file-menu-delete]");
+      if (!del) return;
+      ev.preventDefault();
+      const id = fileMenuId;
+      hideFileMenu();
+      if (id) await deleteOwnedFile(id);
+    });
+    return fileMenu;
+  }
+
+  function showFileMenu(ev, id) {
+    const menu = ensureFileMenu();
+    fileMenuId = id;
+    menu.hidden = false;
+    const pad = 8;
+    const w = menu.offsetWidth || 148;
+    const h = menu.offsetHeight || 44;
+    let x = ev.clientX;
+    let y = ev.clientY;
+    if (x + w + pad > window.innerWidth) x = window.innerWidth - w - pad;
+    if (y + h + pad > window.innerHeight) y = window.innerHeight - h - pad;
+    menu.style.left = `${Math.max(pad, x)}px`;
+    menu.style.top = `${Math.max(pad, y)}px`;
+    window.reinitLiquidGlass?.();
+  }
+
+  async function deleteOwnedFile(id) {
+    const status = document.getElementById("onedrive-upload-status");
+    try {
+      if (String(id).startsWith("class:")) {
+        await api(`/v1/me/class-files/file?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+        lastHome.classFiles = (lastHome.classFiles || []).filter((f) => f.id !== id);
+      } else if (String(id).startsWith("todo:")) {
+        await api(`/v1/me/todo-files/file?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+        lastHome.todoFiles = (lastHome.todoFiles || []).filter((f) => f.id !== id);
+      } else {
+        return;
+      }
+      if (status) status.textContent = "";
+      const route = currentRoute();
+      if (route.page === "class") renderClass(route.id);
+      else if (route.page === "todo") renderTodo(route.id);
+    } catch (err) {
+      if (status) status.textContent = err.message || "Could not delete.";
+    }
+  }
+
+  appEl.addEventListener("contextmenu", (ev) => {
+    const tile = ev.target.closest?.("[data-class-file], [data-todo-file]");
+    if (!tile || !appEl.contains(tile)) return;
+    const id = tile.getAttribute("data-class-file") || tile.getAttribute("data-todo-file");
+    if (!id) return;
+    ev.preventDefault();
+    showFileMenu(ev, id);
+  });
+  document.addEventListener("pointerdown", (ev) => {
+    if (fileMenu && !fileMenu.hidden && !fileMenu.contains(ev.target)) hideFileMenu();
+  });
+  window.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape") hideFileMenu();
+  });
+  window.addEventListener("scroll", hideFileMenu, true);
 
   appEl.addEventListener("click", async (ev) => {
     const a = ev.target.closest("[data-vault-id]");

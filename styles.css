@@ -1009,6 +1009,38 @@ html[data-resolved-theme="dark"] .edu-back-shadow feGaussianBlur {
   overflow-wrap: anywhere;
 }
 
+.edu-file-menu {
+  position: fixed;
+  z-index: 110;
+  min-width: 9rem;
+  padding: 0.28rem;
+  border: 0;
+  border-radius: 16px;
+  background: var(--panel-bg);
+  box-shadow: 0 6px var(--lg-outer-shadow-blur) var(--lg-outer-shadow);
+}
+
+.edu-file-menu-item {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0.55rem 0.85rem;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--text-subhead);
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.edu-file-menu-item:hover,
+.edu-file-menu-item:focus-visible {
+  background: rgba(var(--accent-rgb), 0.16);
+}
+
 .edu-app:not(.is-settled) .edu-file-tile {
   animation: edu-rise 0.65s var(--ease) backwards;
 }

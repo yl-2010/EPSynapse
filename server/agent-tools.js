@@ -807,7 +807,8 @@ export async function executeAgentTool(call, { ownerId, student, req } = {}) {
           content: input.content,
           contentType: input.contentType,
         });
-        return ok({ file }, { kinds: ["files"], navigate: { view: "class", classId } });
+        const { text: _text, ...meta } = file;
+        return ok({ file: meta }, { kinds: ["files"], navigate: { view: "class", classId } });
       }
       case "read_class_file": {
         const target = fileTarget(input);
@@ -839,7 +840,11 @@ export async function executeAgentTool(call, { ownerId, student, req } = {}) {
           content: input.content,
           contentType: input.contentType,
         });
-        return ok({ file }, { kinds: ["files"], navigate: { view: "todo", todoId: file.todoId || todoId } });
+        const { text: _text, ...meta } = file;
+        return ok(
+          { file: meta },
+          { kinds: ["files"], navigate: { view: "todo", todoId: file.todoId || todoId } }
+        );
       }
       case "read_todo_file": {
         const target = todoFileTarget(input);

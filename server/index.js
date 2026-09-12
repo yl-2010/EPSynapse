@@ -1906,6 +1906,34 @@ app.post("/v1/agent/chat", async (req, res) => {
   const kinds = new Set();
   let navigate = null;
 
+  const slimToolCalls = (calls) =>
+    (calls || []).map((call) => {
+      const fn = call?.function || {};
+      let args = fn.arguments || "";
+      if (typeof args === "string" && args.length > 240) {
+        try {
+          const parsed = JSON.parse(args);
+          for (const key of ["content", "text", "html", "body"]) {
+            if (typeof parsed[key] === "string" && parsed[key].length > 80) {
+              parsed[key] = `[saved ${parsed[key].length} chars]`;
+            }
+          }
+          args = JSON.stringify(parsed);
+        } catch {
+          args = `${args.slice(0, 239)}…`;
+        }
+      }
+      return { ...call, function: { ...fn, arguments: args } };
+    });
+
+  const finishMutations = (content) => {
+    if (kinds.size) writeEvent({ type: "mutation", kinds: [...kinds] });
+    if (navigate) writeEvent({ type: "navigate", ...navigate, href: navigateHref(navigate) });
+    if (content) writeEvent({ choices: [{ delta: { content } }] });
+    writeEvent("[DONE]");
+    return res.end();
+  };
+
   try {
     for (let round = 0; round < 8; round += 1) {
       let upstream;
@@ -1913,6 +1941,7 @@ app.post("/v1/agent/chat", async (req, res) => {
         upstream = await fetchUpstream(convo, { tools: true });
       } catch (err) {
         const timedOut = err && err.name === "TimeoutError";
+        if (kinds.size) return finishMutations("Done");
         if (res.headersSent) {
           writeEvent({ choices: [{ delta: { content: timedOut ? "The model timed out. Try again." : "Could not reach the model host." } }] });
           writeEvent("[DONE]");
@@ -1937,6 +1966,7 @@ app.post("/v1/agent/chat", async (req, res) => {
             return res.end();
           }
         }
+        if (kinds.size) return finishMutations("Done");
         if (res.headersSent) {
           writeEvent({ choices: [{ delta: { content: explainUpstreamError(upstream.status, text, { keyCount: keys.length }) } }] });
           writeEvent("[DONE]");
@@ -1949,12 +1979,8 @@ app.post("/v1/agent/chat", async (req, res) => {
 
       const roundOut = await readToolRound(upstream);
       if (!roundOut.toolCalls.length) {
-        if (kinds.size) writeEvent({ type: "mutation", kinds: [...kinds] });
-        if (navigate) writeEvent({ type: "navigate", ...navigate, href: navigateHref(navigate) });
         if (roundOut.reasoning) writeEvent({ choices: [{ delta: { reasoning: roundOut.reasoning } }] });
-        if (roundOut.content) writeEvent({ choices: [{ delta: { content: roundOut.content } }] });
-        writeEvent("[DONE]");
-        return res.end();
+        return finishMutations(roundOut.content || (kinds.size ? "Done" : ""));
       }
 
       writeSseHeaders();
@@ -1962,7 +1988,7 @@ app.post("/v1/agent/chat", async (req, res) => {
       convo.push({
         role: "assistant",
         content: roundOut.content || "",
-        tool_calls: roundOut.toolCalls,
+        tool_calls: slimToolCalls(roundOut.toolCalls),
       });
       for (const call of roundOut.toolCalls) {
         const result = await executeAgentTool(call, { ownerId, student, req });
@@ -1976,12 +2002,15 @@ app.post("/v1/agent/chat", async (req, res) => {
         });
       }
     }
-    if (kinds.size) writeEvent({ type: "mutation", kinds: [...kinds] });
-    if (navigate) writeEvent({ type: "navigate", ...navigate, href: navigateHref(navigate) });
-    writeEvent({ choices: [{ delta: { content: "Stopped after too many tool steps." } }] });
-    writeEvent("[DONE]");
-    return res.end();
+    return finishMutations(kinds.size ? "Done" : "Stopped after too many tool steps.");
   } catch {
+    if (kinds.size) {
+      try {
+        return finishMutations("Done");
+      } catch {
+        return res.end();
+      }
+    }
     if (!res.headersSent) {
       return res.status(502).json({ error: "Could not reach the model host." });
     }
