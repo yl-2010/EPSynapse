@@ -15,11 +15,8 @@
         } catch (e) {}
       })();
     </script>
-    <title>Privacy · EPSynapse</title>
-    <meta
-      name="description"
-      content="What EPSynapse keeps when you sign in, vote on a pulse, or connect school accounts."
-    />
+    <title>Not found · EPSynapse</title>
+    <meta name="description" content="This page is not in EPSynapse." />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/styles.css?v=glass9" />
     <style>
@@ -36,14 +33,6 @@
       .page-sheet {
         max-height: min(52rem, calc(100dvh - 8rem));
       }
-      .page-sheet .edu-sheet-body h2 {
-        margin: 1.1rem 0 0.4rem;
-        font-size: var(--text-headline);
-        font-weight: 650;
-      }
-      .page-sheet .edu-sheet-body h2:first-child {
-        margin-top: 0.15rem;
-      }
       .page-sheet .edu-sheet-body p {
         margin: 0 0 0.75rem;
         font-size: var(--text-subhead);
@@ -52,6 +41,12 @@
       }
       .page-sheet .edu-sheet-body a {
         color: var(--accent);
+      }
+      .page-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem 1.1rem;
+        margin-top: 0.35rem;
       }
     </style>
   </head>
@@ -78,48 +73,15 @@
     <div class="page-wrap">
       <main class="edu-sheet page-sheet">
         <div class="edu-sheet-head">
-          <h1 class="edu-sheet-title">Privacy</h1>
+          <h1 class="edu-sheet-title">Not found</h1>
         </div>
         <div class="edu-sheet-body">
-          <p>
-            EPSynapse is a student app. Home is
-            <a href="/">epsynapse.com</a>. School pulses live at
-            <a href="/pulse">/pulse</a>. Counts show on
-            <a href="/board">/board</a>.
+          <p>This page is not in EPSynapse.</p>
+          <p class="page-links">
+            <a href="/">Home</a>
+            <a href="/pulse">Pulse</a>
+            <a href="/board">Board</a>
           </p>
-
-          <h2>Google sign-in</h2>
-          <p>
-            When you sign in with Google we keep your name, email, and profile photo so you stay
-            logged in. That is all we take from Google.
-          </p>
-
-          <h2>School and student ID</h2>
-          <p>
-            Settings let you type a school and a student ID. Both are optional. They stay on your
-            account so a school admin can match you to a roster later.
-          </p>
-
-          <h2>Canvas, OneDrive, Outlook</h2>
-          <p>
-            Tokens you connect stay on the Mac API behind api.epsynapse.com. The browser does not
-            keep those keys.
-          </p>
-
-          <h2>Pulse votes</h2>
-          <p>
-            A vote on <a href="/pulse">/pulse</a> is a count. We store a hashed voter key so the
-            same person cannot vote twice. Your name does not show on
-            <a href="/board">/board</a>.
-          </p>
-
-          <h2>We do not sell this</h2>
-          <p>
-            No ads, no resale, no handing your roster to a third party. Questions go to the team
-            that runs epsynapse.com.
-          </p>
-
-          <p><a href="/">Back to EPSynapse</a></p>
         </div>
       </main>
     </div>
