@@ -239,6 +239,7 @@ struct ChatOverlay: View {
     }
 
     private func send() {
+        guard session.isSignedIn else { return }
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !busy else { return }
         draft = ""

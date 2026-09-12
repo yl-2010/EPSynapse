@@ -21,8 +21,10 @@ struct SettingsSheet: View {
                 VStack(alignment: .leading, spacing: 22) {
                     statusLine
                     accountSection
-                    microsoftSection
-                    agentSection
+                    if session.isSignedIn {
+                        microsoftSection
+                        agentSection
+                    }
                 }
                 .padding(20)
                 .frame(maxWidth: AdaptiveLayout.formMaxWidth)
@@ -36,6 +38,7 @@ struct SettingsSheet: View {
         .onAppear { hydrate() }
         .onChange(of: session.profile) { _, _ in hydrate() }
         .task(id: school) {
+            guard session.isSignedIn else { return }
             try? await Task.sleep(nanoseconds: 280_000_000)
             guard !Task.isCancelled else { return }
             let hits = await session.searchSchools(query: school)
@@ -46,8 +49,8 @@ struct SettingsSheet: View {
             }
         }
         .task(id: isPresented) {
-            guard isPresented else { return }
-            while !Task.isCancelled, isPresented {
+            guard isPresented, session.isSignedIn else { return }
+            while !Task.isCancelled, isPresented, session.isSignedIn {
                 let od = session.profile?.onedriveConnected
                 let ol = session.profile?.outlookConnected
                 await session.pollConnections()
@@ -111,34 +114,36 @@ struct SettingsSheet: View {
         settingsGroup("Account") {
             googleAccountBlock
 
-            fieldLabel("School")
-            glassField { TextField("Eastside Prep", text: $school) }
-            schoolSuggestions
+            if session.isSignedIn {
+                fieldLabel("School")
+                glassField { TextField("Eastside Prep", text: $school) }
+                schoolSuggestions
 
-            fieldLabel("Student ID")
-            glassField { TextField("Optional", text: $studentId) }
+                fieldLabel("Student ID")
+                glassField { TextField("Optional", text: $studentId) }
 
-            fieldLabel("Canvas URL")
-            glassField { TextField("https://eastsideprep.instructure.com", text: $canvasHost) }
+                fieldLabel("Canvas URL")
+                glassField { TextField("https://eastsideprep.instructure.com", text: $canvasHost) }
 
-            fieldLabel("Canvas access token")
-            glassField { SecureField("Token", text: $canvasToken) }
-            Text("Account → Settings → New Access Token")
-                .font(.footnote)
-                .foregroundStyle(EPSTheme.muted)
+                fieldLabel("Canvas access token")
+                glassField { SecureField("Token", text: $canvasToken) }
+                Text("Account → Settings → New Access Token")
+                    .font(.footnote)
+                    .foregroundStyle(EPSTheme.muted)
 
-            goldButton("Save") {
-                Task {
-                    await session.save(
-                        school: school,
-                        studentId: studentId,
-                        canvasHost: canvasHost,
-                        canvasToken: canvasToken
-                    )
-                    if session.settingsStatus.hasPrefix("Saved") {
-                        canvasToken = ""
-                        await dashboard.load(from: session)
-                        isPresented = false
+                goldButton("Save") {
+                    Task {
+                        await session.save(
+                            school: school,
+                            studentId: studentId,
+                            canvasHost: canvasHost,
+                            canvasToken: canvasToken
+                        )
+                        if session.settingsStatus.hasPrefix("Saved") {
+                            canvasToken = ""
+                            await dashboard.load(from: session)
+                            isPresented = false
+                        }
                     }
                 }
             }

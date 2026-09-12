@@ -27,30 +27,10 @@ struct HomeView: View {
                         .padding(.bottom, 2)
                         .id("home-top")
 
-                    if isWide {
-                        HStack(alignment: .top, spacing: 16) {
-                            VStack(spacing: 16) {
-                                TodoPanel()
-                                CompletedPanel()
-                            }
-                            .frame(maxWidth: .infinity, alignment: .top)
-                            VStack(spacing: 16) {
-                                ClassesPanel()
-                                DatesPanel()
-                                FilesPanel()
-                                MailPanel()
-                            }
-                            .frame(maxWidth: .infinity, alignment: .top)
-                        }
+                    if session.isSignedIn {
+                        dashboardContent
                     } else {
-                        VStack(spacing: 16) {
-                            TodoPanel()
-                            ClassesPanel()
-                            DatesPanel()
-                            FilesPanel()
-                            MailPanel()
-                            CompletedPanel()
-                        }
+                        signedOutContent
                     }
                 }
                 .padding(.horizontal, pagePad)
@@ -68,11 +48,19 @@ struct HomeView: View {
             }
         }
         .refreshable {
+            guard session.isSignedIn else { return }
             await dashboard.load(from: session)
         }
         .task {
             await session.boot()
-            await dashboard.load(from: session)
+            if session.isSignedIn {
+                await dashboard.load(from: session)
+            }
+        }
+        .onChange(of: session.isSignedIn) { _, signedIn in
+            if signedIn {
+                Task { await dashboard.load(from: session) }
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .epsOpenSettings)) { _ in
             showSettings = true
@@ -81,6 +69,58 @@ struct HomeView: View {
             SettingsSheet(isPresented: $showSettings)
                 .environmentObject(session)
                 .environmentObject(dashboard)
+        }
+    }
+
+    @ViewBuilder
+    private var dashboardContent: some View {
+        if isWide {
+            HStack(alignment: .top, spacing: 16) {
+                VStack(spacing: 16) {
+                    TodoPanel()
+                    CompletedPanel()
+                }
+                .frame(maxWidth: .infinity, alignment: .top)
+                VStack(spacing: 16) {
+                    ClassesPanel()
+                    DatesPanel()
+                    FilesPanel()
+                    MailPanel()
+                }
+                .frame(maxWidth: .infinity, alignment: .top)
+            }
+        } else {
+            VStack(spacing: 16) {
+                TodoPanel()
+                ClassesPanel()
+                DatesPanel()
+                FilesPanel()
+                MailPanel()
+                CompletedPanel()
+            }
+        }
+    }
+
+    private var signedOutContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Button {
+                Task { await session.signInWithGoogle() }
+            } label: {
+                Text("Sign in with Google")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(EPSTheme.fg)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+            }
+            .buttonStyle(.plain)
+            .epsGlassRounded(cornerRadius: 14, tint: EPSTheme.accent.opacity(0.72), interactive: true)
+            .epsHapticOnTap()
+
+            if !session.settingsStatus.isEmpty {
+                Text(session.settingsStatus)
+                    .font(.footnote)
+                    .foregroundStyle(EPSTheme.muted)
+            }
         }
     }
 }

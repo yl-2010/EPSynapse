@@ -41,7 +41,11 @@ final class SessionStore: ObservableObject {
   @Published var olURI = ""
   @Published var isBooting = true
 
-  var isSignedIn: Bool { !sessionId.isEmpty && profile != nil }
+  var isSignedIn: Bool {
+    guard !sessionId.isEmpty, let profile else { return false }
+    return !profile.email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      || !profile.googleName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
 
   private let api = APIClient.shared
 
@@ -263,6 +267,7 @@ final class SessionStore: ObservableObject {
   }
 
   func saveKey(_ key: String) {
+    guard isSignedIn else { return }
     let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
     if trimmed.isEmpty {
       keyStatus = "Paste a key first."
@@ -273,6 +278,7 @@ final class SessionStore: ObservableObject {
   }
 
   func clearKey() {
+    guard isSignedIn else { return }
     modelKey = ""
     refreshKeyStatus()
   }

@@ -8,6 +8,7 @@ extension Notification.Name {
 /// Logo, theme orb, settings, and chat pill.
 struct CornerChrome: View {
     @EnvironmentObject private var theme: ThemeStore
+    @EnvironmentObject private var session: SessionStore
 
     private var orbSide: CGFloat { AdaptiveLayout.isPad ? 60 : 52 }
     private var cornerPad: CGFloat { AdaptiveLayout.isPad ? 20 : 16 }
@@ -29,31 +30,33 @@ struct CornerChrome: View {
             .safeAreaPadding(.horizontal)
             .ignoresSafeArea(.keyboard, edges: .bottom)
 
-            VStack {
-                Spacer(minLength: 0)
-                    .allowsHitTesting(false)
-                HStack(alignment: .bottom) {
-                    settingsButton
+            if session.isSignedIn {
+                VStack {
                     Spacer(minLength: 0)
                         .allowsHitTesting(false)
+                    HStack(alignment: .bottom) {
+                        settingsButton
+                        Spacer(minLength: 0)
+                            .allowsHitTesting(false)
+                    }
                 }
-            }
-            .padding(cornerPad)
-            .safeAreaPadding(.bottom)
-            .safeAreaPadding(.horizontal)
-            .ignoresSafeArea(.keyboard, edges: .bottom)
+                .padding(cornerPad)
+                .safeAreaPadding(.bottom)
+                .safeAreaPadding(.horizontal)
+                .ignoresSafeArea(.keyboard, edges: .bottom)
 
-            VStack {
-                Spacer(minLength: 0)
-                    .allowsHitTesting(false)
-                HStack(alignment: .bottom) {
+                VStack {
                     Spacer(minLength: 0)
                         .allowsHitTesting(false)
-                    ChatOverlay()
+                    HStack(alignment: .bottom) {
+                        Spacer(minLength: 0)
+                            .allowsHitTesting(false)
+                        ChatOverlay()
+                    }
                 }
+                .padding(cornerPad)
+                .safeAreaPadding()
             }
-            .padding(cornerPad)
-            .safeAreaPadding()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
