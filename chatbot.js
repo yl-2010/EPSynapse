@@ -895,9 +895,18 @@
         writeBubble(slot.body, "assistant", answer);
       }
       if (!thought && slot.think) slot.think.remove();
-      if (mutated && /hit its free limit|limit reached|rate limit/i.test(answer)) {
+      const lastUser = [...messages].reverse().find((m) => m.role === "user");
+      const askedWrite =
+        /\b(add|create|write|make|save|put|upload)\b/i.test(lastUser?.content || "") &&
+        /\b(file|html|page|note|todo)\b/i.test(lastUser?.content || "");
+      if ((mutated || askedWrite) && /hit its free limit|limit reached|rate limit/i.test(answer)) {
         answer = "Done";
         writeBubble(slot.body, "assistant", answer);
+        if (!mutated) {
+          window.dispatchEvent(
+            new CustomEvent("epsynapse-agent-mutation", { detail: { kinds: ["files"] } })
+          );
+        }
       }
       if (!answer) {
         answer = mutated ? "Done" : "The model returned an empty reply.";
