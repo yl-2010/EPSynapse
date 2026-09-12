@@ -4,9 +4,10 @@ struct AppLoadingScreen: View {
     var body: some View {
         ZStack {
             EPSTheme.bg0.ignoresSafeArea()
-            EPSMark()
-                .fill(EPSTheme.accent)
-                .frame(width: 72, height: 72)
+            Image("LogoMark")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 96, height: 96)
         }
         .allowsHitTesting(true)
     }

@@ -494,6 +494,82 @@ html[data-resolved-theme="dark"] .edu-check.lg-refraction::after {
   color: inherit;
 }
 
+.brand-mark {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 72%;
+  height: 72%;
+}
+
+.brand-mark-img {
+  grid-area: 1 / 1;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.brand-wordmark {
+  position: fixed;
+  z-index: 70;
+  top: var(--corner-pad);
+  left: calc(var(--corner-pad) + var(--corner-orb) + 0.45rem);
+  right: calc(var(--corner-pad) + var(--corner-orb) + 0.45rem);
+  height: calc(var(--corner-orb) * 1.55);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  pointer-events: none;
+}
+
+html[data-auth="out"] .brand-wordmark {
+  left: calc(var(--corner-pad) + var(--corner-orb) + 0.45rem);
+  right: calc(var(--corner-pad) + var(--corner-orb) + 0.45rem);
+}
+
+.brand-wordmark-img {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  object-position: top center;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.brand-mark-img--dark,
+.brand-wordmark-img--dark {
+  display: none;
+}
+
+html[data-resolved-theme="dark"] .brand-mark-img--light,
+html[data-resolved-theme="dark"] .brand-wordmark-img--light {
+  display: none;
+}
+
+html[data-resolved-theme="dark"] .brand-mark-img--dark,
+html[data-resolved-theme="dark"] .brand-wordmark-img--dark {
+  display: block;
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-resolved-theme="light"]) .brand-mark-img--light,
+  html:not([data-resolved-theme="light"]) .brand-wordmark-img--light {
+    display: none;
+  }
+
+  html:not([data-resolved-theme="light"]) .brand-mark-img--dark,
+  html:not([data-resolved-theme="light"]) .brand-wordmark-img--dark {
+    display: block;
+  }
+}
+
 .corner.squircle {
   --lg-radius: 19px;
   border-radius: var(--lg-radius);
@@ -3475,9 +3551,7 @@ html[data-resolved-theme="dark"] .edu-school-results {
   color: var(--muted);
 }
 
-html[data-auth="out"] #home-open,
 html[data-auth="out"] #settings-open,
-html[data-auth="out"] .c-tr,
 html[data-auth="out"] #stage-full,
 html[data-auth="out"] #stage-loading,
 html[data-auth="out"] #edu-chat,
@@ -3492,7 +3566,7 @@ html[data-auth="in"] #stage-out {
 
 .stage-out {
   align-content: center;
-  padding-top: calc(var(--corner-orb) + var(--corner-pad) + 0.5rem);
+  padding-top: calc(var(--corner-orb) * 1.55 + var(--corner-pad) + 0.5rem);
   padding-bottom: 4.5rem;
 }
 

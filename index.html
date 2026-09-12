@@ -18,7 +18,9 @@
     <title>EPSynapse</title>
     <meta name="description" content="EPSynapse student dashboard" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/styles.css?v=notesave1" />
+    <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="stylesheet" href="/styles.css?v=logo1" />
     <link
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css"
@@ -59,7 +61,10 @@
       id="home-open"
       aria-label="Home"
     >
-      <span class="corner-mark" aria-hidden="true">E</span>
+      <span class="brand-mark" aria-hidden="true">
+        <img class="brand-mark-img brand-mark-img--light" src="/logos/mark.png" alt="" />
+        <img class="brand-mark-img brand-mark-img--dark" src="/logos/mark-dark.png" alt="" />
+      </span>
     </button>
 
     <button
@@ -70,6 +75,11 @@
       aria-label="Toggle theme"
       draggable="false"
     ></button>
+
+    <div class="brand-wordmark" aria-hidden="true">
+      <img class="brand-wordmark-img brand-wordmark-img--light" src="/logos/wordmark.png" alt="" />
+      <img class="brand-wordmark-img brand-wordmark-img--dark" src="/logos/wordmark-dark.png" alt="" />
+    </div>
 
     <button
       type="button"

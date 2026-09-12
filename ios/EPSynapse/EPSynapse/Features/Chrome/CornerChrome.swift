@@ -77,9 +77,10 @@ struct CornerChrome: View {
             EPSHaptics.tap()
             NotificationCenter.default.post(name: .epsScrollHomeToTop, object: nil)
         } label: {
-            EPSMark()
-                .fill(EPSTheme.accent)
-                .frame(width: orbSide * 0.46, height: orbSide * 0.46)
+            Image("LogoMark")
+                .resizable()
+                .scaledToFit()
+                .frame(width: orbSide * 0.68, height: orbSide * 0.68)
                 .frame(width: orbSide, height: orbSide)
                 .contentShape(RoundedRectangle(cornerRadius: orbSide * 0.4, style: .continuous))
         }
