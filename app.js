@@ -246,10 +246,9 @@
       ? "No files in /EPSynapse yet"
       : "Connect OneDrive in settings";
 
-    const school = me?.school || "Eastside Prep";
     appEl.classList.add("is-settled");
     appEl.innerHTML = `
-      <p class="edu-home-mark">${escapeHtml(school)}</p>
+      <p class="edu-home-mark">EPSynapse</p>
       <div class="edu-grid edu-grid--home">
         <div class="edu-col edu-col--main">
           ${panelHtml("TODO", listOrEmpty(open.map(todoRow).join(""), todoEmpty), "lg-edu-todo", "", filterBarHtml("todo"))}
