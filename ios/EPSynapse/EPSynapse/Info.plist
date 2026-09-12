@@ -20,15 +20,37 @@
 	<string>0.1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.jype.epsynapse.google</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.REPLACE_ME</string>
+			</array>
+		</dict>
+	</array>
 	<key>EPSApiBaseURL</key>
 	<string>https://api.epsynapse.com</string>
+	<key>EPSGoogleiOSClientID</key>
+	<string></string>
+	<key>EPSGoogleReversedClientID</key>
+	<string>com.googleusercontent.apps.REPLACE_ME</string>
 	<key>EPSLocalApiBaseURL</key>
 	<string>http://127.0.0.1:3006</string>
+	<key>GIDClientID</key>
+	<string></string>
+	<key>GIDServerClientID</key>
+	<string></string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>canvas-courses</string>
+		<string>google</string>
 	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>

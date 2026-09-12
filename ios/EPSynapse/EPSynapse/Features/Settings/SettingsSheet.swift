@@ -12,6 +12,7 @@ struct SettingsSheet: View {
     @State private var canvasHost = "https://eastsideprep.instructure.com"
     @State private var canvasToken = ""
     @State private var draftKey = ""
+    @State private var schoolHits: [SchoolHit] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -33,6 +34,17 @@ struct SettingsSheet: View {
         .presentationDetents([.large])
         .presentationBackground(.ultraThinMaterial)
         .onAppear { hydrate() }
+        .onChange(of: session.profile) { _, _ in hydrate() }
+        .task(id: school) {
+            try? await Task.sleep(nanoseconds: 280_000_000)
+            guard !Task.isCancelled else { return }
+            let hits = await session.searchSchools(query: school)
+            if hits.count == 1, hits[0].name.caseInsensitiveCompare(school) == .orderedSame {
+                schoolHits = []
+            } else {
+                schoolHits = hits
+            }
+        }
         .task(id: isPresented) {
             guard isPresented else { return }
             while !Task.isCancelled, isPresented {
@@ -82,22 +94,29 @@ struct SettingsSheet: View {
     }
 
     private var statusLine: some View {
-        Text(
-            session.settingsStatus.isEmpty
-                ? "School + student ID is your record. Honor system for the hackathon."
-                : session.settingsStatus
-        )
-        .font(.footnote)
-        .foregroundStyle(EPSTheme.muted)
+        Text(statusCopy)
+            .font(.footnote)
+            .foregroundStyle(EPSTheme.muted)
+    }
+
+    private var statusCopy: String {
+        if !session.settingsStatus.isEmpty { return session.settingsStatus }
+        if session.isSignedIn {
+            return SessionStore.signedInHint
+        }
+        return "Sign in with Google. School and student ID let us match you at school."
     }
 
     private var accountSection: some View {
         settingsGroup("Account") {
+            googleAccountBlock
+
             fieldLabel("School")
             glassField { TextField("Eastside Prep", text: $school) }
+            schoolSuggestions
 
             fieldLabel("Student ID")
-            glassField { TextField("Required", text: $studentId) }
+            glassField { TextField("Optional", text: $studentId) }
 
             fieldLabel("Canvas URL")
             glassField { TextField("https://eastsideprep.instructure.com", text: $canvasHost) }
@@ -209,6 +228,86 @@ struct SettingsSheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    @ViewBuilder
+    private var googleAccountBlock: some View {
+        if session.isSignedIn, let profile = session.profile {
+            HStack(alignment: .center, spacing: 12) {
+                googlePicture(profile.picture)
+                VStack(alignment: .leading, spacing: 2) {
+                    if !profile.signedInName.isEmpty {
+                        Text(profile.signedInName)
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(EPSTheme.fg)
+                    }
+                    if !profile.email.isEmpty {
+                        Text(profile.email)
+                            .font(.footnote)
+                            .foregroundStyle(EPSTheme.muted)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            glassAction("Sign out") {
+                Task { await session.logout() }
+            }
+        } else {
+            goldButton("Sign in with Google") {
+                Task { await session.signInWithGoogle() }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var schoolSuggestions: some View {
+        if !schoolHits.isEmpty {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(schoolHits.prefix(8)) { hit in
+                    Button {
+                        school = hit.name
+                        if !hit.canvasHost.isEmpty {
+                            canvasHost = Self.normalizedCanvasHost(hit.canvasHost)
+                        }
+                        schoolHits = []
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(hit.name)
+                                .font(.body)
+                                .foregroundStyle(EPSTheme.fg)
+                            if !hit.shortName.isEmpty, hit.shortName != hit.name {
+                                Text(hit.shortName)
+                                    .font(.caption)
+                                    .foregroundStyle(EPSTheme.muted)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .epsGlassField(interactive: false, cornerRadius: 14)
+        }
+    }
+
+    @ViewBuilder
+    private func googlePicture(_ raw: String) -> some View {
+        if let url = URL(string: raw), !raw.isEmpty {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                default:
+                    Circle().fill(EPSTheme.accent.opacity(0.35))
+                }
+            }
+            .frame(width: 44, height: 44)
+            .clipShape(Circle())
+        }
+    }
+
     private func fieldLabel(_ title: String) -> some View {
         Text(title)
             .font(.footnote.weight(.semibold))
@@ -286,5 +385,13 @@ struct SettingsSheet: View {
             if !profile.canvasHost.isEmpty { canvasHost = profile.canvasHost }
         }
         draftKey = ""
+    }
+
+    private static func normalizedCanvasHost(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://") {
+            return trimmed
+        }
+        return "https://\(trimmed)"
     }
 }

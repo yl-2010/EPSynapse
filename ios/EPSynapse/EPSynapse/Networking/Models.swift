@@ -27,6 +27,11 @@ struct Profile: Codable, Equatable {
   var studentId: String
   var canvasHost: String
   var displayName: String
+  var email: String
+  var googleName: String
+  var picture: String
+  var rosterName: String
+  var rosterMatched: Bool
   var canvasConnected: Bool
   var onedriveConnected: Bool
   var outlookConnected: Bool
@@ -41,6 +46,11 @@ struct Profile: Codable, Equatable {
     studentId: String = "",
     canvasHost: String = "",
     displayName: String = "",
+    email: String = "",
+    googleName: String = "",
+    picture: String = "",
+    rosterName: String = "",
+    rosterMatched: Bool = false,
     canvasConnected: Bool = false,
     onedriveConnected: Bool = false,
     outlookConnected: Bool = false,
@@ -54,6 +64,11 @@ struct Profile: Codable, Equatable {
     self.studentId = studentId
     self.canvasHost = canvasHost
     self.displayName = displayName
+    self.email = email
+    self.googleName = googleName
+    self.picture = picture
+    self.rosterName = rosterName
+    self.rosterMatched = rosterMatched
     self.canvasConnected = canvasConnected
     self.onedriveConnected = onedriveConnected
     self.outlookConnected = outlookConnected
@@ -70,6 +85,11 @@ struct Profile: Codable, Equatable {
     studentId = c.string(.studentId)
     canvasHost = c.string(.canvasHost)
     displayName = c.string(.displayName)
+    email = c.string(.email)
+    googleName = c.string(.googleName)
+    picture = c.string(.picture)
+    rosterName = c.string(.rosterName)
+    rosterMatched = c.bool(.rosterMatched)
     canvasConnected = c.bool(.canvasConnected)
     onedriveConnected = c.bool(.onedriveConnected)
     outlookConnected = c.bool(.outlookConnected)
@@ -79,6 +99,13 @@ struct Profile: Codable, Equatable {
     outlookPending = try c.decodeIfPresent(DevicePending.self, forKey: .outlookPending)
     let sid = c.string(.sessionId)
     sessionId = sid.isEmpty ? nil : sid
+  }
+
+  var signedInName: String {
+    if !googleName.isEmpty { return googleName }
+    if !displayName.isEmpty { return displayName }
+    if !rosterName.isEmpty { return rosterName }
+    return email
   }
 }
 
@@ -471,5 +498,79 @@ struct SendMailResponse: Codable {
     sent = c.bool(.sent)
     to = c.string(.to)
     subject = c.string(.subject)
+  }
+}
+
+struct GoogleAuthConfig: Codable {
+  var clientId: String
+  var iosClientId: String
+
+  init(clientId: String = "", iosClientId: String = "") {
+    self.clientId = clientId
+    self.iosClientId = iosClientId
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    clientId = c.string(.clientId)
+    iosClientId = c.string(.iosClientId)
+  }
+}
+
+struct GoogleAuthBody: Encodable {
+  var idToken: String
+}
+
+struct SchoolHit: Codable, Identifiable, Equatable {
+  var slug: String
+  var name: String
+  var shortName: String
+  var domain: String
+  var canvasHost: String
+  var hasRoster: Bool
+  var rosterCount: Int
+
+  var id: String { slug.isEmpty ? name : slug }
+
+  init(
+    slug: String = "",
+    name: String = "",
+    shortName: String = "",
+    domain: String = "",
+    canvasHost: String = "",
+    hasRoster: Bool = false,
+    rosterCount: Int = 0
+  ) {
+    self.slug = slug
+    self.name = name
+    self.shortName = shortName
+    self.domain = domain
+    self.canvasHost = canvasHost
+    self.hasRoster = hasRoster
+    self.rosterCount = rosterCount
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    slug = c.string(.slug)
+    name = c.string(.name)
+    shortName = c.string(.shortName)
+    domain = c.string(.domain)
+    canvasHost = c.string(.canvasHost)
+    hasRoster = c.bool(.hasRoster)
+    rosterCount = c.int(.rosterCount)
+  }
+}
+
+struct SchoolsResponse: Codable {
+  var schools: [SchoolHit]
+
+  init(schools: [SchoolHit] = []) {
+    self.schools = schools
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    schools = (try? c.decodeIfPresent([SchoolHit].self, forKey: .schools)) ?? []
   }
 }

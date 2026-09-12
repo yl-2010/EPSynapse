@@ -1,5 +1,7 @@
 import Combine
 import Foundation
+import GoogleSignIn
+import UIKit
 
 @MainActor
 final class SessionStore: ObservableObject {
@@ -8,7 +10,8 @@ final class SessionStore: ObservableObject {
   static let onedriveIdle = "School OneDrive. Tap Connect, then sign in with @eastsideprep.org."
   static let outlookIdle = "School Outlook. Same Microsoft sign-in, mail only."
   static let keyIdle = "No model key. Groq is the short path: console.groq.com/keys"
-  static let studentIdRequired = "Student ID is required."
+  static let googleFirst = "Sign in with Google first."
+  static let signedInHint = "Signed in with Google. School and student ID let us match you at school."
 
   @Published var sessionId: String {
     didSet { UserDefaults.standard.set(sessionId, forKey: Keys.sid) }
@@ -38,6 +41,8 @@ final class SessionStore: ObservableObject {
   @Published var olURI = ""
   @Published var isBooting = true
 
+  var isSignedIn: Bool { !sessionId.isEmpty && profile != nil }
+
   private let api = APIClient.shared
 
   private enum Keys {
@@ -58,10 +63,12 @@ final class SessionStore: ObservableObject {
     isBooting = true
     defer { isBooting = false }
 
+    await configureGoogleSignIn()
+
     async let configTask: [AgentProvider] = loadProviders()
     if sessionId.isEmpty {
+      _ = await restoreGoogleSessionIfNeeded()
       providers = await configTask
-      profile = nil
       paintConnections()
       refreshKeyStatus()
       return
@@ -73,6 +80,7 @@ final class SessionStore: ObservableObject {
       rememberSession(me.sessionId)
     } catch let error as APIError where error.status == 401 {
       profile = nil
+      _ = await restoreGoogleSessionIfNeeded()
     } catch {
       profile = nil
     }
@@ -82,12 +90,37 @@ final class SessionStore: ObservableObject {
     refreshKeyStatus()
   }
 
-  func save(school: String, studentId: String, canvasHost: String, canvasToken: String) async {
-    let id = studentId.trimmingCharacters(in: .whitespacesAndNewlines)
-    if id.isEmpty {
-      settingsStatus = Self.studentIdRequired
+  func signInWithGoogle() async {
+    settingsStatus = "Signing in…"
+    await configureGoogleSignIn()
+    guard GIDSignIn.sharedInstance.configuration != nil || Self.plistClientID() != nil else {
+      settingsStatus = "Google sign-in is not configured yet."
       return
     }
+    guard let presenter = Self.presentingViewController() else {
+      settingsStatus = "Could not open Google sign-in."
+      return
+    }
+    do {
+      let result = try await GIDSignIn.sharedInstance.signIn(withPresenting: presenter)
+      try await exchangeGoogleUser(result.user)
+      settingsStatus = Self.signedInHint
+      paintConnections()
+    } catch {
+      if Self.isGoogleCancel(error) {
+        settingsStatus = ""
+        return
+      }
+      settingsStatus = (error as? APIError)?.message ?? error.localizedDescription
+    }
+  }
+
+  func save(school: String, studentId: String, canvasHost: String, canvasToken: String) async {
+    if sessionId.isEmpty {
+      settingsStatus = Self.googleFirst
+      return
+    }
+    let id = studentId.trimmingCharacters(in: .whitespacesAndNewlines)
     settingsStatus = "Saving…"
     let body = SaveMeBody(
       school: school.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -101,16 +134,34 @@ final class SessionStore: ObservableObject {
       let me: Profile = try await api.request("/v1/me", method: "POST", body: body, sessionId: sessionId)
       profile = me
       rememberSession(me.sessionId)
-      settingsStatus = me.displayName.isEmpty ? "Saved." : "Saved · \(me.displayName)"
+      settingsStatus = me.signedInName.isEmpty ? "Saved." : "Saved · \(me.signedInName)"
       paintConnections()
+    } catch let error as APIError where error.status == 401 {
+      settingsStatus = Self.googleFirst
     } catch {
       settingsStatus = (error as? APIError)?.message ?? "Could not save."
     }
   }
 
+  func searchSchools(query: String) async -> [SchoolHit] {
+    let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+    let path: String
+    if trimmed.isEmpty {
+      path = "/v1/schools"
+    } else {
+      path = "/v1/schools?q=\(Self.queryValue(trimmed))"
+    }
+    do {
+      let wrapped: SchoolsResponse = try await api.request(path, sessionId: sessionId)
+      return wrapped.schools
+    } catch {
+      return []
+    }
+  }
+
   func startOnedrive() async {
     guard profile != nil, !sessionId.isEmpty else {
-      onedriveStatus = "Save school and student ID first."
+      onedriveStatus = Self.googleFirst
       return
     }
     do {
@@ -141,7 +192,7 @@ final class SessionStore: ObservableObject {
 
   func startOutlook() async {
     guard profile != nil, !sessionId.isEmpty else {
-      outlookStatus = "Save school and student ID first."
+      outlookStatus = Self.googleFirst
       return
     }
     do {
@@ -235,10 +286,62 @@ final class SessionStore: ObservableObject {
         sessionId: sessionId
       )
     }
+    GIDSignIn.sharedInstance.signOut()
     sessionId = ""
     profile = nil
     settingsStatus = ""
     paintConnections()
+  }
+
+  private func configureGoogleSignIn() async {
+    var iosClientId = Self.plistClientID() ?? ""
+    var serverClientId = Self.plistString("GIDServerClientID") ?? ""
+    do {
+      let cfg: GoogleAuthConfig = try await api.request("/v1/auth/google/config", sessionId: "")
+      if iosClientId.isEmpty {
+        iosClientId = cfg.iosClientId.trimmingCharacters(in: .whitespacesAndNewlines)
+      }
+      if serverClientId.isEmpty {
+        serverClientId = cfg.clientId.trimmingCharacters(in: .whitespacesAndNewlines)
+      }
+    } catch {
+      /* config route may not be up yet; plist still works */
+    }
+    iosClientId = iosClientId.trimmingCharacters(in: .whitespacesAndNewlines)
+    serverClientId = serverClientId.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !iosClientId.isEmpty else { return }
+    GIDSignIn.sharedInstance.configuration = GIDConfiguration(
+      clientID: iosClientId,
+      serverClientID: serverClientId.isEmpty ? nil : serverClientId
+    )
+  }
+
+  @discardableResult
+  private func restoreGoogleSessionIfNeeded() async -> Bool {
+    do {
+      let user = try await GIDSignIn.sharedInstance.restorePreviousSignIn()
+      try await exchangeGoogleUser(user)
+      if settingsStatus.isEmpty {
+        settingsStatus = Self.signedInHint
+      }
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  private func exchangeGoogleUser(_ user: GIDGoogleUser) async throws {
+    guard let idToken = user.idToken?.tokenString, !idToken.isEmpty else {
+      throw APIError(status: 0, message: "Google did not return an ID token.")
+    }
+    let me: Profile = try await api.request(
+      "/v1/auth/google",
+      method: "POST",
+      body: GoogleAuthBody(idToken: idToken),
+      sessionId: sessionId
+    )
+    profile = me
+    rememberSession(me.sessionId)
   }
 
   private func rememberSession(_ sid: String?) {
@@ -310,5 +413,39 @@ final class SessionStore: ObservableObject {
       return
     }
     keyStatus = "Using your \(provider) key · ends \(String(modelKey.suffix(4)))"
+  }
+
+  private static func presentingViewController() -> UIViewController? {
+    let windows = UIApplication.shared.connectedScenes
+      .compactMap { $0 as? UIWindowScene }
+      .flatMap(\.windows)
+    let window = windows.first(where: \.isKeyWindow) ?? windows.first
+    var top = window?.rootViewController
+    while let presented = top?.presentedViewController {
+      top = presented
+    }
+    return top
+  }
+
+  private static func plistClientID() -> String? {
+    plistString("GIDClientID") ?? plistString("EPSGoogleiOSClientID")
+  }
+
+  private static func plistString(_ key: String) -> String? {
+    guard let raw = Bundle.main.object(forInfoDictionaryKey: key) as? String else { return nil }
+    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
+  }
+
+  private static func queryValue(_ raw: String) -> String {
+    var allowed = CharacterSet.alphanumerics
+    allowed.insert(charactersIn: "-._~")
+    return raw.addingPercentEncoding(withAllowedCharacters: allowed) ?? raw
+  }
+
+  private static func isGoogleCancel(_ error: Error) -> Bool {
+    let ns = error as NSError
+    if ns.domain.contains("GIDSignIn") && ns.code == -5 { return true }
+    return error.localizedDescription.lowercased().contains("cancel")
   }
 }

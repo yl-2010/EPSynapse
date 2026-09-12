@@ -17,11 +17,21 @@ settings:
     CODE_SIGN_STYLE: Automatic
     INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.education
 
+packages:
+  GoogleSignIn:
+    url: https://github.com/google/GoogleSignIn-iOS
+    exactVersion: "9.2.0"
+
 targets:
   EPSynapse:
     type: application
     platform: iOS
     deploymentTarget: "18.0"
+    dependencies:
+      - package: GoogleSignIn
+        product: GoogleSignIn
+      - package: GoogleSignIn
+        product: GoogleSignInSwift
     sources:
       - path: EPSynapse
         excludes:
@@ -59,8 +69,18 @@ targets:
         ITSAppUsesNonExemptEncryption: false
         LSApplicationQueriesSchemes:
           - canvas-courses
+          - google
+        GIDClientID: ""
+        GIDServerClientID: ""
+        EPSGoogleiOSClientID: ""
+        EPSGoogleReversedClientID: com.googleusercontent.apps.REPLACE_ME
         EPSApiBaseURL: https://api.epsynapse.com
         EPSLocalApiBaseURL: http://127.0.0.1:3006
+        CFBundleURLTypes:
+          - CFBundleTypeRole: Editor
+            CFBundleURLName: com.jype.epsynapse.google
+            CFBundleURLSchemes:
+              - com.googleusercontent.apps.REPLACE_ME
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
