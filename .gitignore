@@ -41,6 +41,16 @@ vercel.env
 # Student profiles and sessions (tokens live here)
 server/data/
 
+# Notes classifier local data and weights
+__pycache__/
+*.pyc
+.venv/
+models/fine-tuned-bert/
+data/raw/
+data/processed/corpus.parquet
+data/processed/corpus.csv
+data/processed/bert_eval.json
+
 # Xcode
 ios/**/xcuserdata/
 ios/**/DerivedData/

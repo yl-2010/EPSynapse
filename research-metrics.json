@@ -1,0 +1,20 @@
+{
+  "subjects": [
+    "Mathematics",
+    "Physics",
+    "Chemistry",
+    "Biology",
+    "Computer Science",
+    "History",
+    "Literature",
+    "Economics"
+  ],
+  "test_n": 0,
+  "arms": {},
+  "include_user_tests": false,
+  "include_frozen_tests": true,
+  "frozen_test_n": 0,
+  "user_test_n": 0,
+  "source": "pending",
+  "updated_at": "2026-09-12T00:00:00Z"
+}

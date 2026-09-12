@@ -1,0 +1,92 @@
+{
+  "subjects": [
+    "Mathematics",
+    "Physics",
+    "Chemistry",
+    "Biology",
+    "Computer Science",
+    "History",
+    "Literature",
+    "Economics"
+  ],
+  "mmlu": {
+    "elementary_mathematics": "Mathematics",
+    "high_school_mathematics": "Mathematics",
+    "college_mathematics": "Mathematics",
+    "abstract_algebra": "Mathematics",
+    "high_school_statistics": "Mathematics",
+    "high_school_physics": "Physics",
+    "college_physics": "Physics",
+    "conceptual_physics": "Physics",
+    "astronomy": "Physics",
+    "high_school_chemistry": "Chemistry",
+    "college_chemistry": "Chemistry",
+    "high_school_biology": "Biology",
+    "college_biology": "Biology",
+    "anatomy": "Biology",
+    "virology": "Biology",
+    "medical_genetics": "Biology",
+    "high_school_computer_science": "Computer Science",
+    "college_computer_science": "Computer Science",
+    "computer_security": "Computer Science",
+    "machine_learning": "Computer Science",
+    "high_school_us_history": "History",
+    "high_school_world_history": "History",
+    "high_school_european_history": "History",
+    "prehistory": "History",
+    "high_school_microeconomics": "Economics",
+    "high_school_macroeconomics": "Economics",
+    "econometrics": "Economics",
+    "management": "Economics",
+    "marketing": "Economics",
+    "professional_accounting": "Economics"
+  },
+  "setfit": {
+    "Maths": "Mathematics",
+    "Physics": "Physics",
+    "Chemistry": "Chemistry",
+    "Biology": "Biology"
+  },
+  "cogbench": {
+    "mathematics": "Mathematics",
+    "physics": "Physics",
+    "astronomy": "Physics",
+    "chemistry": "Chemistry",
+    "biology": "Biology",
+    "computer_science": "Computer Science",
+    "history": "History",
+    "economics": "Economics",
+    "business": "Economics"
+  },
+  "textbook_level1": {
+    "math": "Mathematics",
+    "stats": "Mathematics",
+    "phys": "Physics",
+    "chem": "Chemistry",
+    "bio": "Biology"
+  },
+  "textbook_level2": {
+    "eng/Computer_Science": "Computer Science",
+    "human/Literature_and_Literacy": "Literature",
+    "human/Composition": "Literature",
+    "human/Languages": "Literature",
+    "human/History": "History",
+    "socialsci/Economics": "Economics",
+    "socialsci/Political_Science_and_Civics": "History",
+    "biz/Finance": "Economics",
+    "biz/Accounting": "Economics",
+    "biz/Economics": "Economics"
+  },
+  "wiki_second": {
+    "Mathematics": "Mathematics",
+    "Physics": "Physics",
+    "Chemistry": "Chemistry",
+    "Biology": "Biology",
+    "Computer science": "Computer Science",
+    "History": "History",
+    "Languages and literature": "Literature",
+    "Economics": "Economics",
+    "Business": "Economics",
+    "Space science": "Physics"
+  }
+}
