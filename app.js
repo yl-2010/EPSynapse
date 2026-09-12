@@ -93,6 +93,39 @@
     sheet.hidden = true;
   }
 
+  function closeChatOverlay() {
+    const minimize = document.querySelector("[data-edu-chat-minimize]");
+    if (minimize) {
+      minimize.click();
+      return;
+    }
+    const chat = document.getElementById("edu-chat");
+    if (!chat) return;
+    chat.dataset.state = "closed";
+    chat.classList.remove("is-open", "has-panel");
+    const panel = chat.querySelector(".yan-chat-panel");
+    if (panel) {
+      panel.hidden = true;
+      panel.setAttribute("aria-hidden", "true");
+    }
+    const launcher = chat.querySelector(".yan-chat-launcher");
+    if (launcher) {
+      launcher.setAttribute("aria-expanded", "false");
+      launcher.tabIndex = 0;
+    }
+    const input = chat.querySelector(".yan-chat-input");
+    if (input) input.tabIndex = -1;
+  }
+
+  function goHome() {
+    closeSheet();
+    closeChatOverlay();
+    if (loading) loading.hidden = true;
+    if (stage) stage.hidden = false;
+    renderHome(lastHome);
+    window.scrollTo(0, 0);
+  }
+
   function panelHtml(title, body, filterId, extraClass, filtersHtml) {
     return `<section class="edu-panel${extraClass ? " " + extraClass : ""}" data-liquid-glass="rounded" data-filter-id="${escapeHtml(filterId)}">
       <div class="edu-panel-head"><h2 class="edu-panel-title">${escapeHtml(title)}</h2>${filtersHtml || ""}</div>
@@ -435,6 +468,7 @@
     }
   }
 
+  document.getElementById("home-open").addEventListener("click", goHome);
   document.getElementById("settings-open").addEventListener("click", openSheet);
   document.getElementById("settings-close").addEventListener("click", () => {
     closeSheet();

@@ -437,6 +437,17 @@ html[data-resolved-theme="dark"] .edu-check.lg-refraction::after {
     0 0 0 1.5px color-mix(in srgb, var(--accent) 50%, transparent);
 }
 
+.c-bl {
+  bottom: var(--corner-pad);
+  left: var(--corner-pad);
+  width: var(--corner-orb);
+  height: var(--corner-orb);
+  color: var(--accent);
+  box-shadow:
+    0 6px var(--lg-outer-shadow-blur) var(--lg-outer-shadow),
+    0 0 0 1.5px color-mix(in srgb, var(--accent) 50%, transparent);
+}
+
 .c-tr {
   /* Empty theme orb: above every page element (no chat on this site) */
   z-index: 100;
@@ -2294,10 +2305,20 @@ a.yan-chat-widget {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1.5rem 1rem;
-  background: rgba(7, 21, 37, 0.28);
-  backdrop-filter: blur(18px) saturate(1.3);
-  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  padding: 1.25rem 1rem;
+  background: rgba(11, 31, 58, 0.42);
+  backdrop-filter: blur(20px) saturate(1.25);
+  -webkit-backdrop-filter: blur(20px) saturate(1.25);
+}
+
+html[data-resolved-theme="dark"] .edu-sheet-backdrop {
+  background: rgba(4, 12, 24, 0.62);
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-resolved-theme="light"]) .edu-sheet-backdrop {
+    background: rgba(4, 12, 24, 0.62);
+  }
 }
 
 .edu-sheet-backdrop[hidden] {
@@ -2305,19 +2326,50 @@ a.yan-chat-widget {
 }
 
 .edu-sheet {
+  --lg-filter: none;
+  --lg-tint-rgb: 244, 247, 251;
+  --lg-tint-opacity: 0.88;
+  --lg-fallback-tint: 0.92;
   position: relative;
   z-index: 121;
-  width: min(28rem, calc(100vw - 2rem));
-  max-height: min(36rem, calc(100vh - 3rem));
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  width: min(32rem, calc(100vw - 2rem));
+  max-height: min(52rem, calc(100dvh - 2rem));
+  overflow: hidden;
   isolation: isolate;
-  --lg-filter: none;
-  border: 0;
-  border-radius: 22px;
-  padding: 1.15rem 1.2rem 1rem;
-  background: transparent;
-  box-shadow: 0 10px var(--lg-outer-shadow-blur) var(--lg-outer-shadow);
+  border: 1px solid color-mix(in srgb, #fff 70%, var(--panel-brd));
+  border-radius: 24px;
+  padding: 0;
+  background: color-mix(in srgb, #f4f7fb 86%, transparent);
+  box-shadow:
+    0 18px 48px rgba(11, 31, 58, 0.22),
+    0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent);
   color: var(--fg);
+}
+
+html[data-resolved-theme="dark"] .edu-sheet {
+  --lg-tint-rgb: 10, 22, 40;
+  --lg-tint-opacity: 0.9;
+  --lg-fallback-tint: 0.88;
+  background: color-mix(in srgb, #0b1f3a 88%, transparent);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.48),
+    0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-resolved-theme="light"]) .edu-sheet {
+    --lg-tint-rgb: 10, 22, 40;
+    --lg-tint-opacity: 0.9;
+    --lg-fallback-tint: 0.88;
+    background: color-mix(in srgb, #0b1f3a 88%, transparent);
+    border-color: rgba(255, 255, 255, 0.12);
+    box-shadow:
+      0 18px 48px rgba(0, 0, 0, 0.48),
+      0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+  }
 }
 
 .edu-sheet > * {
@@ -2326,68 +2378,136 @@ a.yan-chat-widget {
 }
 
 .edu-sheet-head {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
-  margin: 0 0 0.75rem;
-  padding-bottom: 0.55rem;
+  gap: 0.85rem;
+  margin: 0;
+  padding: 1.05rem 1.2rem 0.85rem;
   border-bottom: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  background: color-mix(in srgb, #f4f7fb 92%, transparent);
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+}
+
+html[data-resolved-theme="dark"] .edu-sheet-head {
+  background: color-mix(in srgb, #0b1f3a 94%, transparent);
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-resolved-theme="light"]) .edu-sheet-head {
+    background: color-mix(in srgb, #0b1f3a 94%, transparent);
+  }
 }
 
 .edu-sheet-head .edu-panel-title {
   margin: 0;
 }
 
+.edu-sheet-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.95rem 1.2rem 1.15rem;
+  overscroll-behavior: contain;
+}
+
 .edu-sheet-close {
   --lg-filter: none;
-  flex: 0 0 1.7rem;
-  width: 1.7rem;
-  height: 1.7rem;
+  --lg-tint-rgb: 232, 238, 246;
+  --lg-tint-opacity: 0.62;
+  flex: 0 0 2.35rem;
+  width: 2.35rem;
+  height: 2.35rem;
   margin: 0;
   padding: 0;
-  border: 0;
+  border: 1px solid color-mix(in srgb, var(--fg) 12%, transparent);
   border-radius: 50%;
   display: grid;
   place-items: center;
+  overflow: visible;
   color: var(--fg);
-  background: transparent;
+  background: color-mix(in srgb, #fff 72%, transparent);
   isolation: isolate;
-  box-shadow: 0 3px var(--lg-outer-shadow-blur) var(--lg-outer-shadow);
+  box-shadow: 0 3px 10px rgba(11, 31, 58, 0.12);
   cursor: pointer;
+}
+
+html[data-resolved-theme="dark"] .edu-sheet-close {
+  --lg-tint-rgb: 18, 34, 56;
+  --lg-tint-opacity: 0.7;
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-resolved-theme="light"]) .edu-sheet-close {
+    --lg-tint-rgb: 18, 34, 56;
+    --lg-tint-opacity: 0.7;
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.16);
+  }
 }
 
 .edu-sheet-close svg {
   position: relative;
   z-index: 2;
-  width: 48%;
-  height: 48%;
+  width: 42%;
+  height: 42%;
 }
 
 .edu-sheet label {
   display: block;
   font-size: var(--text-footnote);
-  font-weight: 600;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  color: var(--fg);
+  margin: 0.15rem 0 0.4rem;
+}
+
+.edu-sheet .edu-empty {
   color: var(--muted);
-  margin: 0 0 0.35rem;
 }
 
 .edu-sheet-field {
   --lg-filter: none;
+  --lg-tint-rgb: 255, 255, 255;
+  --lg-tint-opacity: 0.62;
+  --lg-fallback-tint: 0.72;
   position: relative;
   isolation: isolate;
   display: block;
   width: 100%;
-  margin: 0 0 0.85rem;
+  margin: 0 0 0.9rem;
   border-radius: 14px;
-  background: transparent;
-  box-shadow: 0 4px var(--lg-outer-shadow-blur) var(--lg-outer-shadow);
+  background: color-mix(in srgb, #fff 78%, var(--bg-0));
+  border: 1px solid color-mix(in srgb, var(--fg) 10%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+html[data-resolved-theme="dark"] .edu-sheet-field {
+  --lg-tint-rgb: 16, 32, 54;
+  --lg-tint-opacity: 0.72;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-resolved-theme="light"]) .edu-sheet-field {
+    --lg-tint-rgb: 16, 32, 54;
+    --lg-tint-opacity: 0.72;
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.14);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
 }
 
 .edu-sheet-field input,
 .edu-sheet-field select {
   position: relative;
-  z-index: 2;
+  z-index: 3;
   display: block;
   width: 100%;
   box-sizing: border-box;
@@ -2397,10 +2517,20 @@ a.yan-chat-widget {
   background: transparent;
   border: 0;
   border-radius: inherit;
-  padding: 0.6rem 0.8rem;
+  padding: 0.68rem 0.85rem;
   outline: none;
   appearance: none;
   -webkit-appearance: none;
+}
+
+.edu-sheet-field input::placeholder {
+  color: color-mix(in srgb, var(--muted) 82%, var(--fg));
+  opacity: 1;
+}
+
+.edu-sheet-field input:focus,
+.edu-sheet-field select:focus {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 70%, transparent);
 }
 
 .edu-sheet-field select {
@@ -2411,25 +2541,47 @@ a.yan-chat-widget {
 .edu-sheet-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.45rem;
-  margin: 0 0 0.85rem;
+  align-items: stretch;
+  gap: 0.5rem;
+  margin: 0.15rem 0 0.9rem;
 }
 
 .edu-sheet-btn {
   --lg-filter: none;
+  --lg-tint-rgb: 232, 238, 246;
+  --lg-tint-opacity: 0.55;
   position: relative;
   isolation: isolate;
+  flex: 1 1 8.5rem;
   margin: 0;
-  padding: 0.5rem 0.95rem;
-  border: 0;
+  padding: 0.62rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--fg) 10%, transparent);
   border-radius: 14px;
   font: inherit;
   font-size: var(--text-subhead);
-  font-weight: 600;
+  font-weight: 650;
+  line-height: 1.2;
+  text-align: center;
   color: var(--fg);
-  background: transparent;
-  box-shadow: 0 4px var(--lg-outer-shadow-blur) var(--lg-outer-shadow);
+  background: color-mix(in srgb, #fff 62%, transparent);
+  box-shadow: 0 2px 8px rgba(11, 31, 58, 0.08);
   cursor: pointer;
+}
+
+html[data-resolved-theme="dark"] .edu-sheet-btn {
+  --lg-tint-rgb: 18, 34, 56;
+  --lg-tint-opacity: 0.58;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-resolved-theme="light"]) .edu-sheet-btn {
+    --lg-tint-rgb: 18, 34, 56;
+    --lg-tint-opacity: 0.58;
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.14);
+  }
 }
 
 .edu-sheet-btn > * {
@@ -2437,15 +2589,53 @@ a.yan-chat-widget {
   z-index: 2;
 }
 
-.edu-sheet-btn--gold {
+.edu-sheet-btn--gold,
+html[data-resolved-theme="dark"] .edu-sheet-btn--gold {
   color: #0b1f3a;
+  background: #eba700;
+  border-color: color-mix(in srgb, #eba700 70%, #0b1f3a);
   --lg-tint-rgb: var(--accent-rgb);
-  --lg-tint-opacity: 0.72;
+  --lg-tint-opacity: 0;
 }
 
-html[data-resolved-theme="dark"] .edu-sheet-btn--gold {
-  color: #fff;
-  --lg-tint-opacity: 0.55;
+@media (prefers-color-scheme: dark) {
+  html:not([data-resolved-theme="light"]) .edu-sheet-btn--gold {
+    color: #0b1f3a;
+    background: #eba700;
+    --lg-tint-opacity: 0;
+  }
+}
+
+.edu-sheet::before,
+.edu-sheet-field::before,
+.edu-sheet-btn::before,
+.edu-sheet-close::before {
+  z-index: 0;
+}
+
+.edu-sheet-btn--gold::before {
+  display: none;
+}
+
+.edu-sheet.lg-refraction::after,
+.edu-sheet-field.lg-refraction::after,
+.edu-sheet-btn.lg-refraction::after,
+.edu-sheet-close.lg-refraction::after,
+html.lg-chrome .edu-sheet.lg-static.lg-refraction::after,
+html.lg-chrome .edu-sheet-field.lg-static.lg-refraction::after,
+html.lg-chrome .edu-sheet-btn.lg-static.lg-refraction::after,
+html.lg-chrome[data-resolved-theme="dark"] .edu-sheet.lg-static.lg-refraction::after,
+html.lg-chrome[data-resolved-theme="dark"] .edu-sheet-field.lg-static.lg-refraction::after,
+html.lg-chrome[data-resolved-theme="dark"] .edu-sheet-btn.lg-static.lg-refraction::after {
+  display: none;
+}
+
+.edu-sheet.lg-fallback,
+.edu-sheet-field.lg-fallback,
+.edu-sheet-btn.lg-fallback,
+.edu-sheet-close.lg-fallback {
+  backdrop-filter: blur(16px) saturate(1.35);
+  -webkit-backdrop-filter: blur(16px) saturate(1.35);
 }
 
 .edu-tag-CW,
