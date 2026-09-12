@@ -762,9 +762,29 @@
     return Number.isFinite(n) ? n : null;
   }
 
+  function letterFromPercent(score) {
+    const n = scoreNumber(score);
+    if (n == null) return "";
+    if (n >= 93) return "A";
+    if (n >= 90) return "A-";
+    if (n >= 87) return "B+";
+    if (n >= 83) return "B";
+    if (n >= 80) return "B-";
+    if (n >= 77) return "C+";
+    if (n >= 73) return "C";
+    if (n >= 70) return "C-";
+    if (n >= 67) return "D+";
+    if (n >= 63) return "D";
+    if (n >= 60) return "D-";
+    return "F";
+  }
+
   function formatCourseGrade(row) {
-    const letter = String(row?.currentGrade || "").trim();
-    const score = scoreNumber(row?.currentScore);
+    let score = scoreNumber(row?.currentScore);
+    let letter = String(row?.currentGrade || "").trim();
+    // Canvas final scores treat missing work as 0. That is not the grade page.
+    if (score === 0 && !letter) score = null;
+    if (score != null && !letter) letter = letterFromPercent(score);
     const pct = score != null ? `${trimNum(score)}%` : "";
     if (letter && pct) return `${letter} ${pct}`;
     return letter || pct || "—";
@@ -1005,7 +1025,7 @@
 
     appEl.classList.add("is-settled");
     appEl.innerHTML = `
-      <p class="edu-home-mark">EPSynapse <a class="edu-home-research" data-route href="/grades">Grades</a> <a class="edu-home-research" href="/research">Research</a></p>
+      <p class="edu-home-mark">EPSynapse</p>
       <div class="edu-grid edu-grid--home">
         <div class="edu-col edu-col--main">
           ${panelHtml("TODO", listOrEmpty(open.map(todoRow).join(""), todoEmpty), "lg-edu-todo", "", todoExpanded ? filterBarHtml("todo") : "", collapseTitle("TODO", "todos", todoExpanded))}
@@ -1266,7 +1286,7 @@
       .join("");
     appEl.classList.add("is-settled");
     appEl.innerHTML = `
-      <p class="edu-home-mark"><a class="edu-home-research" data-route href="/">Home</a> Grades</p>
+      <p class="edu-home-mark"><a class="edu-home-research" data-route href="/">Home</a></p>
       <div class="edu-grid edu-grid--grades">
         <div class="edu-col edu-col--main">
           ${panels || `<p class="edu-empty">${escapeHtml(empty)}</p>`}
@@ -1342,9 +1362,12 @@
     const mergedCourses = courseRows.map((c) => {
       const g = gradeById.get(String(c.id));
       if (!g) return c;
+      const a = scoreNumber(c.currentScore);
+      const b = scoreNumber(g.currentScore);
+      const currentScore = a == null ? b : b == null ? a : a === 0 && b !== 0 ? b : a;
       return {
         ...c,
-        currentScore: c.currentScore != null ? c.currentScore : g.currentScore,
+        currentScore,
         currentGrade: c.currentGrade || g.currentGrade,
         finalScore: c.finalScore != null ? c.finalScore : g.finalScore,
         finalGrade: c.finalGrade || g.finalGrade,
