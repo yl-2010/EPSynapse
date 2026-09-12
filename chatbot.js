@@ -731,6 +731,22 @@
     }
     const text = String(raw || "").trim();
     if (!text || busy) return;
+    const hasKey =
+      Boolean(localStorage.getItem(LS_KEY)) ||
+      document.documentElement.dataset.modelKeySet === "1";
+    if (!hasKey) {
+      if (state() !== "panel") setState("panel");
+      messages.push({ role: "user", content: text });
+      appendTurn("user", text);
+      appendTurn(
+        "assistant",
+        "Do not paste a key in this chat. Bottom-left gear → Chat key, paste the Groq key, tap Save key, then ask again."
+      );
+      if (input) input.value = "";
+      syncComposerSize();
+      window.__epsynapseOpenChatKey?.();
+      return;
+    }
     if (state() !== "panel") setState("panel");
     messages.push({ role: "user", content: text });
     appendTurn("user", text);

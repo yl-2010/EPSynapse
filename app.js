@@ -433,7 +433,42 @@
     }
     localStorage.setItem(LS_PROV, providerSel.value || id);
     document.documentElement.dataset.modelProvider = providerSel.value || id;
+    document.documentElement.dataset.modelKeySet = accountHasKey() ? "1" : "";
     refreshKeyStatus();
+  }
+
+  async function saveChatKey() {
+    if (!signedInViaGoogle()) {
+      setStatus(keyStatus, NEED_GOOGLE);
+      return false;
+    }
+    const key = document.getElementById("modelKey").value.trim();
+    if (!key) {
+      setStatus(keyStatus, "Paste the Groq key here, then tap Save key.");
+      return false;
+    }
+    setStatus(keyStatus, "Saving…");
+    try {
+      me = await api("/v1/me/agent", {
+        method: "POST",
+        body: JSON.stringify({
+          provider: providerSel.value || "groq",
+          modelKey: key,
+        }),
+      });
+      localStorage.removeItem(LS_KEY);
+      localStorage.setItem(LS_PROV, providerSel.value || "groq");
+      document.getElementById("modelKey").value = "";
+      const entry = document.getElementById("key-entry");
+      if (entry) delete entry.dataset.replace;
+      applyAgentFromMe();
+      setStatus(keyStatus, "Saved on this account. Chat can use it now.");
+      closePane();
+      return true;
+    } catch (err) {
+      setStatus(keyStatus, err.message || "Could not save the key.");
+      return false;
+    }
   }
 
   async function migrateLocalKey() {
@@ -1267,7 +1302,12 @@
       setStatus(keyStatus, "Paste a new key to replace the one on this account.");
       return;
     }
-    setStatus(keyStatus, signedInViaGoogle() ? "One key for the website and iPhone." : "");
+    setStatus(
+      keyStatus,
+      signedInViaGoogle()
+        ? "Paste the Groq key here and tap Save key. Enter also saves. Then go back to chat."
+        : ""
+    );
   }
 
   function fillProviders(list) {
@@ -1478,6 +1518,10 @@
 
   form.addEventListener("submit", async (ev) => {
     ev.preventDefault();
+    if (activePane() === "chat" || document.getElementById("modelKey")?.value.trim()) {
+      await saveChatKey();
+      return;
+    }
     if (!signedInViaGoogle()) {
       setStatus(statusEl, NEED_GOOGLE);
       return;
@@ -1783,34 +1827,14 @@
     }
   });
 
-  document.getElementById("key-save").addEventListener("click", async () => {
-    if (!signedInViaGoogle()) {
-      setStatus(keyStatus, NEED_GOOGLE);
-      return;
-    }
-    const key = document.getElementById("modelKey").value.trim();
-    if (!key) {
-      setStatus(keyStatus, "Paste a key first.");
-      return;
-    }
-    setStatus(keyStatus, "Saving…");
-    try {
-      me = await api("/v1/me/agent", {
-        method: "POST",
-        body: JSON.stringify({
-          provider: providerSel.value || "groq",
-          modelKey: key,
-        }),
-      });
-      localStorage.removeItem(LS_KEY);
-      localStorage.setItem(LS_PROV, providerSel.value || "groq");
-      document.getElementById("modelKey").value = "";
-      const entry = document.getElementById("key-entry");
-      if (entry) delete entry.dataset.replace;
-      applyAgentFromMe();
-    } catch (err) {
-      setStatus(keyStatus, err.message || "Could not save the key.");
-    }
+  document.getElementById("key-save").addEventListener("click", () => {
+    saveChatKey();
+  });
+
+  document.getElementById("modelKey")?.addEventListener("keydown", (ev) => {
+    if (ev.key !== "Enter") return;
+    ev.preventDefault();
+    saveChatKey();
   });
 
   document.getElementById("key-replace")?.addEventListener("click", () => {
