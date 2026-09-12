@@ -28,11 +28,8 @@ struct ChatOverlay: View {
             composer
         }
         .background {
-            GeometryReader { geo in
-                Color.clear.preference(key: AgentOverlayFrameKey.self, value: geo.frame(in: .global))
-            }
+            AgentFrameProbe { overlayFrame = $0 }
         }
-        .onPreferenceChange(AgentOverlayFrameKey.self) { overlayFrame = $0 }
         .offset(y: dragY)
         .background {
             if isOpen {
@@ -302,10 +299,40 @@ struct ChatOverlay: View {
     }
 }
 
-private struct AgentOverlayFrameKey: PreferenceKey {
-    static var defaultValue: CGRect = .zero
-    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
-        value = nextValue()
+/// Reports the agent chrome in window coordinates, including keyboard lift.
+private struct AgentFrameProbe: UIViewRepresentable {
+    var onChange: (CGRect) -> Void
+
+    func makeUIView(context: Context) -> AgentFrameProbeView {
+        let view = AgentFrameProbeView()
+        view.onChange = onChange
+        view.isUserInteractionEnabled = false
+        view.backgroundColor = .clear
+        return view
+    }
+
+    func updateUIView(_ view: AgentFrameProbeView, context: Context) {
+        view.onChange = onChange
+        view.report()
+    }
+}
+
+final class AgentFrameProbeView: UIView {
+    var onChange: ((CGRect) -> Void)?
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        report()
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        report()
+    }
+
+    func report() {
+        guard window != nil, bounds.width > 1, bounds.height > 1 else { return }
+        onChange?(convert(bounds, to: nil))
     }
 }
 
@@ -421,18 +448,39 @@ final class AgentDismissInstaller: UIView, UIGestureRecognizerDelegate {
     }
 
     private func hitBar(_ location: CGPoint) -> Bool {
-        var bar = overlayFrame
-        if bar.height < 8, let window = hostWindow ?? window {
-            bar = CGRect(
-                x: 0,
-                y: window.bounds.maxY - 88,
-                width: window.bounds.width,
-                height: 88
-            )
-        }
-        bar = bar.insetBy(dx: -36, dy: 0)
+        let bar = hitRect()
         guard bar.height > 8 else { return false }
         return location.y >= bar.minY && location.x >= bar.minX && location.x <= bar.maxX
+    }
+
+    /// Top of the input bar, which sits on the keyboard when the keys are up.
+    private func hitRect() -> CGRect {
+        let window = hostWindow ?? self.window
+        var keyboard = AgentKeyboardScrub.keyboardFrame
+        if let window, keyboard.height > 20 {
+            keyboard = window.convert(keyboard, from: nil)
+        }
+
+        let barHeight = max(overlayFrame.height, 56)
+        var minY = overlayFrame.minY
+        var minX = overlayFrame.minX
+        var width = overlayFrame.width
+
+        if AgentKeyboardScrub.isKeyboardUp {
+            let liftedTop = keyboard.minY - barHeight
+            if minY < 8 || overlayFrame.height < 8 || minY > keyboard.minY - 8 {
+                minY = liftedTop
+            } else {
+                minY = min(minY, liftedTop)
+            }
+        }
+
+        if width < 8, let window {
+            minX = 0
+            width = window.bounds.width
+        }
+
+        return CGRect(x: minX - 36, y: minY, width: width + 72, height: 4000)
     }
 
     override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
@@ -458,7 +506,16 @@ enum AgentKeyboardScrub {
     private static weak var host: UIView?
     private(set) static var coverage: CGFloat = 0
     private static var lastKeyboardFrame: CGRect = .zero
-    private static var observer: NSObjectProtocol?
+    private static var observers: [NSObjectProtocol] = []
+
+    static var keyboardFrame: CGRect { lastKeyboardFrame }
+
+    static var isKeyboardUp: Bool {
+        let frame = lastKeyboardFrame
+        guard frame.height > 40 else { return false }
+        let bottom = UIScreen.main.bounds.maxY
+        return frame.minY < bottom - 20
+    }
 
     static func prepare() {
         listenIfNeeded()
@@ -530,15 +587,29 @@ enum AgentKeyboardScrub {
     }
 
     private static func listenIfNeeded() {
-        guard observer == nil else { return }
-        observer = NotificationCenter.default.addObserver(
-            forName: UIResponder.keyboardWillChangeFrameNotification,
-            object: nil,
-            queue: .main
-        ) { note in
-            if let frame = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
-                lastKeyboardFrame = frame
-            }
+        guard observers.isEmpty else { return }
+        let center = NotificationCenter.default
+        let names = [
+            UIResponder.keyboardWillShowNotification,
+            UIResponder.keyboardDidShowNotification,
+            UIResponder.keyboardWillChangeFrameNotification,
+            UIResponder.keyboardDidChangeFrameNotification,
+            UIResponder.keyboardWillHideNotification,
+            UIResponder.keyboardDidHideNotification,
+        ]
+        for name in names {
+            observers.append(
+                center.addObserver(forName: name, object: nil, queue: .main) { note in
+                    if name == UIResponder.keyboardWillHideNotification
+                        || name == UIResponder.keyboardDidHideNotification {
+                        lastKeyboardFrame = .zero
+                        return
+                    }
+                    if let frame = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
+                        lastKeyboardFrame = frame
+                    }
+                }
+            )
         }
     }
 
