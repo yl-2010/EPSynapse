@@ -1,21 +1,22 @@
 /**
- * School Outlook via the Outlook on the web public client.
- * Mail.Read / Mail.Send work. Files.ReadWrite does not (AADSTS65002).
- * Tokens stay on the student profile. No Entra app registration.
+ * School Outlook via Microsoft Graph.
+ * Graph Explorer is already preauthorized for Graph Mail.
+ * Outlook on the web is not. That client returns AADSTS65002 against Exchange.
+ * Override with MICROSOFT_CLIENT_ID if we later register EPSynapse itself.
  */
 
-export const OUTLOOK_WEB_CLIENT_ID = "9199bf20-a13f-4107-85dc-02114787ef48";
 export const GRAPH_EXPLORER_CLIENT_ID = "de8bc8b5-d9f9-48b1-a8ad-b748da725064";
 export const EPS_TENANT_ID = "b2681e8b-dd20-46cf-b163-371a2d7c6014";
 export const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
 export const OUTLOOK_REST_BASE = "https://outlook.office.com/api/v2.0";
-export const OWA_URL = "https://outlook.office.com/mail/";
 
 const LOGIN = `https://login.microsoftonline.com/${EPS_TENANT_ID}/oauth2/v2.0`;
-const OWA_SCOPE =
-  "https://outlook.office.com/Mail.Read https://outlook.office.com/Mail.Send offline_access openid profile";
 const GRAPH_SCOPE =
   "https://graph.microsoft.com/Mail.Read https://graph.microsoft.com/Mail.Send offline_access openid profile";
+
+export function outlookClientId() {
+  return String(process.env.MICROSOFT_CLIENT_ID || "").trim() || GRAPH_EXPLORER_CLIENT_ID;
+}
 const TOKEN_SKEW_S = 90;
 const GRAPH_APP_ID = "00000003-0000-0000-c000-000000000000";
 const DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code";
@@ -136,40 +137,25 @@ async function requestDeviceCode(clientId, scope) {
   };
 }
 
-export function implicitAuthorizeUrl() {
-  const params = new URLSearchParams({
-    client_id: OUTLOOK_WEB_CLIENT_ID,
-    response_type: "token",
-    redirect_uri: OWA_URL,
-    scope: OWA_SCOPE,
-    nonce: "epsynapse-outlook",
-  });
-  return `${LOGIN}/authorize?${params}`;
-}
-
 export async function startDeviceCode() {
   try {
-    const owa = await requestDeviceCode(OUTLOOK_WEB_CLIENT_ID, OWA_SCOPE);
-    if (owa.ok) return owa;
-    const graph = await requestDeviceCode(GRAPH_EXPLORER_CLIENT_ID, GRAPH_SCOPE);
+    const graph = await requestDeviceCode(outlookClientId(), GRAPH_SCOPE);
     if (graph.ok) return graph;
     return {
       ok: false,
-      error: owa.error || graph.error || "Microsoft would not start Outlook sign-in.",
-      authorizeUrl: implicitAuthorizeUrl(),
+      error: graph.error || "Microsoft would not start Outlook sign-in.",
     };
   } catch (err) {
     return {
       ok: false,
       error: err instanceof Error ? err.message : "device code failed",
-      authorizeUrl: implicitAuthorizeUrl(),
     };
   }
 }
 
 export async function pollDeviceCode(deviceCode, clientId) {
   const code = String(deviceCode || "").trim();
-  const id = String(clientId || "").trim() || OUTLOOK_WEB_CLIENT_ID;
+  const id = String(clientId || "").trim() || outlookClientId();
   if (!code) return { ok: false, error: "missing device_code" };
   let data;
   try {
@@ -186,7 +172,7 @@ export async function pollDeviceCode(deviceCode, clientId) {
     if (res.ok && data.access_token) {
       return tokenPayload(data.access_token, data.refresh_token, {
         clientId: id,
-        scope: id === GRAPH_EXPLORER_CLIENT_ID ? GRAPH_SCOPE : OWA_SCOPE,
+        scope: GRAPH_SCOPE,
       });
     }
   } catch (err) {
@@ -207,13 +193,13 @@ export function acceptPastedToken(accessToken) {
   if (!isMailAudience(token)) {
     return { ok: false, error: "token audience is not Outlook or Graph mail" };
   }
-  return tokenPayload(token, "", { clientId: OUTLOOK_WEB_CLIENT_ID, scope: OWA_SCOPE });
+  return tokenPayload(token, "", { clientId: outlookClientId(), scope: GRAPH_SCOPE });
 }
 
 export async function refreshAccessToken(refreshToken, clientId, scope) {
   const rt = String(refreshToken || "").trim();
-  const id = String(clientId || "").trim() || OUTLOOK_WEB_CLIENT_ID;
-  const scp = String(scope || "").trim() || OWA_SCOPE;
+  const id = String(clientId || "").trim() || outlookClientId();
+  const scp = String(scope || "").trim() || GRAPH_SCOPE;
   if (!rt) return { ok: false, error: "no refresh token" };
   try {
     const res = await fetch(`${LOGIN}/token`, {
@@ -447,5 +433,6 @@ export function isConnected(outlook) {
   const token = String(outlook?.accessToken || "").trim();
   if (!token) return false;
   const exp = Number(outlook.exp) || jwtExp(token);
+  if (!exp) return true;
   return exp * 1000 > Date.now();
 }

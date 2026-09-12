@@ -62,6 +62,7 @@ import {
   createSession,
   destroySession,
   googleFileId,
+  loadStudentByFileId,
   mergeGraph,
   mergeOutlook,
   publicProfile,
@@ -157,6 +158,60 @@ async function persistGraph(student, patch) {
 async function persistOutlook(student, patch) {
   mergeOutlook(student, patch);
   return saveStudent(student);
+}
+
+const studentLocks = new Map();
+
+function withStudentLock(fileId, fn) {
+  const key = String(fileId || "");
+  const prev = studentLocks.get(key) || Promise.resolve();
+  const next = prev.then(fn, fn);
+  studentLocks.set(
+    key,
+    next.then(
+      () => {},
+      () => {}
+    )
+  );
+  return next;
+}
+
+function waitingDeviceError(error) {
+  const e = String(error || "");
+  return e === "authorization_pending" || e === "slow_down";
+}
+
+function terminalDeviceError(error) {
+  const e = String(error || "").toLowerCase();
+  return (
+    e === "expired_token" ||
+    e === "authorization_declined" ||
+    e === "access_denied" ||
+    e === "bad_verification_code" ||
+    e.includes("aadsts70016") ||
+    e.includes("expired") ||
+    e.includes("declined")
+  );
+}
+
+const BROKEN_OUTLOOK_WEB_CLIENT = "9199bf20-a13f-4107-85dc-02114787ef48";
+
+function livePending(pending) {
+  if (!pending?.device_code || !pending.user_code) return null;
+  if (String(pending.clientId || "") === BROKEN_OUTLOOK_WEB_CLIENT) return null;
+  const exp = Number(pending.expiresAt) || 0;
+  if (exp && exp < Date.now()) return null;
+  return pending;
+}
+
+function pendingStartPayload(pending) {
+  return {
+    user_code: pending.user_code,
+    verification_uri: pending.verification_uri || "",
+    verification_uri_complete: pending.verification_uri_complete || "",
+    message: pending.message || "",
+    interval: pending.interval || 5,
+  };
 }
 
 async function graphToken(student) {
@@ -465,6 +520,8 @@ app.post("/v1/me/onedrive/start", async (req, res) => {
   try {
     const student = await requireStudent(req, res);
     if (!student) return;
+    const existing = livePending(student.graph?.pending);
+    if (existing) return res.json(pendingStartPayload(existing));
     const started = await startDeviceCode();
     if (!started.ok) {
       return res.json({
@@ -481,6 +538,7 @@ app.post("/v1/me/onedrive/start", async (req, res) => {
         expiresAt: started.expiresAt,
         user_code: started.user_code,
         verification_uri: started.verification_uri,
+        verification_uri_complete: started.verification_uri_complete || "",
         message: started.message,
       },
     });
@@ -500,25 +558,40 @@ app.get("/v1/me/onedrive/status", async (req, res) => {
   try {
     const student = await requireStudent(req, res);
     if (!student) return;
-    const pending = student.graph?.pending;
-    if (pending?.device_code) {
-      const poll = await pollDeviceCode(pending.device_code);
+    const fileId = googleFileId(student.googleSub);
+    const { current, pollError } = await withStudentLock(fileId, async () => {
+      const current = (await loadStudentByFileId(fileId)) || student;
+      const pending = current.graph?.pending;
+      if (!pending?.device_code) return { current, pollError: "" };
+      if (!livePending(pending)) {
+        await persistGraph(current, { pending: null });
+        return { current, pollError: "That Microsoft sign-in expired. Connect again." };
+      }
+      const poll = await pollDeviceCode(pending.device_code, pending.clientId);
       if (poll.ok) {
-        await persistGraph(student, {
+        await persistGraph(current, {
           accessToken: poll.accessToken,
           refreshToken: poll.refreshToken,
           exp: poll.exp,
           email: poll.email,
           pending: null,
         });
-      } else if (!poll.pending) {
-        await persistGraph(student, { pending: null });
+        return { current, pollError: "" };
       }
-    }
+      if (poll.pending || waitingDeviceError(poll.error)) {
+        return { current, pollError: "" };
+      }
+      if (terminalDeviceError(poll.error)) {
+        await persistGraph(current, { pending: null });
+        return { current, pollError: poll.error };
+      }
+      return { current, pollError: poll.error || "" };
+    });
     return res.json({
-      connected: isConnected(student.graph),
-      pending: publicPending(student.graph),
-      email: student.graph?.email || "",
+      connected: isConnected(current.graph),
+      pending: publicPending(current.graph),
+      email: current.graph?.email || "",
+      error: pollError || "",
     });
   } catch (err) {
     return fail(res, err);
@@ -590,13 +663,14 @@ app.post("/v1/me/outlook/start", async (req, res) => {
   try {
     const student = await requireStudent(req, res);
     if (!student) return;
+    const existing = livePending(student.outlook?.pending);
+    if (existing) return res.json(pendingStartPayload(existing));
     const started = await startOutlookCode();
     if (!started.ok) {
       return res.json({
         user_code: "",
         verification_uri: "",
         message: started.error || "Microsoft would not start Outlook sign-in.",
-        authorizeUrl: started.authorizeUrl || "",
       });
     }
     await persistOutlook(student, {
@@ -608,6 +682,7 @@ app.post("/v1/me/outlook/start", async (req, res) => {
         expiresAt: started.expiresAt,
         user_code: started.user_code,
         verification_uri: started.verification_uri,
+        verification_uri_complete: started.verification_uri_complete || "",
         message: started.message,
       },
     });
@@ -627,11 +702,18 @@ app.get("/v1/me/outlook/status", async (req, res) => {
   try {
     const student = await requireStudent(req, res);
     if (!student) return;
-    const pending = student.outlook?.pending;
-    if (pending?.device_code) {
+    const fileId = googleFileId(student.googleSub);
+    const { current, pollError } = await withStudentLock(fileId, async () => {
+      const current = (await loadStudentByFileId(fileId)) || student;
+      const pending = current.outlook?.pending;
+      if (!pending?.device_code) return { current, pollError: "" };
+      if (!livePending(pending)) {
+        await persistOutlook(current, { pending: null });
+        return { current, pollError: "That Microsoft sign-in expired. Connect again." };
+      }
       const poll = await pollOutlookCode(pending.device_code, pending.clientId);
       if (poll.ok) {
-        await persistOutlook(student, {
+        await persistOutlook(current, {
           accessToken: poll.accessToken,
           refreshToken: poll.refreshToken,
           exp: poll.exp,
@@ -640,14 +722,22 @@ app.get("/v1/me/outlook/status", async (req, res) => {
           scope: poll.scope || pending.scope || "",
           pending: null,
         });
-      } else if (!poll.pending) {
-        await persistOutlook(student, { pending: null });
+        return { current, pollError: "" };
       }
-    }
+      if (poll.pending || waitingDeviceError(poll.error)) {
+        return { current, pollError: "" };
+      }
+      if (terminalDeviceError(poll.error)) {
+        await persistOutlook(current, { pending: null });
+        return { current, pollError: poll.error };
+      }
+      return { current, pollError: poll.error || "" };
+    });
     return res.json({
-      connected: outlookConnected(student.outlook),
-      pending: outlookPending(student.outlook),
-      email: student.outlook?.email || "",
+      connected: outlookConnected(current.outlook),
+      pending: outlookPending(current.outlook),
+      email: current.outlook?.email || "",
+      error: pollError || "",
     });
   } catch (err) {
     return fail(res, err);

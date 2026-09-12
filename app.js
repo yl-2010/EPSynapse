@@ -19,6 +19,8 @@
   let me = null;
   let odPollTimer = 0;
   let olPollTimer = 0;
+  let odPollInFlight = false;
+  let olPollInFlight = false;
   const TAGS = ["CW", "HW", "QA", "MA"];
   const typeFilter = new Set(TAGS);
   let lastHome = {
@@ -285,6 +287,8 @@
       paintAccount();
       paintOnedrive();
       paintOutlook();
+      if (me?.onedrivePending && !me.onedriveConnected) watchOnedrive();
+      if (me?.outlookPending && !me.outlookConnected) watchOutlook();
       await migrateLocalKey();
       await loadDashboard();
     } catch (err) {
@@ -1162,7 +1166,7 @@
     }
     const p = me.onedrivePending;
     if (p && (p.user_code || p.verification_uri)) {
-      setStatus(odStatus, "Enter this code, then sign in with your school email.");
+      setStatus(odStatus, "Enter this code on the Microsoft page, then come back here.");
       showOnedriveCode(p.user_code, p.verification_uri || "https://login.microsoft.com/device");
       paintNavSummaries();
       return;
@@ -1214,7 +1218,7 @@
     }
     const p = me.outlookPending;
     if (p && (p.user_code || p.verification_uri)) {
-      setStatus(olStatus, "Enter this code, then sign in with your school email.");
+      setStatus(olStatus, "Enter this code on the Microsoft page, then come back here.");
       showOutlookCode(p.user_code, p.verification_uri || "https://login.microsoft.com/device");
       paintNavSummaries();
       return;
@@ -1317,6 +1321,8 @@
     paintCanvasToken();
     paintOnedrive();
     paintOutlook();
+    if (me?.onedrivePending && !me.onedriveConnected) watchOnedrive();
+    if (me?.outlookPending && !me.outlookConnected) watchOutlook();
     await initGoogle();
   }
 
@@ -1502,6 +1508,98 @@
     }
   });
 
+  function stopOdPoll() {
+    clearInterval(odPollTimer);
+    odPollTimer = 0;
+  }
+
+  function stopOlPoll() {
+    clearInterval(olPollTimer);
+    olPollTimer = 0;
+  }
+
+  async function tickOnedrive() {
+    if (odPollInFlight) return;
+    odPollInFlight = true;
+    try {
+      const st = await api("/v1/me/onedrive/status", { timeoutMs: 15000 });
+      if (st.connected) {
+        stopOdPoll();
+        me = Object.assign({}, me, {
+          onedriveConnected: true,
+          onedriveEmail: st.email || "",
+          onedrivePending: null,
+        });
+        paintOnedrive();
+        await loadDashboard();
+        return;
+      }
+      if (st.pending && (st.pending.user_code || st.pending.verification_uri)) {
+        me = Object.assign({}, me, { onedrivePending: st.pending });
+        paintOnedrive();
+        return;
+      }
+      stopOdPoll();
+      me = Object.assign({}, me, { onedrivePending: null });
+      paintOnedrive();
+      if (st.error) setStatus(odStatus, st.error);
+    } catch {
+      /* keep polling */
+    } finally {
+      odPollInFlight = false;
+    }
+  }
+
+  async function tickOutlook() {
+    if (olPollInFlight) return;
+    olPollInFlight = true;
+    try {
+      const st = await api("/v1/me/outlook/status", { timeoutMs: 15000 });
+      if (st.connected) {
+        stopOlPoll();
+        me = Object.assign({}, me, {
+          outlookConnected: true,
+          outlookEmail: st.email || "",
+          outlookPending: null,
+        });
+        paintOutlook();
+        await loadDashboard();
+        return;
+      }
+      if (st.pending && (st.pending.user_code || st.pending.verification_uri)) {
+        me = Object.assign({}, me, { outlookPending: st.pending });
+        paintOutlook();
+        return;
+      }
+      stopOlPoll();
+      me = Object.assign({}, me, { outlookPending: null });
+      paintOutlook();
+      if (st.error) setStatus(olStatus, st.error);
+    } catch {
+      /* keep polling */
+    } finally {
+      olPollInFlight = false;
+    }
+  }
+
+  function watchOnedrive() {
+    stopOdPoll();
+    tickOnedrive();
+    odPollTimer = setInterval(tickOnedrive, 4000);
+  }
+
+  function watchOutlook() {
+    stopOlPoll();
+    tickOutlook();
+    olPollTimer = setInterval(tickOutlook, 4000);
+  }
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible") return;
+    if (me?.onedrivePending && !me.onedriveConnected) tickOnedrive();
+    if (me?.outlookPending && !me.outlookConnected) tickOutlook();
+  });
+
   document.getElementById("onedrive-start").addEventListener("click", async () => {
     try {
       if (!signedInViaGoogle()) {
@@ -1518,24 +1616,9 @@
           },
         });
         paintOnedrive();
-        clearInterval(odPollTimer);
-        odPollTimer = setInterval(async () => {
-          try {
-            const st = await api("/v1/me/onedrive/status", { timeoutMs: 15000 });
-            if (st.connected) {
-              clearInterval(odPollTimer);
-              me = Object.assign({}, me, {
-                onedriveConnected: true,
-                onedriveEmail: st.email || "",
-                onedrivePending: null,
-              });
-              paintOnedrive();
-              await loadDashboard();
-            }
-          } catch {
-            /* keep polling */
-          }
-        }, 4000);
+        const openAt = started.verification_uri_complete || started.verification_uri;
+        if (openAt) window.open(openAt, "_blank", "noopener");
+        watchOnedrive();
       } else {
         setStatus(odStatus, started.message || "Microsoft would not start school sign-in.");
         showOnedriveCode("", "");
@@ -1561,28 +1644,9 @@
           },
         });
         paintOutlook();
-        if (started.verification_uri) window.open(started.verification_uri, "_blank", "noopener");
-        clearInterval(olPollTimer);
-        olPollTimer = setInterval(async () => {
-          try {
-            const st = await api("/v1/me/outlook/status", { timeoutMs: 15000 });
-            if (st.connected) {
-              clearInterval(olPollTimer);
-              me = Object.assign({}, me, {
-                outlookConnected: true,
-                outlookEmail: st.email || "",
-                outlookPending: null,
-              });
-              paintOutlook();
-              await loadDashboard();
-            } else if (st.pending && (st.pending.user_code || st.pending.verification_uri)) {
-              me = Object.assign({}, me, { outlookPending: st.pending });
-              paintOutlook();
-            }
-          } catch {
-            /* keep polling */
-          }
-        }, 4000);
+        const openAt = started.verification_uri_complete || started.verification_uri;
+        if (openAt) window.open(openAt, "_blank", "noopener");
+        watchOutlook();
       } else {
         setStatus(olStatus, started.message || "Microsoft would not start Outlook sign-in.");
         showOutlookCode("", "");

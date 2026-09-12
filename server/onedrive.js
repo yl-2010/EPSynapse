@@ -168,16 +168,17 @@ export async function startDeviceCode() {
   }
 }
 
-export async function pollDeviceCode(deviceCode) {
+export async function pollDeviceCode(deviceCode, clientId) {
   const code = String(deviceCode || "").trim();
   if (!code) return pasteFallback("missing device_code");
+  const id = String(clientId || "").trim() || graphClientId();
   let data;
   try {
     const res = await fetch(`${LOGIN}/token`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
-        client_id: graphClientId(),
+        client_id: id,
         grant_type: DEVICE_GRANT,
         device_code: code,
       }),
@@ -379,5 +380,6 @@ export function isConnected(graph) {
   const token = String(graph?.accessToken || "").trim();
   if (!token) return false;
   const exp = Number(graph.exp) || jwtExp(token);
+  if (!exp) return true;
   return exp * 1000 > Date.now();
 }

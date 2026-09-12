@@ -439,7 +439,7 @@ final class SessionStore: ObservableObject {
       odCode = ""
       odURI = ""
     } else if let pending = me.onedrivePending, pending.isActive {
-      onedriveStatus = "Enter this code on the Microsoft page, then sign in with your school email. Allow files access."
+      onedriveStatus = "Enter this code on the Microsoft page, then come back here. Allow files access."
       odCode = pending.user_code
       odURI = pending.verification_uri
     } else {
@@ -453,7 +453,7 @@ final class SessionStore: ObservableObject {
       olCode = ""
       olURI = ""
     } else if let pending = me.outlookPending, pending.isActive {
-      outlookStatus = "Enter this code on the Microsoft page, then sign in with your school email. Allow mail access."
+      outlookStatus = "Enter this code on the Microsoft page, then come back here. Allow mail access."
       olCode = pending.user_code
       olURI = pending.verification_uri
     } else {

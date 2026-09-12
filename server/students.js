@@ -174,6 +174,7 @@ function hydrate(raw) {
 function graphConnected(graph) {
   if (!graph?.accessToken) return false;
   const exp = Number(graph.exp) || 0;
+  if (!exp) return true;
   return exp > Math.floor(Date.now() / 1000) - SKEW_SEC;
 }
 
