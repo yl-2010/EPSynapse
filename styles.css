@@ -66,7 +66,7 @@
     --muted: #9aa8b8;
     --accent: #eba700;
     --hairline: rgba(232, 238, 244, 0.12);
-    --panel-bg: rgba(11, 31, 58, 0.88);
+    --panel-bg: rgba(11, 31, 58, 0.42);
     --panel-brd: rgba(255, 255, 255, 0.1);
     --rim: rgba(255, 255, 255, 0.16);
     --accent-rgb: 235, 167, 0;
@@ -93,7 +93,7 @@ html[data-resolved-theme="dark"] {
   --muted: #9aa8b8;
   --accent: #eba700;
   --hairline: rgba(232, 238, 244, 0.12);
-  --panel-bg: rgba(11, 31, 58, 0.88);
+  --panel-bg: rgba(11, 31, 58, 0.42);
   --panel-brd: rgba(255, 255, 255, 0.1);
   --rim: rgba(255, 255, 255, 0.16);
   --accent-rgb: 235, 167, 0;
@@ -110,6 +110,22 @@ html[data-resolved-theme="dark"] {
   --lg-outer-shadow: rgba(0, 0, 0, 0.5);
   --lg-fallback-tint: 0.14;
   --lg-fallback-shine: rgba(255, 255, 255, 0.3);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-resolved-theme="light"]) .corner,
+  :root:not([data-resolved-theme="light"]) .yan-chat-close,
+  :root:not([data-resolved-theme="light"]) .yan-chat-send {
+    --lg-tint-opacity: 0.06;
+    --lg-fallback-tint: 0.08;
+  }
+}
+
+html[data-resolved-theme="dark"] .corner,
+html[data-resolved-theme="dark"] .yan-chat-close,
+html[data-resolved-theme="dark"] .yan-chat-send {
+  --lg-tint-opacity: 0.06;
+  --lg-fallback-tint: 0.08;
 }
 
 *,
@@ -252,12 +268,9 @@ html.lg-chrome[data-resolved-theme="dark"] .edu-sheet-btn.lg-static.lg-refractio
 html.lg-chrome[data-resolved-theme="dark"] .yan-chat-widget.lg-static.lg-refraction::after,
 html.lg-chrome[data-resolved-theme="dark"] .yan-chat-map-ios.lg-static.lg-refraction::after,
 html.lg-chrome[data-resolved-theme="dark"] .yan-chat-bubble.lg-static.lg-refraction::after {
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  isolation: auto;
-  background: var(--lg-spec) center / 100% 100% no-repeat;
-  mix-blend-mode: screen;
-  opacity: var(--lg-spec-opacity, 0.5);
+  display: none !important;
+  background: none;
+  mix-blend-mode: normal;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -269,23 +282,18 @@ html.lg-chrome[data-resolved-theme="dark"] .yan-chat-bubble.lg-static.lg-refract
   html.lg-chrome:not([data-resolved-theme="light"]) .yan-chat-widget.lg-static.lg-refraction::after,
   html.lg-chrome:not([data-resolved-theme="light"]) .yan-chat-map-ios.lg-static.lg-refraction::after,
   html.lg-chrome:not([data-resolved-theme="light"]) .yan-chat-bubble.lg-static.lg-refraction::after {
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
+    display: none !important;
+    background: none;
+    mix-blend-mode: normal;
   }
 }
 
 html.lg-chrome .yan-chat-bubble.lg-static.lg-refraction::after,
 html.lg-chrome[data-resolved-theme="dark"] .yan-chat-bubble.lg-static.lg-refraction::after,
 html.lg-chrome:not([data-resolved-theme="light"]) .yan-chat-bubble.lg-static.lg-refraction::after {
-  background: rgba(255, 255, 255, 0.72);
+  display: none !important;
+  background: none;
   mix-blend-mode: normal;
-  opacity: 1;
-  -webkit-mask-image: var(--lg-spec);
-  mask-image: var(--lg-spec);
-  -webkit-mask-size: 100% 100%;
-  mask-size: 100% 100%;
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
 }
 
 a {
@@ -302,6 +310,7 @@ a {
   display: grid;
   place-items: center;
   color: var(--fg);
+  background: transparent;
   box-shadow: 0 6px var(--lg-outer-shadow-blur) var(--lg-outer-shadow);
   transition: transform 0.3s var(--ease), box-shadow 0.4s var(--ease);
   will-change: transform;
@@ -328,6 +337,13 @@ a {
   box-shadow: inset 0 0 var(--lg-shadow-blur) var(--lg-shadow-spread) var(--lg-shadow-color);
   background-color: rgba(var(--lg-tint-rgb), var(--lg-tint-opacity));
   pointer-events: none;
+}
+
+.edu-panel::before,
+.edu-file-tile::before {
+  z-index: 0;
+  backdrop-filter: blur(18px) saturate(1.35);
+  -webkit-backdrop-filter: blur(18px) saturate(1.35);
 }
 
 .corner.lg-refraction::after,
@@ -869,6 +885,7 @@ html[data-resolved-theme="dark"] .edu-back-shadow feGaussianBlur {
 .edu-file-tile > * {
   position: relative;
   z-index: 2;
+  mix-blend-mode: normal;
 }
 
 .edu-file-tile.lg-fallback {
@@ -904,6 +921,7 @@ html[data-resolved-theme="dark"] .edu-back-shadow feGaussianBlur {
 .edu-panel > * {
   position: relative;
   z-index: 2;
+  mix-blend-mode: normal;
 }
 
 .edu-panel.lg-fallback {
@@ -1814,9 +1832,15 @@ html[data-resolved-theme="dark"] .yan-chat-pill.corner.lg-refraction::after {
   user-select: none;
 }
 @media (prefers-color-scheme: dark) {
-  html:not([data-resolved-theme="light"]) .yan-chat-send { --lg-tint-opacity: 0.4; }
+  html:not([data-resolved-theme="light"]) .yan-chat-send {
+    --lg-tint-opacity: 0.06;
+    --lg-fallback-tint: 0.08;
+  }
 }
-html[data-resolved-theme="dark"] .yan-chat-send { --lg-tint-opacity: 0.4; }
+html[data-resolved-theme="dark"] .yan-chat-send {
+  --lg-tint-opacity: 0.06;
+  --lg-fallback-tint: 0.08;
+}
 .yan-chat-send svg {
   width: 42%; height: 42%; display: block;
   transition: transform 0.25s var(--chat-spring);
