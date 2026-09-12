@@ -80,6 +80,11 @@ import {
   ownerIdForStudent,
   persistChat,
 } from "./chat-history.js";
+import multer from "multer";
+import { probeBertService } from "./bert.js";
+import { mountNotes } from "./notes.js";
+import { mountResearch } from "./research-metrics.js";
+import { mountSchedule } from "./schedule.js";
 
 const PORT = Number(process.env.PORT || 3006);
 const HOST = process.env.HOST || "0.0.0.0";
@@ -102,6 +107,20 @@ app.use(
   })
 );
 app.use(express.json({ limit: "8mb" }));
+
+const pdfUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 12 * 1024 * 1024 },
+  fileFilter(_req, file, cb) {
+    const name = String(file?.originalname || "").toLowerCase();
+    const type = String(file?.mimetype || "");
+    if (type === "application/pdf" || name.endsWith(".pdf")) {
+      cb(null, true);
+      return;
+    }
+    cb(new Error("Upload a PDF."));
+  },
+});
 
 function fail(res, err, fallback = 500) {
   const status = Number(err?.status) || fallback;
@@ -216,11 +235,18 @@ async function liveSnapshot(student) {
   return bits.join("\n").slice(0, 4000);
 }
 
-app.get("/health", (_req, res) => {
+app.get("/health", async (_req, res) => {
+  const bert = await probeBertService();
   res.json({
     ok: true,
     service: "jype-server",
     time: new Date().toISOString(),
+    bert: {
+      ok: Boolean(bert.ok),
+      url: "http://127.0.0.1:3007",
+      zeroShotLoaded: Boolean(bert.zeroShotLoaded),
+      fineTunedLoaded: Boolean(bert.fineTunedLoaded),
+    },
   });
 });
 
@@ -896,6 +922,14 @@ app.post("/v1/agent/chats/:id/read", async (req, res) => {
     return fail(res, err, err.status || 404);
   }
 });
+
+mountSchedule(app, {
+  requireStudent,
+  fail,
+  upload: pdfUpload,
+});
+mountNotes(app, { requireStudent, fail });
+mountResearch(app, { fail });
 
 app.listen(PORT, HOST, () => {
   console.log(`[jype-server] listening on http://${HOST}:${PORT}`);

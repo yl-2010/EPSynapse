@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <script>
+      (function () {
+        try {
+          var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var r = document.documentElement;
+          r.dataset.theme = "system";
+          r.dataset.resolvedTheme = dark ? "dark" : "light";
+          r.style.colorScheme = dark ? "dark" : "light";
+        } catch (e) {}
+      })();
+    </script>
+    <title>Research · EPSynapse</title>
+    <meta
+      name="description"
+      content="Accuracy of the EPSynapse notes classifier across zero-shot BERT, fine-tuned BERT, and the student-key model."
+    />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css?v=glass21" />
+  </head>
+  <body>
+    <a
+      href="/"
+      class="corner c-tl squircle"
+      data-liquid-glass="squircle"
+      data-filter-id="lg-tl"
+      aria-label="Home"
+    >
+      <span class="corner-mark" aria-hidden="true">E</span>
+    </a>
+
+    <button
+      type="button"
+      class="corner c-tr circle"
+      data-liquid-glass="circle"
+      data-filter-id="lg-tr"
+      aria-label="Toggle theme"
+      draggable="false"
+    ></button>
+
+    <main class="research-page">
+      <p class="edu-home-mark">Research</p>
+      <p class="research-lead">
+        How the EPSynapse notes classifier votes. Three arms, eight subjects.
+        Eval numbers stay at zero until training finishes.
+      </p>
+      <form class="research-toggles" id="research-toggles">
+        <label class="edu-filter is-on">
+          <input type="checkbox" name="includeUser" checked />
+          <span>Include user tests</span>
+        </label>
+        <label class="edu-filter is-on">
+          <input type="checkbox" name="includeFrozen" checked />
+          <span>Include eval tests</span>
+        </label>
+      </form>
+      <p class="edu-empty" id="research-status">Loading metrics…</p>
+      <div class="research-charts" id="research-charts" hidden></div>
+    </main>
+
+    <svg class="lg-svg" aria-hidden="true">
+      <defs id="liquid-glass-defs"></defs>
+    </svg>
+    <script src="/liquid-glass.js?v=glass10"></script>
+    <script src="/theme-orb.js?v=glass9"></script>
+    <script src="/research.js?v=glass21"></script>
+  </body>
+</html>
