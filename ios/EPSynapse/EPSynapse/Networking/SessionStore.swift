@@ -9,6 +9,7 @@ final class SessionStore: ObservableObject {
 
   static let onedriveIdle = "Opens school OneDrive in the browser"
   static let outlookIdle = "Opens school Outlook in the browser"
+  static let teamsIdle = "Opens school Teams in the browser"
   static let keyIdle = "Paste the gsk_ key here, tap Save key, wait until Chat key says Groq, then ask in chat. Do not paste the key in the chat box."
   static let setupGuide = """
 This box is only for questions. The Groq key goes in Settings, not here.
@@ -49,11 +50,14 @@ If you skip Save key, chat will send you back to these steps.
   @Published var settingsStatus = ""
   @Published var onedriveStatus = SessionStore.onedriveIdle
   @Published var outlookStatus = SessionStore.outlookIdle
+  @Published var teamsStatus = SessionStore.teamsIdle
   @Published var keyStatus = SessionStore.keyIdle
   @Published var odCode = ""
   @Published var odURI = ""
   @Published var olCode = ""
   @Published var olURI = ""
+  @Published var tmCode = ""
+  @Published var tmURI = ""
   @Published var isBooting = true
 
   var isSignedIn: Bool {
@@ -244,13 +248,48 @@ If you skip Save key, chat will send you back to these steps.
     }
   }
 
+  func startTeams() async {
+    guard profile != nil, !sessionId.isEmpty else {
+      teamsStatus = Self.googleFirst
+      return
+    }
+    do {
+      let started: DeviceStartResponse = try await api.request(
+        "/v1/me/teams/start",
+        method: "POST",
+        body: EmptyJSON(),
+        sessionId: sessionId,
+        timeout: 20
+      )
+      if started.user_code.isEmpty {
+        teamsStatus = started.message.isEmpty
+          ? "Microsoft would not start Teams sign-in."
+          : started.message
+        tmCode = ""
+        tmURI = ""
+        return
+      }
+      profile?.teamsPending = DevicePending(
+        user_code: started.user_code,
+        verification_uri: started.verification_uri,
+        verification_uri_complete: started.verification_uri_complete,
+        message: started.message
+      )
+      paintConnections()
+    } catch {
+      teamsStatus = (error as? APIError)?.message ?? "Could not start Teams."
+    }
+  }
+
   func pollConnections(force: Bool = false) async {
     guard !sessionId.isEmpty else { return }
     let watchOnedrive = profile?.onedriveConnected != true
       && (force || profile?.onedrivePending?.isActive == true || !odCode.isEmpty)
     let watchOutlook = profile?.outlookConnected != true
       && (force || profile?.outlookPending?.isActive == true || !olCode.isEmpty)
-    guard watchOnedrive || watchOutlook else { return }
+    let watchTeams = profile?.teamsConnected != true
+      && (force || profile?.teamsPending?.isActive == true || !tmCode.isEmpty)
+    guard watchOnedrive || watchOutlook || watchTeams else { return }
 
     async let od: ConnectionStatusResponse? = {
       guard watchOnedrive else { return nil }
@@ -260,10 +299,16 @@ If you skip Save key, chat will send you back to these steps.
       guard watchOutlook else { return nil }
       return await self.fetchStatus("/v1/me/outlook/status")
     }()
+    async let tm: ConnectionStatusResponse? = {
+      guard watchTeams else { return nil }
+      return await self.fetchStatus("/v1/me/teams/status")
+    }()
     let odStatus = await od
     let olStatus = await ol
+    let tmStatus = await tm
     var odPollError = ""
     var olPollError = ""
+    var tmPollError = ""
 
     if let odStatus {
       if odStatus.connected {
@@ -299,9 +344,20 @@ If you skip Save key, chat will send you back to these steps.
       }
       olPollError = olStatus.error
     }
+    if let tmStatus {
+      if tmStatus.connected {
+        profile?.teamsConnected = true
+        profile?.teamsEmail = tmStatus.email
+        profile?.teamsPending = nil
+      } else if let pending = tmStatus.pending, pending.isActive {
+        profile?.teamsPending = pending
+      }
+      tmPollError = tmStatus.error
+    }
     paintConnections()
     if !odPollError.isEmpty { onedriveStatus = odPollError }
     if !olPollError.isEmpty { outlookStatus = olPollError }
+    if !tmPollError.isEmpty { teamsStatus = tmPollError }
   }
 
   func saveKey(_ key: String) async {
@@ -464,10 +520,13 @@ If you skip Save key, chat will send you back to these steps.
     guard let me = profile else {
       onedriveStatus = Self.onedriveIdle
       outlookStatus = Self.outlookIdle
+      teamsStatus = Self.teamsIdle
       odCode = ""
       odURI = ""
       olCode = ""
       olURI = ""
+      tmCode = ""
+      tmURI = ""
       return
     }
 
@@ -497,6 +556,20 @@ If you skip Save key, chat will send you back to these steps.
       outlookStatus = Self.outlookIdle
       olCode = ""
       olURI = ""
+    }
+
+    if me.teamsConnected {
+      teamsStatus = me.teamsEmail.isEmpty ? "Teams connected" : "Teams · \(me.teamsEmail)"
+      tmCode = ""
+      tmURI = ""
+    } else if let pending = me.teamsPending, pending.isActive {
+      teamsStatus = "Microsoft should open with this code. Allow access, then come back."
+      tmCode = pending.user_code
+      tmURI = pending.openURL
+    } else {
+      teamsStatus = Self.teamsIdle
+      tmCode = ""
+      tmURI = ""
     }
   }
 
