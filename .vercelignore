@@ -4,3 +4,9 @@ deploy/
 .cursor/
 ideas.md
 AGENTS.md
+.venv/
+models/
+data/
+ml/
+scripts/
+ios/

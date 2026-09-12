@@ -40,6 +40,12 @@ rsync -a --delete \
   --exclude 'docs/' \
   --exclude '.cursor/' \
   --exclude 'deploy/' \
+  --exclude '.venv/' \
+  --exclude 'models/' \
+  --exclude 'data/' \
+  --exclude 'server/' \
+  --exclude 'ml/' \
+  --exclude 'scripts/' \
   "$root/" "$stage/"
 cd "$stage"
 
