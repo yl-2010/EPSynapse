@@ -930,8 +930,8 @@
     return (lastHome.assignments || []).find((t) => String(t.id || t.canvasId || "") === key) || null;
   }
 
-  function ensureCompletedList() {
-    const panel = document.querySelector('[data-filter-id="lg-edu-completed"]');
+  function ensureAssignmentList(filterId, emptyText) {
+    const panel = document.querySelector(`[data-filter-id="${filterId}"]`);
     if (!panel) return null;
     let list = panel.querySelector(".edu-list");
     if (list) return list;
@@ -945,7 +945,7 @@
       const filterEmpty = document.createElement("p");
       filterEmpty.className = "edu-empty edu-filter-empty";
       filterEmpty.hidden = true;
-      filterEmpty.textContent = "Nothing completed yet";
+      filterEmpty.textContent = emptyText;
       list.after(filterEmpty);
     }
     empty.forEach((node) => {
@@ -954,6 +954,17 @@
       }
     });
     return list;
+  }
+
+  function ensureCompletedList() {
+    return ensureAssignmentList("lg-edu-completed", "Nothing completed yet");
+  }
+
+  function ensureTodoList() {
+    return ensureAssignmentList(
+      "lg-edu-todo",
+      me?.canvasConnected ? "No open work" : "Connect Canvas in settings"
+    );
   }
 
   function refreshTodoEmptyState() {
@@ -978,26 +989,28 @@
     empty.hidden = visible;
   }
 
-  function completeTodoRow(check) {
-    const row = check.closest(".edu-todo");
-    const id = check.getAttribute("data-todo-id") || row?.getAttribute("data-id");
-    if (!row || !id || check.classList.contains("is-checked") || row.dataset.busy === "1") return;
-    const item = assignmentById(id);
-    row.dataset.busy = "1";
-    check.classList.add("is-checked");
-    check.setAttribute("aria-label", "Completed");
-    check.disabled = true;
-    row.classList.add("is-done");
-    if (item) item.done = true;
-
-    const dest = ensureCompletedList();
-    if (!dest) {
-      row.dataset.busy = "";
-      return;
+  function refreshCompletedEmptyState() {
+    const panel = document.querySelector('[data-filter-id="lg-edu-completed"]');
+    if (!panel) return;
+    const list = panel.querySelector(".edu-list");
+    if (!list) return;
+    const visible = [...list.querySelectorAll(":scope > .edu-todo")].some(
+      (row) =>
+        !row.classList.contains("is-filter-hidden") &&
+        !row.classList.contains("is-collapse-hidden")
+    );
+    list.classList.toggle("is-filter-empty", !visible);
+    let empty = list.nextElementSibling;
+    if (!empty || !empty.classList.contains("edu-filter-empty")) {
+      empty = document.createElement("p");
+      empty.className = "edu-empty edu-filter-empty";
+      empty.textContent = "Nothing completed yet";
+      list.after(empty);
     }
+    empty.hidden = visible;
+  }
 
-    const first = row.getBoundingClientRect();
-    dest.appendChild(row);
+  function animateFly(row, first) {
     const last = row.getBoundingClientRect();
     const dx = first.left - last.left;
     const dy = first.top - last.top;
@@ -1017,6 +1030,7 @@
       row.style.transform = "";
       row.dataset.busy = "";
       refreshTodoEmptyState();
+      refreshCompletedEmptyState();
       paintAssignmentFilters();
     };
     row.addEventListener(
@@ -1028,8 +1042,11 @@
       { once: true }
     );
     window.setTimeout(finish, 700);
+  }
 
-    api(`/v1/me/canvas/assignments/${encodeURIComponent(id)}/complete`, {
+  function writeTodoComplete(id, item, done) {
+    const path = done ? "complete" : "incomplete";
+    api(`/v1/me/canvas/assignments/${encodeURIComponent(id)}/${path}`, {
       method: "POST",
       body: JSON.stringify({
         canvasId: item?.canvasId || id,
@@ -1042,8 +1059,56 @@
         if (item && saved?.plannerOverrideId) item.plannerOverrideId = saved.plannerOverrideId;
       })
       .catch(() => {
-        /* local complete still stands for the demo */
+        /* local move still stands */
       });
+  }
+
+  function completeTodoRow(check) {
+    const row = check.closest(".edu-todo");
+    const id = check.getAttribute("data-todo-id") || row?.getAttribute("data-id");
+    if (!row || !id || check.classList.contains("is-checked") || row.dataset.busy === "1") return;
+    const item = assignmentById(id);
+    row.dataset.busy = "1";
+    check.classList.add("is-checked");
+    check.setAttribute("aria-label", "Mark incomplete");
+    check.disabled = false;
+    row.classList.add("is-done");
+    if (item) item.done = true;
+
+    const dest = ensureCompletedList();
+    if (!dest) {
+      row.dataset.busy = "";
+      return;
+    }
+
+    const first = row.getBoundingClientRect();
+    dest.appendChild(row);
+    animateFly(row, first);
+    writeTodoComplete(id, item, true);
+  }
+
+  function uncompleteTodoRow(check) {
+    const row = check.closest(".edu-todo");
+    const id = check.getAttribute("data-todo-id") || row?.getAttribute("data-id");
+    if (!row || !id || !check.classList.contains("is-checked") || row.dataset.busy === "1") return;
+    const item = assignmentById(id);
+    row.dataset.busy = "1";
+    check.classList.remove("is-checked");
+    check.setAttribute("aria-label", "Mark complete");
+    check.disabled = false;
+    row.classList.remove("is-done");
+    if (item) item.done = false;
+
+    const dest = ensureTodoList();
+    if (!dest) {
+      row.dataset.busy = "";
+      return;
+    }
+
+    const first = row.getBoundingClientRect();
+    dest.insertBefore(row, dest.firstChild);
+    animateFly(row, first);
+    writeTodoComplete(id, item, false);
   }
 
   function trimNum(n) {
@@ -1293,7 +1358,7 @@
     const klass = t.courseName ? `<span class="edu-meta">${escapeHtml(t.courseName)}</span>` : "";
     const href = canvasHref(t.canvasLink);
     return `<li class="edu-row edu-todo${t.done ? " is-done" : ""} ${cardClass(workTone(t))}" data-id="${escapeHtml(t.id || t.canvasId || "")}" data-tag="${escapeHtml(tag)}">
-      <button type="button" class="edu-check${t.done ? " is-checked" : ""}" data-liquid-glass="circle" data-filter-id="lg-check-${escapeHtml(t.id)}" data-todo-id="${escapeHtml(t.id || t.canvasId || "")}" aria-label="${t.done ? "Completed" : "Mark complete"}"${t.done ? " disabled" : ""}><span class="edu-check-dot"></span></button>
+      <button type="button" class="edu-check${t.done ? " is-checked" : ""}" data-liquid-glass="circle" data-filter-id="lg-check-${escapeHtml(t.id)}" data-todo-id="${escapeHtml(t.id || t.canvasId || "")}" aria-label="${t.done ? "Mark incomplete" : "Mark complete"}"><span class="edu-check-dot"></span></button>
       <a class="edu-row-link" href="${escapeHtml(href)}" target="_blank" rel="noopener">
         <span class="edu-name"><span class="edu-tag edu-tag-${escapeHtml(tag)}">${escapeHtml(tag)}</span> ${escapeHtml(t.title)}</span>
         ${klass}${due}
@@ -2235,9 +2300,10 @@
   });
   appEl.addEventListener("click", (ev) => {
     const check = ev.target.closest(".edu-check");
-    if (!check || check.classList.contains("is-checked")) return;
+    if (!check) return;
     ev.preventDefault();
-    completeTodoRow(check);
+    if (check.classList.contains("is-checked")) uncompleteTodoRow(check);
+    else completeTodoRow(check);
   });
 
   form.addEventListener("submit", async (ev) => {

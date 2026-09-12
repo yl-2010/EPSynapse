@@ -626,7 +626,7 @@ async function canvasWrite(host, token, path, method, body) {
   }
 }
 
-export async function markAssignmentComplete(host, token, assignment) {
+async function setPlannerComplete(host, token, assignment, done) {
   const canvasId = String(assignment?.canvasId || assignment?.id || "").trim();
   if (!canvasId) {
     const err = new Error("Missing assignment id.");
@@ -635,23 +635,32 @@ export async function markAssignmentComplete(host, token, assignment) {
   }
   const overrideId = String(assignment?.plannerOverrideId || "").trim();
   const plannableType = String(assignment?.plannableType || "assignment").trim() || "assignment";
+  const marked = Boolean(done);
   let saved;
   if (overrideId) {
     saved = await canvasWrite(host, token, `/planner/overrides/${encodeURIComponent(overrideId)}`, "PUT", {
-      marked_complete: true,
+      marked_complete: marked,
     });
   } else {
     saved = await canvasWrite(host, token, "/planner/overrides", "POST", {
       plannable_type: plannableType,
       plannable_id: canvasId,
-      marked_complete: true,
+      marked_complete: marked,
     });
   }
   return {
     id: canvasId,
     canvasId,
-    done: true,
+    done: marked,
     plannerOverrideId: String(saved?.id || overrideId).trim(),
     plannableType,
   };
+}
+
+export async function markAssignmentComplete(host, token, assignment) {
+  return setPlannerComplete(host, token, assignment, true);
+}
+
+export async function markAssignmentIncomplete(host, token, assignment) {
+  return setPlannerComplete(host, token, assignment, false);
 }
