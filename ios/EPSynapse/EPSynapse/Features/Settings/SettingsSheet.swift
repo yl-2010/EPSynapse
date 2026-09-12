@@ -6,6 +6,7 @@ private enum SettingsPane: String, Hashable {
     case chat
     case canvas
     case onedrive
+    case onenote
     case outlook
     case teams
 
@@ -15,6 +16,7 @@ private enum SettingsPane: String, Hashable {
         case .chat: "Chat key"
         case .canvas: "Canvas"
         case .onedrive: "OneDrive"
+        case .onenote: "OneNote"
         case .outlook: "Outlook"
         case .teams: "Teams"
         }
@@ -59,6 +61,7 @@ struct SettingsSheet: View {
                             case .chat: chatPane
                             case .canvas: canvasPane
                             case .onedrive: microsoftPane(.onedrive)
+                            case .onenote: microsoftPane(.onenote)
                             case .outlook: microsoftPane(.outlook)
                             case .teams: microsoftPane(.teams)
                             }
@@ -177,6 +180,7 @@ struct SettingsSheet: View {
                         navRow(.chat, meta: chatMeta)
                         navRow(.canvas, meta: canvasMeta)
                         navRow(.onedrive, meta: onedriveMeta)
+                        navRow(.onenote, meta: onenoteMeta)
                         navRow(.outlook, meta: outlookMeta)
                         navRow(.teams, meta: teamsMeta)
                     }
@@ -377,7 +381,7 @@ struct SettingsSheet: View {
     private func microsoftPane(_ pane: SettingsPane) -> some View {
         let connected: Bool = {
             switch pane {
-            case .onedrive: session.profile?.onedriveConnected == true
+            case .onedrive, .onenote: session.profile?.onedriveConnected == true
             case .outlook: session.profile?.outlookConnected == true
             case .teams: session.profile?.teamsConnected == true
             default: false
@@ -385,7 +389,7 @@ struct SettingsSheet: View {
         }()
         let email: String = {
             switch pane {
-            case .onedrive: session.profile?.onedriveEmail ?? ""
+            case .onedrive, .onenote: session.profile?.onedriveEmail ?? ""
             case .outlook: session.profile?.outlookEmail ?? ""
             case .teams: session.profile?.teamsEmail ?? ""
             default: ""
@@ -393,7 +397,7 @@ struct SettingsSheet: View {
         }()
         let code: String = {
             switch pane {
-            case .onedrive: session.odCode
+            case .onedrive, .onenote: session.odCode
             case .outlook: session.olCode
             case .teams: session.tmCode
             default: ""
@@ -401,7 +405,7 @@ struct SettingsSheet: View {
         }()
         let uri: String = {
             switch pane {
-            case .onedrive: session.odURI
+            case .onedrive, .onenote: session.odURI
             case .outlook: session.olURI
             case .teams: session.tmURI
             default: ""
@@ -409,7 +413,7 @@ struct SettingsSheet: View {
         }()
         let status: String = {
             switch pane {
-            case .onedrive: session.onedriveStatus
+            case .onedrive, .onenote: session.onedriveStatus
             case .outlook: session.outlookStatus
             case .teams: session.teamsStatus
             default: ""
@@ -628,6 +632,10 @@ struct SettingsSheet: View {
         msMeta(connected: session.profile?.onedriveConnected == true, email: session.profile?.onedriveEmail ?? "", fallback: "School files")
     }
 
+    private var onenoteMeta: String {
+        msMeta(connected: session.profile?.onedriveConnected == true, email: session.profile?.onedriveEmail ?? "", fallback: "School notebooks")
+    }
+
     private var outlookMeta: String {
         msMeta(connected: session.profile?.outlookConnected == true, email: session.profile?.outlookEmail ?? "", fallback: "School mail")
     }
@@ -703,7 +711,7 @@ struct SettingsSheet: View {
 
     private func startMicrosoft(_ pane: SettingsPane) async {
         switch pane {
-        case .onedrive:
+        case .onedrive, .onenote:
             await session.startOnedrive()
             openPending(session.odURI)
         case .outlook:
@@ -749,11 +757,14 @@ struct SettingsSheet: View {
     ]
 
     private static func microsoftSteps(for pane: SettingsPane) -> [String] {
-        [
+        let last = pane == .onenote
+            ? "OneNote uses the OneDrive Microsoft sign-in. OneNote on the settings list must say Connected."
+            : "\(pane.title) on the settings list must say Connected."
+        return [
             "Sign in with Google on this page if you have not already.",
             "Tap Connect \(pane.title). Microsoft opens a school sign-in.",
             "Use your @eastsideprep.org account. If Microsoft says the app needs admin approval, that is expected. School IT Accepts once, then every student can connect.",
-            "\(pane.title) on the settings list must say Connected.",
+            last,
         ]
     }
 
