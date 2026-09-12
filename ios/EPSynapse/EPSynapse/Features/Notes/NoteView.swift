@@ -21,7 +21,7 @@ struct NoteView: View {
     }
 
     private var pickerSubjects: [String] {
-        var list = NoteSubject.all
+        var list = dashboard.noteClassLabels
         if !subject.isEmpty, !list.contains(subject) {
             list.insert(subject, at: 0)
         }
@@ -114,8 +114,8 @@ struct NoteView: View {
     }
 
     private var subjectCard: some View {
-        EPSPanel(title: "Subject") {
-            Picker("Subject", selection: $subject) {
+        EPSPanel(title: "Class") {
+            Picker("Class", selection: $subject) {
                 ForEach(pickerSubjects, id: \.self) { label in
                     Text(label).tag(label)
                 }

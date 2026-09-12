@@ -8,9 +8,10 @@ import { mkdir, readdir, readFile, rename, unlink, writeFile } from "node:fs/pro
 import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ownerIdForStudent } from "./chat-history.js";
+import { isHiddenClassCourse, listCourses } from "./canvas.js";
 import { classifyEnsemble } from "./classify.js";
-import { loadSchedule, matchClassForSubject } from "./schedule.js";
-import { isKnownSubject, normalizeSubjectLabel } from "./subjects.js";
+import { loadSchedule, matchClassByLabel, matchClassForSubject } from "./schedule.js";
+import { OTHER_SUBJECT, isKnownSubject, normalizeSubjectLabel, subjectFromCourseName } from "./subjects.js";
 
 const ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_TEXT = 12000;
@@ -198,6 +199,35 @@ export async function listResearchEvents() {
   return events;
 }
 
+function noteClassRoster(classes) {
+  const seen = new Set();
+  const out = [];
+  for (const c of classes || []) {
+    if (c?.freePeriod || isHiddenClassCourse(c)) continue;
+    const name = String(c.name || "").trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      id: String(c.id || ""),
+      name,
+      period: String(c.period || ""),
+      subject: String(c.subject || subjectFromCourseName(name) || ""),
+    });
+  }
+  return out;
+}
+
+async function loadNoteClasses(ownerId, student) {
+  const schedule = await loadSchedule(ownerId).catch(() => ({ classes: [] }));
+  const fromSchedule = noteClassRoster(schedule.classes);
+  if (fromSchedule.length) return fromSchedule;
+  if (!student?.canvasToken) return [];
+  const courses = await listCourses(student.canvasHost, student.canvasToken).catch(() => []);
+  return noteClassRoster(courses);
+}
+
 export async function createNote(ownerId, rawText, { req, student } = {}) {
   const text = String(rawText || "").trim();
   if (!text) {
@@ -211,9 +241,11 @@ export async function createNote(ownerId, rawText, { req, student } = {}) {
     throw err;
   }
 
-  const classified = await classifyEnsemble(text, { req, student });
-  const schedule = await loadSchedule(ownerId);
-  const matched = matchClassForSubject(schedule.classes, classified.subject, titleFromText(text));
+  const classes = await loadNoteClasses(ownerId, student);
+  const classified = await classifyEnsemble(text, { req, student, classes });
+  const matched =
+    matchClassByLabel(classes, classified.subject) ||
+    matchClassForSubject(classes, classified.subject, titleFromText(text));
   const now = new Date().toISOString();
   const note = {
     id: randomUUID(),
@@ -234,11 +266,30 @@ export async function createNote(ownerId, rawText, { req, student } = {}) {
   return note;
 }
 
-export async function patchNoteSubject(ownerId, id, subject) {
+export async function patchNoteSubject(ownerId, id, subject, { student } = {}) {
   const note = await loadNote(ownerId, id);
-  const label = normalizeSubjectLabel(subject);
-  if (!label || !isKnownSubject(label)) {
-    const err = new Error("Pick one of the eight subjects or Other.");
+  const raw = String(subject || "").trim();
+  const roster = await loadNoteClasses(ownerId, student);
+  const matched = matchClassByLabel(roster, raw);
+  let label = "";
+  if (matched) {
+    label = matched.name;
+    note.classId = matched.id || "";
+  } else if (raw.toLowerCase() === "other" || normalizeSubjectLabel(raw) === OTHER_SUBJECT) {
+    label = OTHER_SUBJECT;
+    note.classId = "";
+  } else if (!roster.length) {
+    const fallback = normalizeSubjectLabel(raw);
+    if (!fallback || !isKnownSubject(fallback)) {
+      const err = new Error("Pick one of the eight subjects or Other.");
+      err.status = 400;
+      throw err;
+    }
+    label = fallback;
+    const schedule = await loadSchedule(ownerId).catch(() => ({ classes: [] }));
+    note.classId = matchClassForSubject(schedule.classes, label, note.title)?.id || "";
+  } else {
+    const err = new Error("Pick one of your classes.");
     err.status = 400;
     throw err;
   }
@@ -250,6 +301,7 @@ export async function patchNoteSubject(ownerId, id, subject) {
   const event = existing || researchEventFromNote(note);
   event.userGoldSubject = label;
   event.finalSubject = event.finalSubject || note.subject;
+  event.classId = note.classId || "";
   delete event.text;
   await saveEvent(ownerId, event);
   return note;
@@ -307,7 +359,9 @@ export function mountNotes(app, { requireStudent, fail }) {
     try {
       const ctx = await ownerFromReq(req, res);
       if (!ctx) return;
-      const note = await patchNoteSubject(ctx.ownerId, req.params.id, req.body?.subject);
+      const note = await patchNoteSubject(ctx.ownerId, req.params.id, req.body?.subject, {
+        student: ctx.student,
+      });
       return res.json({ note: publicNote(note) });
     } catch (err) {
       return fail(res, err, err.status || 400);

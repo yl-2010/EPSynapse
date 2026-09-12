@@ -1732,17 +1732,31 @@
   }
 
   function subjectOptions(selected) {
-    const labels = [
-      "Mathematics",
-      "Physics",
-      "Chemistry",
-      "Biology",
-      "Computer Science",
-      "History",
-      "Literature",
-      "Economics",
-      "Other",
-    ];
+    const names = homeClasses()
+      .map((c) => String(c.name || "").trim())
+      .filter(Boolean);
+    const seen = new Set();
+    const labels = [];
+    for (const name of names) {
+      const key = name.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      labels.push(name);
+    }
+    if (!labels.length) {
+      labels.push(
+        "Mathematics",
+        "Physics",
+        "Chemistry",
+        "Biology",
+        "Computer Science",
+        "History",
+        "Literature",
+        "Economics"
+      );
+    }
+    if (!labels.includes("Other")) labels.push("Other");
+    if (selected && !labels.includes(selected)) labels.unshift(selected);
     return labels
       .map((s) => `<option value="${escapeHtml(s)}"${s === selected ? " selected" : ""}>${escapeHtml(s)}</option>`)
       .join("");
@@ -1774,9 +1788,9 @@
         </div>
         <div class="edu-col edu-col--side">
           ${panelHtml(
-            "Subject",
+            "Class",
             `<form class="edu-notes-form" id="note-gold">
-              <label for="note-subject">Correct subject</label>
+              <label for="note-subject">Correct class</label>
               <select id="note-subject" name="subject">${subjectOptions(gold)}</select>
               <button type="submit" class="edu-sheet-btn edu-sheet-btn--gold" data-liquid-glass="rounded" data-filter-id="lg-edu-note-gold">Save</button>
               <p class="edu-empty" id="note-gold-status"></p>
@@ -2755,7 +2769,7 @@
         const again = document.getElementById("note-gold-status");
         if (again) again.textContent = "Saved.";
       } catch (err) {
-        if (status) status.textContent = err.message || "Could not save subject.";
+        if (status) status.textContent = err.message || "Could not save class.";
       }
       return;
     }

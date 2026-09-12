@@ -543,6 +543,20 @@ export function matchClassForSubject(classes, subject, nameHint = "") {
   return null;
 }
 
+export function matchClassByLabel(classes, label) {
+  const rows = (classes || []).filter((c) => !c.freePeriod);
+  const key = String(label || "").trim().toLowerCase();
+  if (!key) return null;
+  const byId = rows.find((c) => String(c.id || "").toLowerCase() === key);
+  if (byId) return byId;
+  const exact = rows.find((c) => String(c.name || "").trim().toLowerCase() === key);
+  if (exact) return exact;
+  return rows.find((c) => {
+    const n = String(c.name || "").trim().toLowerCase();
+    return n && (n.includes(key) || key.includes(n));
+  }) || null;
+}
+
 export function mountSchedule(app, { requireStudent, fail, upload }) {
   app.post("/v1/me/schedule/pdf", upload.single("pdf"), async (req, res) => {
     try {

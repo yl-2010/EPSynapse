@@ -7,7 +7,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { listResearchEvents } from "./notes.js";
-import { FIXED_SUBJECTS, isFixedSubject, normalizeSubjectLabel } from "./subjects.js";
+import { FIXED_SUBJECTS, isFixedSubject, normalizeSubjectLabel, taxonomyFromLabel } from "./subjects.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..");
@@ -119,8 +119,7 @@ export function summarizeCounts(counts, name, extra = {}) {
 
 export function goldFromEvent(event) {
   if (!event || typeof event !== "object") return null;
-  const gold = normalizeSubjectLabel(event.userGoldSubject || event.finalSubject);
-  return isFixedSubject(gold) ? gold : null;
+  return taxonomyFromLabel(event.userGoldSubject || event.finalSubject);
 }
 
 export function predFromEvent(event, armKey) {

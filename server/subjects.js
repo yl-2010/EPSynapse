@@ -56,3 +56,11 @@ export function subjectFromCourseName(name) {
   }
   return "";
 }
+
+/** Map a class name or taxonomy label onto the eight research subjects. */
+export function taxonomyFromLabel(raw) {
+  const direct = normalizeSubjectLabel(raw);
+  if (isFixedSubject(direct)) return direct;
+  const mapped = subjectFromCourseName(raw);
+  return isFixedSubject(mapped) ? mapped : null;
+}

@@ -30,6 +30,19 @@ final class DashboardStore: ObservableObject {
     return courses.map(SchoolClass.init(course:))
   }
 
+  var noteClassLabels: [String] {
+    var seen = Set<String>()
+    var names: [String] = []
+    for row in displayedClasses where !row.freePeriod {
+      let name = row.name.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !name.isEmpty, seen.insert(name).inserted else { continue }
+      names.append(name)
+    }
+    if names.isEmpty { return NoteSubject.all }
+    if !names.contains("Other") { names.append("Other") }
+    return names
+  }
+
   private let api = APIClient.shared
 
   init() {
@@ -236,7 +249,7 @@ final class DashboardStore: ObservableObject {
         notes.insert(note, at: 0)
       }
     } catch {
-      notesStatus = (error as? APIError)?.message ?? "Could not update the subject."
+      notesStatus = (error as? APIError)?.message ?? "Could not update the class."
     }
   }
 

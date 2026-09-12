@@ -12,6 +12,7 @@ import {
   upstreamHeaders,
 } from "./agent.js";
 import { classifyWithBert, normalizeBertVote } from "./bert.js";
+import { matchClassForSubject } from "./schedule.js";
 import {
   FIXED_SUBJECTS,
   OTHER_SUBJECT,
@@ -50,6 +51,44 @@ function clampToAllowedSubject(raw) {
   if (!normalized) return OTHER_SUBJECT;
   if (SUBJECTS_PLUS_OTHER.includes(normalized)) return normalized;
   return OTHER_SUBJECT;
+}
+
+function classNamesFrom(classes) {
+  const seen = new Set();
+  const names = [];
+  for (const c of classes || []) {
+    const name = String(c?.name || "").trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    names.push(name);
+  }
+  return names;
+}
+
+function clampToClassLabel(raw, classNames) {
+  const names = classNames || [];
+  const trimmed = String(raw || "").trim();
+  if (!trimmed) return OTHER_SUBJECT;
+  const lower = trimmed.toLowerCase();
+  if (lower === "other") return OTHER_SUBJECT;
+  const exact = names.find((n) => n.toLowerCase() === lower);
+  if (exact) return exact;
+  const fuzzy = names.find((n) => {
+    const nl = n.toLowerCase();
+    return nl.includes(lower) || lower.includes(nl);
+  });
+  return fuzzy || OTHER_SUBJECT;
+}
+
+function classLine(klass) {
+  const name = String(klass?.name || "").trim();
+  if (!name) return "";
+  const bits = [name];
+  if (klass.period) bits.push(`period ${klass.period}`);
+  if (klass.subject) bits.push(klass.subject);
+  return `- ${bits.join(" · ")}`;
 }
 
 async function completeJson(req, student, system, user) {
@@ -170,19 +209,39 @@ function agreementSubject(votes) {
   return best || OTHER_SUBJECT;
 }
 
-export async function orchestrateWithStudentKey(rawText, votes, { req, student } = {}) {
-  const system = [
-    "You are an orchestrator that picks the final academic subject for student notes.",
-    `Pick exactly one of: ${SUBJECTS_PLUS_OTHER.join(", ")}.`,
-    "Do not invent a new subject name.",
-    "Prefer agreement among the three votes.",
-    "Weigh fine-tuned BERT highly when its confidence is strong.",
-    "Respond with a single JSON object only, no markdown.",
-    'Schema: {"subject": string, "confidence": number, "rationale": string}',
-    "confidence is 0..1.",
-  ].join(" ");
+export async function orchestrateWithStudentKey(rawText, votes, { req, student, classes } = {}) {
+  const classNames = classNamesFrom(classes);
+  const usingClasses = classNames.length > 0;
+  const allowed = usingClasses ? [...classNames, OTHER_SUBJECT] : SUBJECTS_PLUS_OTHER;
+  const system = usingClasses
+    ? [
+        "You are an orchestrator that picks which of this student's classes these notes belong to.",
+        `Pick exactly one of: ${allowed.join(", ")}.`,
+        "Do not invent a class name.",
+        "The three votes are coarse academic subjects. Map them onto the student's actual class list.",
+        "Prefer a class that matches the votes and the note content.",
+        "Use Other only when none of the classes fit.",
+        "Respond with a single JSON object only, no markdown.",
+        'Schema: {"subject": string, "confidence": number, "rationale": string}',
+        "confidence is 0..1.",
+      ].join(" ")
+    : [
+        "You are an orchestrator that picks the final academic subject for student notes.",
+        `Pick exactly one of: ${SUBJECTS_PLUS_OTHER.join(", ")}.`,
+        "Do not invent a new subject name.",
+        "Prefer agreement among the three votes.",
+        "Weigh fine-tuned BERT highly when its confidence is strong.",
+        "Respond with a single JSON object only, no markdown.",
+        'Schema: {"subject": string, "confidence": number, "rationale": string}',
+        "confidence is 0..1.",
+      ].join(" ");
+
+  const classBlock = usingClasses
+    ? ["Student classes:", ...(classes || []).map(classLine).filter(Boolean), ""]
+    : [];
 
   const user = [
+    ...classBlock,
     "Votes (JSON):",
     JSON.stringify(
       {
@@ -204,7 +263,9 @@ export async function orchestrateWithStudentKey(rawText, votes, { req, student }
   if (!Number.isFinite(confidence)) confidence = 0.5;
   confidence = Math.max(0, Math.min(1, confidence));
   return {
-    subject: clampToAllowedSubject(parsed.subject),
+    subject: usingClasses
+      ? clampToClassLabel(parsed.subject, classNames)
+      : clampToAllowedSubject(parsed.subject),
     confidence,
     rationale: typeof parsed.rationale === "string" ? parsed.rationale : "",
     model: result.model,
@@ -212,7 +273,7 @@ export async function orchestrateWithStudentKey(rawText, votes, { req, student }
   };
 }
 
-export async function classifyEnsemble(rawText, { req, student } = {}) {
+export async function classifyEnsemble(rawText, { req, student, classes } = {}) {
   const [studentVote, bertResult] = await Promise.all([
     classifyWithStudentKey(rawText, { req, student }).catch((err) => ({
       error: err?.message || "student-key model failed",
@@ -255,9 +316,12 @@ export async function classifyEnsemble(rawText, { req, student } = {}) {
   let orchestrator;
   try {
     if (!studentKey) throw new Error(studentVote?.error || "No student-key vote.");
-    orchestrator = await orchestrateWithStudentKey(rawText, votes, { req, student });
+    orchestrator = await orchestrateWithStudentKey(rawText, votes, { req, student, classes });
   } catch (err) {
-    const fallback = agreementSubject(votes);
+    const agreed = agreementSubject(votes);
+    const fallback = classNamesFrom(classes).length
+      ? matchClassForSubject(classes, agreed)?.name || OTHER_SUBJECT
+      : agreed;
     const conf =
       (fineTunedBert && fineTunedBert.confidence) ||
       (studentKey && studentKey.confidence) ||
