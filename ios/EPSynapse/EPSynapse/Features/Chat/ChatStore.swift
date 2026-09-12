@@ -99,7 +99,7 @@ final class ChatStore: ObservableObject {
     func setHistoryOpen(_ open: Bool) {
         let wasOpen = historyReveal > 0.5
         historyDragging = false
-        withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) {
             historyReveal = open ? 1 : 0
         }
         if wasOpen && !open, !busy, let sid = currentSessionId {

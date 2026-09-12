@@ -18,7 +18,7 @@ struct ChatHistoryOverlay: View {
             let bottom = Self.panelBottom(safeBottom: safe.bottom)
             let width = Self.panelWidth(for: geo.size)
             let height = Self.panelHeight(for: geo.size, top: top, bottom: bottom)
-            let travel = width + leading
+            let travel = width + Self.hideExtra
             let showPanel = chat.historyDragging || chat.historyReveal >= 1 || panelMounted
             let mountPanel = showPanel || panelWarming
 
@@ -83,6 +83,9 @@ struct ChatHistoryOverlay: View {
         return chat.historyReveal > 0.5
     }
 
+    static let hideExtra: CGFloat = 64
+    static let commitVelocity: CGFloat = 520
+
     static func panelWidth(for size: CGSize) -> CGFloat {
         if AdaptiveLayout.isPad {
             return min(360, max(320, size.width * 0.34))
@@ -140,7 +143,7 @@ struct ChatHistoryOverlay: View {
                 let dx = value.translation.width
                 let dy = value.translation.height
                 if !closeEngaged {
-                    guard dx < 0, abs(dx) > abs(dy) * 1.15 else { return }
+                    guard dx < 0, abs(dx) > 8, abs(dx) > abs(dy) * 1.15 else { return }
                     closeEngaged = true
                     closeStart = chat.historyReveal
                     chat.historyDragging = true
@@ -171,9 +174,9 @@ struct ChatHistoryOverlay: View {
     private func commit(velocity vx: CGFloat) {
         chat.historyDragging = false
         let open: Bool
-        if vx >= 800 {
+        if vx >= Self.commitVelocity, chat.historyReveal > 0.08 {
             open = true
-        } else if vx <= -800 {
+        } else if vx <= -Self.commitVelocity, chat.historyReveal < 0.92 {
             open = false
         } else {
             open = Self.linear(chat.historyReveal) >= 0.5
@@ -221,7 +224,7 @@ struct ChatHistoryOpenModifier: ViewModifier {
                 let dx = value.translation.width
                 let dy = value.translation.height
                 if !engaged {
-                    guard dx > 0, abs(dx) > abs(dy) * 1.15 else { return }
+                    guard dx > 8, abs(dx) > abs(dy) * 1.15 else { return }
                     engaged = true
                     startReveal = chat.historyReveal
                     chat.historyDragging = true
@@ -245,9 +248,9 @@ struct ChatHistoryOpenModifier: ViewModifier {
                 chat.historyDragging = false
                 let vx = value.velocity.width
                 let open: Bool
-                if vx >= 800 {
+                if vx >= ChatHistoryOverlay.commitVelocity, chat.historyReveal > 0.08 {
                     open = true
-                } else if vx <= -800 {
+                } else if vx <= -ChatHistoryOverlay.commitVelocity, chat.historyReveal < 0.92 {
                     open = false
                 } else {
                     open = ChatHistoryOverlay.linear(chat.historyReveal) >= 0.5
