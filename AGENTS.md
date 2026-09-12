@@ -129,9 +129,10 @@ Public API health: https://api.epsynapse.com/health
 
 | Path | What |
 |------|------|
-| `index.html`, `favicon.svg` | Public site. Styles are inline in `index.html`. There is no `styles.css`. |
+| `index.html`, `styles.css`, `favicon.svg` | Public site. |
 | `runtime-config.json` | Browser config. `apiBase` is `https://api.epsynapse.com`. |
 | `vercel.json` | Vercel project config. Git auto-deploy is off. |
+| `ios/` | Native iPhone and iPad app. See `docs/IOS.md`. Not shipped to Vercel. |
 | `server/` | Mac Express API. Port 3006. |
 | `server/.env` | Local secrets. Never commit. Copy from `server/.env.example`. |
 | `docs/` | How to start, tunnel, local API. Not shipped to Vercel. |
@@ -179,6 +180,7 @@ Run it after commit + push if you touched any of:
 Skip for Mac / agent trees:
 
 - `server/**`
+- `ios/**`
 - `docs/`, `deploy/`, `.cursor/`, `ideas.md`, this file
 
 ### How to deploy

@@ -33,7 +33,14 @@ fi
 stage="$(mktemp -d "${TMPDIR:-/tmp}/jype-web.XXXXXX")"
 cleanup() { rm -rf "$stage"; }
 trap cleanup EXIT
-rsync -a --delete --exclude '.git/' --exclude 'node_modules/' "$root/" "$stage/"
+rsync -a --delete \
+  --exclude '.git/' \
+  --exclude 'node_modules/' \
+  --exclude 'ios/' \
+  --exclude 'docs/' \
+  --exclude '.cursor/' \
+  --exclude 'deploy/' \
+  "$root/" "$stage/"
 cd "$stage"
 
 npx vercel deploy --prod --yes --scope jype1

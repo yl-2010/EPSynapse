@@ -18,7 +18,7 @@ Run `npm run deploy:web` after commit + push if you touched any of:
 - `runtime-config.json`, `vercel.json`
 - any other root static file Vercel serves
 
-Skip only for Mac / agent trees: `server/**`, `docs/`, `deploy/`, `.cursor/`, `ideas.md`, `AGENTS.md`.
+Skip only for Mac / agent trees: `server/**`, `ios/**`, `docs/`, `deploy/`, `.cursor/`, `ideas.md`, `AGENTS.md`.
 
 ## How
 
