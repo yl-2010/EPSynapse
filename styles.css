@@ -1624,7 +1624,7 @@ html[data-resolved-theme="light"] .edu-filter.is-on {
 
 /* ── Chatbot: circle → centered pill → response panel ── */
 .yan-chat {
-  --lg-read-blur: 0px;
+  --lg-read-blur: 18px;
   --lg-panel-blur: 18px;
   --chat-pad: clamp(1rem, 2.5vw, 1.6rem);
   --chat-circle: var(--corner-orb);
@@ -1701,8 +1701,8 @@ html[data-resolved-theme="dark"] .yan-chat-pill.corner.lg-refraction::after {
   -webkit-backdrop-filter: blur(var(--lg-read-blur)) var(--lg-filter) brightness(0.92) saturate(1.15);
 }
 .yan-chat-pill.lg-fallback {
-  backdrop-filter: blur(10px) saturate(1.5);
-  -webkit-backdrop-filter: blur(10px) saturate(1.5);
+  backdrop-filter: blur(18px) saturate(1.5);
+  -webkit-backdrop-filter: blur(18px) saturate(1.5);
   transition: backdrop-filter 0.4s var(--ease), -webkit-backdrop-filter 0.4s var(--ease);
 }
 .yan-chat.has-input-text .yan-chat-pill.lg-fallback {
