@@ -8,9 +8,10 @@
   --panel-bg: rgba(255, 255, 255, 0.5);
   --panel-brd: rgba(255, 255, 255, 0.6);
   --rim: rgba(255, 255, 255, 0.75);
-  --glow: rgba(235, 167, 0, 0.12);
+  --accent-rgb: 235, 167, 0;
+  --glow: rgba(235, 167, 0, 0.28);
   --bloom-a: rgba(0, 70, 127, 0.16);
-  --bloom-b: rgba(235, 167, 0, 0.14);
+  --bloom-b: rgba(235, 167, 0, 0.32);
   --bloom-c: rgba(11, 31, 58, 0.1);
   --lg-tint-rgb: 232, 238, 246;
   --lg-tint-opacity: 0.06;
@@ -68,9 +69,10 @@
     --panel-bg: rgba(11, 31, 58, 0.48);
     --panel-brd: rgba(255, 255, 255, 0.1);
     --rim: rgba(255, 255, 255, 0.16);
-    --glow: rgba(235, 167, 0, 0.08);
+    --accent-rgb: 235, 167, 0;
+    --glow: rgba(235, 167, 0, 0.22);
     --bloom-a: rgba(0, 70, 127, 0.32);
-    --bloom-b: rgba(235, 167, 0, 0.16);
+    --bloom-b: rgba(235, 167, 0, 0.28);
     --bloom-c: rgba(0, 50, 95, 0.22);
     --lg-tint-rgb: 8, 22, 42;
     --lg-tint-opacity: 0.28;
@@ -94,9 +96,10 @@ html[data-resolved-theme="dark"] {
   --panel-bg: rgba(11, 31, 58, 0.48);
   --panel-brd: rgba(255, 255, 255, 0.1);
   --rim: rgba(255, 255, 255, 0.16);
-  --glow: rgba(235, 167, 0, 0.08);
+  --accent-rgb: 235, 167, 0;
+  --glow: rgba(235, 167, 0, 0.22);
   --bloom-a: rgba(0, 70, 127, 0.32);
-  --bloom-b: rgba(235, 167, 0, 0.16);
+  --bloom-b: rgba(235, 167, 0, 0.28);
   --bloom-c: rgba(0, 50, 95, 0.22);
   --lg-tint-rgb: 8, 22, 42;
   --lg-tint-opacity: 0.28;
@@ -213,6 +216,9 @@ html.lg-chrome .edu-file-tile {
 
 html.lg-chrome .edu-panel.lg-static,
 html.lg-chrome .edu-file-tile.lg-static,
+html.lg-chrome .edu-sheet.lg-static,
+html.lg-chrome .edu-sheet-field.lg-static,
+html.lg-chrome .edu-sheet-btn.lg-static,
 html.lg-chrome .yan-chat-widget.lg-static,
 html.lg-chrome .yan-chat-map-ios.lg-static,
 html.lg-chrome .yan-chat-bubble.lg-static {
@@ -221,6 +227,9 @@ html.lg-chrome .yan-chat-bubble.lg-static {
 
 html.lg-chrome .edu-panel.lg-static:hover,
 html.lg-chrome .edu-file-tile.lg-static:hover,
+html.lg-chrome .edu-sheet.lg-static:hover,
+html.lg-chrome .edu-sheet-field.lg-static:hover,
+html.lg-chrome .edu-sheet-btn.lg-static:hover,
 html.lg-chrome .yan-chat-widget.lg-static:hover,
 html.lg-chrome .yan-chat-map-ios.lg-static:hover,
 html.lg-chrome .yan-chat-bubble.lg-static:hover {
@@ -229,11 +238,17 @@ html.lg-chrome .yan-chat-bubble.lg-static:hover {
 
 html.lg-chrome .edu-panel.lg-static.lg-refraction::after,
 html.lg-chrome .edu-file-tile.lg-static.lg-refraction::after,
+html.lg-chrome .edu-sheet.lg-static.lg-refraction::after,
+html.lg-chrome .edu-sheet-field.lg-static.lg-refraction::after,
+html.lg-chrome .edu-sheet-btn.lg-static.lg-refraction::after,
 html.lg-chrome .yan-chat-widget.lg-static.lg-refraction::after,
 html.lg-chrome .yan-chat-map-ios.lg-static.lg-refraction::after,
 html.lg-chrome .yan-chat-bubble.lg-static.lg-refraction::after,
 html.lg-chrome[data-resolved-theme="dark"] .edu-panel.lg-static.lg-refraction::after,
 html.lg-chrome[data-resolved-theme="dark"] .edu-file-tile.lg-static.lg-refraction::after,
+html.lg-chrome[data-resolved-theme="dark"] .edu-sheet.lg-static.lg-refraction::after,
+html.lg-chrome[data-resolved-theme="dark"] .edu-sheet-field.lg-static.lg-refraction::after,
+html.lg-chrome[data-resolved-theme="dark"] .edu-sheet-btn.lg-static.lg-refraction::after,
 html.lg-chrome[data-resolved-theme="dark"] .yan-chat-widget.lg-static.lg-refraction::after,
 html.lg-chrome[data-resolved-theme="dark"] .yan-chat-map-ios.lg-static.lg-refraction::after,
 html.lg-chrome[data-resolved-theme="dark"] .yan-chat-bubble.lg-static.lg-refraction::after {
@@ -248,6 +263,9 @@ html.lg-chrome[data-resolved-theme="dark"] .yan-chat-bubble.lg-static.lg-refract
 @media (prefers-color-scheme: dark) {
   html.lg-chrome:not([data-resolved-theme="light"]) .edu-panel.lg-static.lg-refraction::after,
   html.lg-chrome:not([data-resolved-theme="light"]) .edu-file-tile.lg-static.lg-refraction::after,
+  html.lg-chrome:not([data-resolved-theme="light"]) .edu-sheet.lg-static.lg-refraction::after,
+  html.lg-chrome:not([data-resolved-theme="light"]) .edu-sheet-field.lg-static.lg-refraction::after,
+  html.lg-chrome:not([data-resolved-theme="light"]) .edu-sheet-btn.lg-static.lg-refraction::after,
   html.lg-chrome:not([data-resolved-theme="light"]) .yan-chat-widget.lg-static.lg-refraction::after,
   html.lg-chrome:not([data-resolved-theme="light"]) .yan-chat-map-ios.lg-static.lg-refraction::after,
   html.lg-chrome:not([data-resolved-theme="light"]) .yan-chat-bubble.lg-static.lg-refraction::after {
@@ -294,6 +312,10 @@ a {
 .yan-chat-send::before,
 .edu-panel::before,
 .edu-file-tile::before,
+.edu-sheet::before,
+.edu-sheet-field::before,
+.edu-sheet-btn::before,
+.edu-sheet-close::before,
 .yan-chat-widget::before,
 .yan-chat-map-ios::before,
 .yan-chat-bubble::before,
@@ -313,6 +335,10 @@ a {
 .yan-chat-send.lg-refraction::after,
 .edu-panel.lg-refraction::after,
 .edu-file-tile.lg-refraction::after,
+.edu-sheet.lg-refraction::after,
+.edu-sheet-field.lg-refraction::after,
+.edu-sheet-btn.lg-refraction::after,
+.edu-sheet-close.lg-refraction::after,
 .yan-chat-widget.lg-refraction::after,
 .yan-chat-map-ios.lg-refraction::after,
 .yan-chat-bubble.lg-refraction::after,
@@ -334,6 +360,10 @@ a {
 .yan-chat-send.lg-fallback,
 .edu-panel.lg-fallback,
 .edu-file-tile.lg-fallback,
+.edu-sheet.lg-fallback,
+.edu-sheet-field.lg-fallback,
+.edu-sheet-btn.lg-fallback,
+.edu-sheet-close.lg-fallback,
 .yan-chat-widget.lg-fallback,
 .yan-chat-bubble.lg-fallback,
 .edu-filter.lg-fallback,
@@ -349,6 +379,10 @@ a {
   html:not([data-resolved-theme="light"]) .yan-chat-send.lg-refraction::after,
   html:not([data-resolved-theme="light"]) .edu-panel.lg-refraction::after,
   html:not([data-resolved-theme="light"]) .edu-file-tile.lg-refraction::after,
+  html:not([data-resolved-theme="light"]) .edu-sheet.lg-refraction::after,
+  html:not([data-resolved-theme="light"]) .edu-sheet-field.lg-refraction::after,
+  html:not([data-resolved-theme="light"]) .edu-sheet-btn.lg-refraction::after,
+  html:not([data-resolved-theme="light"]) .edu-sheet-close.lg-refraction::after,
   html:not([data-resolved-theme="light"]) .yan-chat-widget.lg-refraction::after,
   html:not([data-resolved-theme="light"]) .yan-chat-bubble.lg-refraction::after,
   html:not([data-resolved-theme="light"]) .edu-filter.lg-refraction::after,
@@ -363,6 +397,10 @@ html[data-resolved-theme="dark"] .yan-chat-close.lg-refraction::after,
 html[data-resolved-theme="dark"] .yan-chat-send.lg-refraction::after,
 html[data-resolved-theme="dark"] .edu-panel.lg-refraction::after,
 html[data-resolved-theme="dark"] .edu-file-tile.lg-refraction::after,
+html[data-resolved-theme="dark"] .edu-sheet.lg-refraction::after,
+html[data-resolved-theme="dark"] .edu-sheet-field.lg-refraction::after,
+html[data-resolved-theme="dark"] .edu-sheet-btn.lg-refraction::after,
+html[data-resolved-theme="dark"] .edu-sheet-close.lg-refraction::after,
 html[data-resolved-theme="dark"] .yan-chat-widget.lg-refraction::after,
 html[data-resolved-theme="dark"] .yan-chat-bubble.lg-refraction::after,
 html[data-resolved-theme="dark"] .edu-filter.lg-refraction::after,
@@ -393,6 +431,10 @@ html[data-resolved-theme="dark"] .edu-check.lg-refraction::after {
   left: var(--corner-pad);
   width: var(--corner-orb);
   height: var(--corner-orb);
+  color: var(--accent);
+  box-shadow:
+    0 6px var(--lg-outer-shadow-blur) var(--lg-outer-shadow),
+    0 0 0 1.5px color-mix(in srgb, var(--accent) 50%, transparent);
 }
 
 .c-tr {
@@ -414,6 +456,9 @@ html[data-resolved-theme="dark"] .edu-check.lg-refraction::after {
   color: inherit;
   appearance: none;
   -webkit-appearance: none;
+  box-shadow:
+    0 6px var(--lg-outer-shadow-blur) var(--lg-outer-shadow),
+    0 0 0 1.5px color-mix(in srgb, var(--accent) 40%, transparent);
   transition:
     transform 0.55s cubic-bezier(0.34, 1.56, 0.64, 1),
     box-shadow 0.4s var(--ease);
@@ -763,7 +808,7 @@ html[data-resolved-theme="dark"] .edu-back-shadow feGaussianBlur {
 }
 
 .edu-panel--completed {
-  opacity: 0.48;
+  opacity: 0.78;
 }
 
 .edu-files {
@@ -854,17 +899,20 @@ html[data-resolved-theme="dark"] .edu-back-shadow feGaussianBlur {
   gap: 0.65rem;
   margin-bottom: 0.7rem;
   min-height: 2.15rem;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
 }
 
 .edu-panel-title {
   margin: 0;
-  padding: 0;
+  padding: 0 0 0 0.65rem;
   font-family: var(--display);
   font-size: var(--text-title3);
   font-weight: 700;
   color: var(--fg);
   flex: 0 1 auto;
   min-width: 0;
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .edu-dates-toggle,
@@ -934,8 +982,9 @@ html[data-resolved-theme="dark"] .edu-back-shadow feGaussianBlur {
   isolation: isolate;
   background: transparent;
   color: var(--muted);
-  font-size: var(--text-caption2);
+  font-size: 9px;
   font-weight: 700;
+  letter-spacing: 0.02em;
   line-height: 1;
   cursor: pointer;
   user-select: none;
@@ -961,7 +1010,7 @@ html[data-resolved-theme="dark"] .edu-back-shadow feGaussianBlur {
 
 .edu-filter.is-on {
   color: #fff;
-  --lg-tint-rgb: 27, 125, 138;
+  --lg-tint-rgb: var(--accent-rgb);
   --lg-tint-opacity: 0.72;
   box-shadow:
     0 2px var(--lg-outer-shadow-blur) var(--lg-outer-shadow),
@@ -970,18 +1019,18 @@ html[data-resolved-theme="dark"] .edu-back-shadow feGaussianBlur {
 
 @media (prefers-color-scheme: dark) {
   html:not([data-resolved-theme="light"]) .edu-filter.is-on {
-    --lg-tint-rgb: 113, 196, 194;
+    --lg-tint-rgb: var(--accent-rgb);
     --lg-tint-opacity: 0.55;
   }
 }
 
 html[data-resolved-theme="dark"] .edu-filter.is-on {
-  --lg-tint-rgb: 113, 196, 194;
+  --lg-tint-rgb: var(--accent-rgb);
   --lg-tint-opacity: 0.55;
 }
 
 html[data-resolved-theme="light"] .edu-filter.is-on {
-  --lg-tint-rgb: 27, 125, 138;
+  --lg-tint-rgb: var(--accent-rgb);
   --lg-tint-opacity: 0.72;
 }
 
@@ -1518,22 +1567,22 @@ html[data-resolved-theme="light"] .edu-filter.is-on {
   --pill-h: var(--chat-circle);
   --chat-panel-bottom: calc(var(--pill-h) + var(--chat-pad) + 0.75rem);
   --chat-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --chat-orange: #fd5802;
-  --chat-orange-rgb: 253, 88, 2;
+  --chat-orange: #eba700;
+  --chat-orange-rgb: 235, 167, 0;
   --pill-w: var(--chat-circle);
   --pill-left: calc(100vw - var(--chat-pad) - var(--chat-circle));
   position: fixed; inset: 0; z-index: 90; pointer-events: none;
 }
 @media (prefers-color-scheme: dark) {
   html:not([data-resolved-theme="light"]) .yan-chat {
-    --chat-orange: #f87a28; --chat-orange-rgb: 248, 122, 40;
+    --chat-orange: #eba700; --chat-orange-rgb: 235, 167, 0;
   }
 }
 html[data-resolved-theme="dark"] .yan-chat {
-  --chat-orange: #f87a28; --chat-orange-rgb: 248, 122, 40;
+  --chat-orange: #eba700; --chat-orange-rgb: 235, 167, 0;
 }
 html[data-resolved-theme="light"] .yan-chat {
-  --chat-orange: #fd5802; --chat-orange-rgb: 253, 88, 2;
+  --chat-orange: #eba700; --chat-orange-rgb: 235, 167, 0;
 }
 .yan-chat.is-open {
   --pill-w: min(calc(var(--chat-circle) * 6), calc(100vw - (var(--chat-pad) * 2)));
@@ -1568,6 +1617,9 @@ html[data-resolved-theme="light"] .yan-chat {
 }
 .yan-chat.is-open .yan-chat-pill.corner {
   cursor: text;
+  box-shadow:
+    0 6px var(--lg-outer-shadow-blur) var(--lg-outer-shadow),
+    0 0 0 1.5px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 .yan-chat-pill.corner.lg-refraction::after {
   backdrop-filter: blur(var(--lg-read-blur)) var(--lg-filter);
@@ -2226,32 +2278,51 @@ a.yan-chat-widget {
   }
 }
 
-/* Settings sheet + assignment tags (JYPE extras) */
+.edu-home-mark {
+  margin: 0 0 1.1rem;
+  font-family: var(--display);
+  font-size: var(--text-title3);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+}
+
 .edu-sheet-backdrop {
   position: fixed;
   inset: 0;
   z-index: 120;
-  background: rgba(7, 21, 37, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem 1rem;
+  background: rgba(7, 21, 37, 0.28);
+  backdrop-filter: blur(18px) saturate(1.3);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+}
+
+.edu-sheet-backdrop[hidden] {
+  display: none !important;
 }
 
 .edu-sheet {
-  position: fixed;
+  position: relative;
   z-index: 121;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
   width: min(28rem, calc(100vw - 2rem));
   max-height: min(36rem, calc(100vh - 3rem));
   overflow: auto;
   isolation: isolate;
+  --lg-filter: none;
   border: 0;
   border-radius: 22px;
   padding: 1.15rem 1.2rem 1rem;
-  background: var(--panel-bg);
-  box-shadow:
-    0 6px var(--lg-outer-shadow-blur) var(--lg-outer-shadow),
-    0 0 0 1px var(--panel-brd);
+  background: transparent;
+  box-shadow: 0 10px var(--lg-outer-shadow-blur) var(--lg-outer-shadow);
   color: var(--fg);
+}
+
+.edu-sheet > * {
+  position: relative;
+  z-index: 2;
 }
 
 .edu-sheet-head {
@@ -2259,15 +2330,38 @@ a.yan-chat-widget {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  margin: 0 0 0.4rem;
+  margin: 0 0 0.75rem;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
 }
 
 .edu-sheet-head .edu-panel-title {
   margin: 0;
 }
 
-.edu-sheet-head #settings-close {
+.edu-sheet-close {
+  --lg-filter: none;
+  flex: 0 0 1.7rem;
+  width: 1.7rem;
+  height: 1.7rem;
   margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--fg);
+  background: transparent;
+  isolation: isolate;
+  box-shadow: 0 3px var(--lg-outer-shadow-blur) var(--lg-outer-shadow);
+  cursor: pointer;
+}
+
+.edu-sheet-close svg {
+  position: relative;
+  z-index: 2;
+  width: 48%;
+  height: 48%;
 }
 
 .edu-sheet label {
@@ -2278,42 +2372,80 @@ a.yan-chat-widget {
   margin: 0 0 0.35rem;
 }
 
-.edu-sheet input {
+.edu-sheet-field {
+  --lg-filter: none;
+  position: relative;
+  isolation: isolate;
+  display: block;
+  width: 100%;
+  margin: 0 0 0.85rem;
+  border-radius: 14px;
+  background: transparent;
+  box-shadow: 0 4px var(--lg-outer-shadow-blur) var(--lg-outer-shadow);
+}
+
+.edu-sheet-field input,
+.edu-sheet-field select {
+  position: relative;
+  z-index: 2;
   display: block;
   width: 100%;
   box-sizing: border-box;
   font: inherit;
   font-size: var(--text-body);
   color: var(--fg);
-  background: color-mix(in srgb, var(--bg-0) 70%, transparent);
-  border: 1px solid var(--hairline);
-  border-radius: 12px;
-  padding: 0.55rem 0.75rem;
+  background: transparent;
+  border: 0;
+  border-radius: inherit;
+  padding: 0.6rem 0.8rem;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.edu-sheet-field select {
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.edu-sheet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
   margin: 0 0 0.85rem;
 }
 
-.edu-sheet button,
-.edu-sheet select {
+.edu-sheet-btn {
+  --lg-filter: none;
+  position: relative;
+  isolation: isolate;
+  margin: 0;
+  padding: 0.5rem 0.95rem;
+  border: 0;
+  border-radius: 14px;
   font: inherit;
   font-size: var(--text-subhead);
   font-weight: 600;
   color: var(--fg);
-  background: color-mix(in srgb, var(--accent) 18%, var(--panel-bg));
-  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--hairline));
-  border-radius: 12px;
-  padding: 0.5rem 0.9rem;
+  background: transparent;
+  box-shadow: 0 4px var(--lg-outer-shadow-blur) var(--lg-outer-shadow);
   cursor: pointer;
 }
 
-.edu-sheet select {
-  display: block;
-  width: 100%;
-  font-weight: 500;
-  margin: 0 0 0.85rem;
+.edu-sheet-btn > * {
+  position: relative;
+  z-index: 2;
 }
 
-.edu-sheet button {
-  margin: 0 0.4rem 0.7rem 0;
+.edu-sheet-btn--gold {
+  color: #0b1f3a;
+  --lg-tint-rgb: var(--accent-rgb);
+  --lg-tint-opacity: 0.72;
+}
+
+html[data-resolved-theme="dark"] .edu-sheet-btn--gold {
+  color: #fff;
+  --lg-tint-opacity: 0.55;
 }
 
 .edu-tag-CW,

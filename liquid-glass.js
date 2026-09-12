@@ -352,12 +352,15 @@
       el.classList.contains("yan-chat-widget") ||
       el.classList.contains("yan-chat-map-ios") ||
       el.classList.contains("yan-chat-bubble") ||
+      el.classList.contains("edu-sheet") ||
+      el.classList.contains("edu-sheet-field") ||
+      el.classList.contains("edu-sheet-btn") ||
       el.classList.contains("sheet")
     );
   }
 
   const STATIC_BOX_SEL =
-    ".edu-panel.lg-static, .edu-file-tile.lg-static, .dash-login.lg-static, .dash-entry.lg-static, .dash-agent.lg-static, .yan-chat-widget.lg-static, .yan-chat-map-ios.lg-static, .yan-chat-bubble.lg-static, .sheet.lg-static";
+    ".edu-panel.lg-static, .edu-file-tile.lg-static, .edu-sheet.lg-static, .edu-sheet-field.lg-static, .edu-sheet-btn.lg-static, .dash-login.lg-static, .dash-entry.lg-static, .dash-agent.lg-static, .yan-chat-widget.lg-static, .yan-chat-map-ios.lg-static, .yan-chat-bubble.lg-static, .sheet.lg-static";
 
   const STATIC_BOX_MAG_SCALE = 0.6;
 

@@ -35,7 +35,7 @@ If they are already loaded: `launchctl kickstart -k "gui/$(id -u)/com.jype.serve
 
 Logs: `/tmp/jype-server.log`, `/tmp/cloudflared-jype.log`.
 
-Git auto-deploy is off. Agents run `npm run deploy:web` for the public site.
+Git auto-deploy is off. After any browser-facing change (`index.html`, `styles.css`, `app.js`, `chatbot.js`, `liquid-glass.js`, `theme-orb.js`, `runtime-config.json`, `vercel.json`, root static files), agents must run `npm run deploy:web` and confirm https://epsynapse.com shows the new page. `git push` does not update the live site.
 
 ---
 

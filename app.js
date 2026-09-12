@@ -37,11 +37,20 @@
     const session = sid();
     if (session) headers["X-EPSynapse-Session"] = session;
     if (opts.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
-    const res = await fetch(apiBase + path, {
-      credentials: "include",
-      ...opts,
-      headers,
-    });
+    const ctrl = new AbortController();
+    const wait = Number.isFinite(opts.timeoutMs) ? opts.timeoutMs : 8000;
+    const timer = setTimeout(() => ctrl.abort(), wait);
+    let res;
+    try {
+      res = await fetch(apiBase + path, {
+        credentials: "include",
+        ...opts,
+        headers,
+        signal: ctrl.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
     const text = await res.text();
     let body = {};
     try {

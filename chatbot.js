@@ -101,6 +101,8 @@
     if (thinking !== undefined) {
       const think = document.createElement("div");
       think.className = "yan-chat-bubble yan-chat-working";
+      think.dataset.liquidGlass = "rounded";
+      think.dataset.filterId = "lg-edu-chat-w-" + ++bubbleSeq;
       think.textContent = thinking;
       turn.appendChild(think);
     }

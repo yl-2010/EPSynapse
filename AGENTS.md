@@ -167,12 +167,14 @@ Vercel team is JYPE (`jype1`, `team_EF7WJXYBcuZa84T04Q5jvmKv`), not Yan's person
 
 ### When a deploy applies
 
-Run `npm run deploy:web` if you changed anything Vercel serves in the browser.
+A browser change is not done until `npm run deploy:web` lands and https://epsynapse.com shows it. Localhost and GitHub can be ahead. That is how the last dashboard missed production.
 
-Deploy for:
+Run it after commit + push if you touched any of:
 
-- `index.html`, `favicon.svg`, other static files at the repo root
-- `vercel.json`, `runtime-config.json`
+- `index.html`, `agent.html`, `favicon.svg`
+- `styles.css`, `app.js`, `chatbot.js`, `liquid-glass.js`, `theme-orb.js`
+- `runtime-config.json`, `vercel.json`
+- any other root static file Vercel serves
 
 Skip for Mac / agent trees:
 
@@ -237,6 +239,7 @@ Logs: `/tmp/jype-server.log`, `/tmp/cloudflared-jype.log`.
 - Four `cloudflared` processes run on this Mac. Do not combine them. JYPE is port 3006 only.
 - Never commit `server/.env`, `.env`, or auth secrets.
 - Do not connect the GitHub repo to Vercel Git. Manual `deploy:web` only.
+- After any root static / browser change, run `npm run deploy:web` before you stop. `git push` is not a site deploy.
 - Do not force-push `main`.
 - Do not open PRs unless the user in this chat told you to.
 
