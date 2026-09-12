@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-auth="out">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -15,51 +15,60 @@
         } catch (e) {}
       })();
     </script>
-    <title>Not found · EPSynapse</title>
-    <meta name="description" content="This page is not in EPSynapse." />
+    <title>EPSynapse</title>
+    <meta name="description" content="EPSynapse student dashboard" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/styles.css?v=glass13" />
+    <link rel="stylesheet" href="/styles.css?v=glass22" />
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
-      a.corner {
-        text-decoration: none;
-      }
-      .page-wrap {
-        display: flex;
-        justify-content: center;
-        box-sizing: border-box;
-        min-height: 100dvh;
-        padding: 6.5rem 1rem 2rem;
-      }
-      .page-sheet {
-        max-height: min(52rem, calc(100dvh - 8rem));
-      }
-      .page-sheet .edu-sheet-body p {
-        margin: 0 0 0.75rem;
-        font-size: var(--text-subhead);
-        line-height: 1.45;
-        color: var(--fg);
-      }
-      .page-sheet .edu-sheet-body a {
+      .od-code {
+        margin: 0.35rem 0 0.5rem;
+        font-size: 1.55rem;
+        font-weight: 700;
+        letter-spacing: 0.14em;
         color: var(--accent);
       }
-      .page-links {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.75rem 1.1rem;
-        margin-top: 0.35rem;
+      .edu-mail-unread .edu-name { font-weight: 650; }
+      .edu-mail-body {
+        margin: 0.65rem 0 0;
+        white-space: pre-wrap;
+        font-size: var(--text-footnote);
+        color: var(--muted);
+        max-height: 12rem;
+        overflow: auto;
       }
+      .edu-compose {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        margin-top: 0.85rem;
+      }
+      .edu-compose input,
+      .edu-compose textarea {
+        width: 100%;
+        box-sizing: border-box;
+        border: 0;
+        border-radius: 14px;
+        padding: 0.65rem 0.8rem;
+        background: color-mix(in srgb, var(--fg) 6%, transparent);
+        color: var(--fg);
+        font: inherit;
+        font-size: var(--text-footnote);
+      }
+      .edu-compose textarea { min-height: 5.2rem; resize: vertical; }
     </style>
   </head>
   <body>
-    <a
-      href="/"
+    <button
+      type="button"
       class="corner c-tl squircle"
       data-liquid-glass="squircle"
       data-filter-id="lg-tl"
+      id="home-open"
       aria-label="Home"
     >
       <span class="corner-mark" aria-hidden="true">E</span>
-    </a>
+    </button>
 
     <button
       type="button"
@@ -70,20 +79,423 @@
       draggable="false"
     ></button>
 
-    <div class="page-wrap">
-      <main class="edu-sheet page-sheet">
+    <button
+      type="button"
+      class="corner c-bl squircle"
+      data-liquid-glass="squircle"
+      data-filter-id="lg-bl"
+      id="settings-open"
+      aria-label="Open settings"
+    >
+      <svg viewBox="0 0 24 24" fill="currentColor" shape-rendering="geometricPrecision" aria-hidden="true">
+        <path
+          fill-rule="evenodd"
+          d="M9.808 6.04A.72.72 0 0 0 10.28 5.364V4.57a1.72 1.72 0 0 1 3.44 0v.794A.72.72 0 0 0 14.192 6.04 6.35 6.35 0 0 1 16.066 7.122.72.72 0 0 0 16.887 7.193l.688-.398a1.72 1.72 0 0 1 1.72 2.98l-.688.397A.72.72 0 0 0 18.257 10.918 6.35 6.35 0 0 1 18.257 13.082.72.72 0 0 0 18.607 13.828l.688.397a1.72 1.72 0 0 1-1.72 2.98l-.688-.398A.72.72 0 0 0 16.066 16.878 6.35 6.35 0 0 1 14.192 17.96.72.72 0 0 0 13.72 18.636v.794a1.72 1.72 0 0 1-3.44 0v-.794A.72.72 0 0 0 9.808 17.96 6.35 6.35 0 0 1 7.934 16.878.72.72 0 0 0 7.113 16.807l-.688.398a1.72 1.72 0 0 1-1.72-2.98l.688-.397A.72.72 0 0 0 5.743 13.082 6.35 6.35 0 0 1 5.743 10.918.72.72 0 0 0 5.393 10.172l-.688-.397a1.72 1.72 0 0 1 1.72-2.98l.688.398A.72.72 0 0 0 7.934 7.122 6.35 6.35 0 0 1 9.808 6.04ZM15.08 12a3.08 3.08 0 1 0-6.16 0 3.08 3.08 0 1 0 6.16 0Z"
+        />
+      </svg>
+    </button>
+
+    <div id="stage-loading" class="stage stage-loading" aria-live="polite">…</div>
+
+    <div id="stage-out" class="stage stage-out" hidden>
+      <div class="stage-out-card">
+        <p class="stage-out-mark">EPSynapse</p>
+        <p class="stage-out-lead">Student dashboard for Eastside Prep.</p>
+        <button type="button" id="stage-google" class="google-native">
+          <span class="google-native-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path fill="#4285F4" d="M23.52 12.27c0-.86-.07-1.49-.23-2.14H12v3.89h6.55c-.13 1.1-.84 2.76-2.42 3.88l-.02.14 3.51 2.72.24.02c2.24-2.07 3.66-5.12 3.66-8.51z"/>
+              <path fill="#34A853" d="M12 24c3.2 0 5.89-1.05 7.85-2.86l-3.74-2.9c-1 .7-2.35 1.19-4.11 1.19-3.15 0-5.82-2.07-6.77-4.94l-.14.01-3.66 2.83-.05.13C3.35 21.33 7.36 24 12 24z"/>
+              <path fill="#FBBC05" d="M5.23 14.49A7.2 7.2 0 0 1 4.83 12c0-.87.15-1.71.39-2.49l-.01-.17-3.7-2.87-.12.06A11.97 11.97 0 0 0 0 12c0 1.94.47 3.78 1.39 5.47l3.84-2.98z"/>
+              <path fill="#EA4335" d="M12 4.77c2.22 0 3.72.96 4.57 1.76l3.34-3.26C17.88 1.19 15.2 0 12 0 7.36 0 3.35 2.67 1.39 6.53l3.83 2.98C6.17 6.84 8.85 4.77 12 4.77z"/>
+            </svg>
+          </span>
+          Sign in with Google
+        </button>
+        <p class="stage-out-status" id="stage-out-status" hidden></p>
+        <p class="stage-out-links">
+          <a class="stage-out-foot" href="/research">Research</a>
+          <a class="stage-out-foot" href="/privacy.html">Privacy</a>
+        </p>
+      </div>
+    </div>
+
+    <div id="stage-full" class="stage stage-full" hidden>
+      <main id="edu-app" class="edu-app" aria-live="polite"></main>
+
+      <div id="edu-chat" class="yan-chat" data-state="closed">
+        <div
+          class="yan-chat-panel"
+          data-liquid-glass="rounded"
+          data-filter-id="lg-edu-chat-panel"
+          hidden
+          aria-hidden="true"
+          role="region"
+          aria-label="Personal assistant"
+        >
+          <button
+            type="button"
+            class="yan-chat-close yan-chat-close--panel circle"
+            data-liquid-glass="circle"
+            data-filter-id="lg-edu-chat-x-panel"
+            data-edu-chat-minimize
+            aria-label="Hide chat"
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" shape-rendering="geometricPrecision" aria-hidden="true">
+              <path
+                d="M5.448 7.252 16.748 18.552a1.275 1.275 0 0 0 1.804-1.804L7.252 5.448a1.275 1.275 0 0 0-1.804 1.804Zm11.3-1.804L5.448 16.748a1.275 1.275 0 0 0 1.804 1.804L18.552 7.252a1.275 1.275 0 0 0-1.804-1.804Z"
+              />
+            </svg>
+          </button>
+          <button
+            type="button"
+            class="yan-chat-close yan-chat-close--panel yan-chat-close--new circle"
+            data-liquid-glass="circle"
+            data-filter-id="lg-edu-chat-new-panel"
+            data-edu-chat-clear
+            aria-label="New chat"
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" shape-rendering="geometricPrecision" aria-hidden="true">
+              <path
+                d="M10.725 5.55v12.9a1.275 1.275 0 0 0 2.55 0V5.55a1.275 1.275 0 0 0-2.55 0Zm-5.175 7.725h12.9a1.275 1.275 0 0 0 0-2.55H5.55a1.275 1.275 0 0 0 0 2.55Z"
+              />
+            </svg>
+          </button>
+          <div class="yan-chat-messages" aria-live="polite"></div>
+          <div class="yan-chat-history" hidden aria-hidden="true"></div>
+        </div>
+
+        <div
+          class="yan-chat-pill corner circle c-br"
+          data-liquid-glass="circle"
+          data-filter-id="lg-edu-chat-pill"
+        >
+          <button
+            type="button"
+            class="yan-chat-minimize yan-chat-close yan-chat-close--pill circle"
+            data-liquid-glass="circle"
+            data-filter-id="lg-edu-chat-minimize"
+            data-edu-chat-minimize
+            aria-label="Hide chat"
+            tabindex="-1"
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" shape-rendering="geometricPrecision" aria-hidden="true">
+              <path
+                d="M5.448 7.252 16.748 18.552a1.275 1.275 0 0 0 1.804-1.804L7.252 5.448a1.275 1.275 0 0 0-1.804 1.804Zm11.3-1.804L5.448 16.748a1.275 1.275 0 0 0 1.804 1.804L18.552 7.252a1.275 1.275 0 0 0-1.804-1.804Z"
+              />
+            </svg>
+          </button>
+
+          <button
+            type="button"
+            class="yan-chat-launcher"
+            aria-label="Personal assistant"
+            aria-expanded="false"
+            aria-controls="edu-chat-input"
+          >
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="M6.2 5.2h11.6A2.8 2.8 0 0 1 20.6 8v6.1a2.8 2.8 0 0 1-2.8 2.8h-4.55l-4.35 3.15V16.9H6.2A2.8 2.8 0 0 1 3.4 14.1V8A2.8 2.8 0 0 1 6.2 5.2Z"
+                stroke="currentColor"
+                stroke-width="1.85"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </button>
+
+          <form class="yan-chat-form" action="#" autocomplete="off">
+            <button
+              type="button"
+              class="yan-chat-history-btn circle"
+              data-liquid-glass="circle"
+              data-filter-id="lg-edu-chat-history"
+              data-edu-chat-history
+              aria-label="Past chats"
+              aria-pressed="false"
+              tabindex="-1"
+            >
+              <svg viewBox="0 0 24 24" fill="currentColor" shape-rendering="geometricPrecision" aria-hidden="true">
+                <path
+                  d="M12 3.6a8.4 8.4 0 1 0 0 16.8 8.4 8.4 0 0 0 0-16.8ZM12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20Zm.75 5.2a.75.75 0 0 0-1.5 0v5.05c0 .24.12.47.32.61l3.4 2.2a.75.75 0 1 0 .82-1.26L12.75 11.9V7.2Z"
+                />
+              </svg>
+            </button>
+            <label class="visually-hidden" for="edu-chat-input">Ask your personal agent</label>
+            <textarea
+              id="edu-chat-input"
+              class="yan-chat-input"
+              name="q"
+              rows="1"
+              inputmode="text"
+              enterkeyhint="enter"
+              placeholder="Ask your personal agent…"
+              maxlength="4000"
+              tabindex="-1"
+              autocomplete="off"
+              wrap="soft"
+              aria-multiline="true"
+            ></textarea>
+            <button
+              type="submit"
+              class="yan-chat-send circle"
+              data-liquid-glass="circle"
+              data-filter-id="lg-edu-chat-send"
+              aria-label="Send"
+            >
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <g stroke="currentColor" stroke-width="3.3" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 18.2V6.4" />
+                  <path d="M6.9 11.3L12 6.2L17.1 11.3" />
+                </g>
+              </svg>
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div id="settings-sheet" class="edu-sheet-backdrop" hidden>
+      <form id="settings-form" class="set-stage" autocomplete="off">
+      <div class="edu-sheet edu-sheet--set" id="settings-main">
         <div class="edu-sheet-head">
-          <h1 class="edu-sheet-title">Not found</h1>
+          <h2 class="edu-sheet-title">Settings</h2>
+          <button
+            type="button"
+            id="settings-close"
+            class="edu-sheet-close"
+            aria-label="Close settings"
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" shape-rendering="geometricPrecision" aria-hidden="true">
+              <path
+                d="M5.448 7.252 16.748 18.552a1.275 1.275 0 0 0 1.804-1.804L7.252 5.448a1.275 1.275 0 0 0-1.804 1.804Zm11.3-1.804L5.448 16.748a1.275 1.275 0 0 0 1.804 1.804L18.552 7.252a1.275 1.275 0 0 0-1.804-1.804Z"
+              />
+            </svg>
+          </button>
         </div>
         <div class="edu-sheet-body">
-          <p>This page is not in EPSynapse.</p>
-          <p class="page-links">
-            <a href="/">Home</a>
-            <a href="/privacy">Privacy</a>
-            <a href="/groq">Groq key</a>
-          </p>
+        <section class="set-block">
+          <button type="button" id="google-redirect" class="google-native">
+            <span class="google-native-mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path fill="#4285F4" d="M23.52 12.27c0-.86-.07-1.49-.23-2.14H12v3.89h6.55c-.13 1.1-.84 2.76-2.42 3.88l-.02.14 3.51 2.72.24.02c2.24-2.07 3.66-5.12 3.66-8.51z"/>
+                <path fill="#34A853" d="M12 24c3.2 0 5.89-1.05 7.85-2.86l-3.74-2.9c-1 .7-2.35 1.19-4.11 1.19-3.15 0-5.82-2.07-6.77-4.94l-.14.01-3.66 2.83-.05.13C3.35 21.33 7.36 24 12 24z"/>
+                <path fill="#FBBC05" d="M5.23 14.49A7.2 7.2 0 0 1 4.83 12c0-.87.15-1.71.39-2.49l-.01-.17-3.7-2.87-.12.06A11.97 11.97 0 0 0 0 12c0 1.94.47 3.78 1.39 5.47l3.84-2.98z"/>
+                <path fill="#EA4335" d="M12 4.77c2.22 0 3.72.96 4.57 1.76l3.34-3.26C17.88 1.19 15.2 0 12 0 7.36 0 3.35 2.67 1.39 6.53l3.83 2.98C6.17 6.84 8.85 4.77 12 4.77z"/>
+              </svg>
+            </span>
+            Sign in with Google
+          </button>
+          <div class="edu-google-account" id="google-profile" hidden>
+            <img class="edu-google-pic" id="google-picture" alt="" hidden />
+            <div class="edu-google-who">
+              <p class="edu-google-name" id="google-name"></p>
+              <p class="edu-google-email" id="google-email"></p>
+            </div>
+            <span id="google-signout-row" hidden>
+              <button type="button" id="google-signout" class="set-textbtn">Sign out</button>
+            </span>
+          </div>
+          <p class="set-hint" id="settings-status">Sign in with Google first.</p>
+        </section>
+
+        <div id="settings-gated" class="edu-sheet-gated">
+        <section class="set-block">
+          <button type="button" class="set-nav" data-pane="school">
+            <span class="set-nav-copy">
+              <span class="set-nav-title">School</span>
+              <span class="set-nav-meta" id="school-summary">Eastside Prep</span>
+            </span>
+            <svg class="set-nav-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M9 6.2L15.2 12L9 17.8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <button type="button" class="set-nav" data-pane="chat">
+            <span class="set-nav-copy">
+              <span class="set-nav-title">Chat key</span>
+              <span class="set-nav-meta" id="chat-summary">Groq</span>
+            </span>
+            <svg class="set-nav-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M9 6.2L15.2 12L9 17.8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <button type="button" class="set-nav" data-pane="canvas">
+            <span class="set-nav-copy">
+              <span class="set-nav-title">Canvas</span>
+              <span class="set-nav-meta" id="canvas-summary">URL and token</span>
+            </span>
+            <svg class="set-nav-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M9 6.2L15.2 12L9 17.8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <button type="button" class="set-nav" data-pane="onedrive">
+            <span class="set-nav-copy">
+              <span class="set-nav-title">OneDrive</span>
+              <span class="set-nav-meta" id="onedrive-summary">School files</span>
+            </span>
+            <svg class="set-nav-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M9 6.2L15.2 12L9 17.8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <button type="button" class="set-nav" data-pane="outlook">
+            <span class="set-nav-copy">
+              <span class="set-nav-title">Outlook</span>
+              <span class="set-nav-meta" id="outlook-summary">School mail</span>
+            </span>
+            <svg class="set-nav-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M9 6.2L15.2 12L9 17.8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </section>
         </div>
-      </main>
+        </div>
+      </div>
+
+      <div class="set-side" id="settings-side" aria-hidden="true" inert>
+        <div class="edu-sheet edu-sheet--set" data-pane="school" hidden>
+          <div class="edu-sheet-head">
+            <h2 class="edu-sheet-title">School</h2>
+            <button type="button" class="edu-sheet-close set-pane-close" aria-label="Close school">
+              <svg viewBox="0 0 24 24" fill="currentColor" shape-rendering="geometricPrecision" aria-hidden="true">
+                <path d="M5.448 7.252 16.748 18.552a1.275 1.275 0 0 0 1.804-1.804L7.252 5.448a1.275 1.275 0 0 0-1.804 1.804Zm11.3-1.804L5.448 16.748a1.275 1.275 0 0 0 1.804 1.804L18.552 7.252a1.275 1.275 0 0 0-1.804-1.804Z"/>
+              </svg>
+            </button>
+          </div>
+          <div class="edu-sheet-body">
+            <div class="edu-school-search">
+              <label for="school">School</label>
+              <div class="edu-sheet-field">
+                <input id="school" name="school" value="Eastside Prep" maxlength="80" autocomplete="off" />
+              </div>
+              <input type="hidden" id="schoolSlug" name="schoolSlug" value="" />
+              <ul id="school-results" class="edu-school-results" hidden role="listbox" aria-label="Schools"></ul>
+            </div>
+            <label for="studentId">Student ID</label>
+            <div class="edu-sheet-field">
+              <input id="studentId" name="studentId" maxlength="80" placeholder="Optional" />
+            </div>
+            <label for="schedulePdf">Term schedule PDF</label>
+            <div class="edu-sheet-field">
+              <input id="schedulePdf" name="schedulePdf" type="file" accept="application/pdf,.pdf" />
+            </div>
+            <div class="edu-sheet-actions">
+              <button type="button" id="schedule-upload" class="edu-sheet-btn">Upload schedule PDF</button>
+            </div>
+            <p class="edu-empty" id="schedule-status"></p>
+            <div class="edu-sheet-actions">
+              <button type="submit" id="settings-save" class="edu-sheet-btn edu-sheet-btn--gold">Save</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="edu-sheet edu-sheet--set" data-pane="chat" hidden>
+          <div class="edu-sheet-head">
+            <h2 class="edu-sheet-title">Chat key</h2>
+            <button type="button" class="edu-sheet-close set-pane-close" aria-label="Close chat key">
+              <svg viewBox="0 0 24 24" fill="currentColor" shape-rendering="geometricPrecision" aria-hidden="true">
+                <path d="M5.448 7.252 16.748 18.552a1.275 1.275 0 0 0 1.804-1.804L7.252 5.448a1.275 1.275 0 0 0-1.804 1.804Zm11.3-1.804L5.448 16.748a1.275 1.275 0 0 0 1.804 1.804L18.552 7.252a1.275 1.275 0 0 0-1.804-1.804Z"/>
+              </svg>
+            </button>
+          </div>
+          <div class="edu-sheet-body">
+            <div id="key-ready" hidden>
+              <div class="set-row">
+                <p class="set-ready" id="key-ready-label"></p>
+                <div class="set-actions">
+                  <button type="button" id="key-replace" class="set-textbtn">Replace</button>
+                  <button type="button" id="key-clear" class="set-textbtn">Clear</button>
+                </div>
+              </div>
+            </div>
+            <div id="key-entry">
+              <label for="provider">Model</label>
+              <div class="edu-sheet-field">
+                <select id="provider" name="provider"></select>
+              </div>
+              <label for="modelKey">API key</label>
+              <div class="edu-sheet-field">
+                <input id="modelKey" name="modelKey" type="password" autocomplete="off" placeholder="gsk_…" />
+              </div>
+              <div class="edu-sheet-actions">
+                <button type="button" id="key-save" class="edu-sheet-btn edu-sheet-btn--gold">Save key</button>
+              </div>
+            </div>
+            <p class="set-hint" id="key-status"></p>
+            <a class="set-link" href="/groq">How to get a Groq key</a>
+          </div>
+        </div>
+
+        <div class="edu-sheet edu-sheet--set" data-pane="canvas" hidden>
+          <div class="edu-sheet-head">
+            <h2 class="edu-sheet-title">Canvas</h2>
+            <button type="button" class="edu-sheet-close set-pane-close" aria-label="Close Canvas">
+              <svg viewBox="0 0 24 24" fill="currentColor" shape-rendering="geometricPrecision" aria-hidden="true">
+                <path d="M5.448 7.252 16.748 18.552a1.275 1.275 0 0 0 1.804-1.804L7.252 5.448a1.275 1.275 0 0 0-1.804 1.804Zm11.3-1.804L5.448 16.748a1.275 1.275 0 0 0 1.804 1.804L18.552 7.252a1.275 1.275 0 0 0-1.804-1.804Z"/>
+              </svg>
+            </button>
+          </div>
+          <div class="edu-sheet-body">
+            <label for="canvasHost">Canvas URL</label>
+            <div class="edu-sheet-field">
+              <input id="canvasHost" name="canvasHost" value="https://eastsideprep.instructure.com" />
+            </div>
+            <div id="canvas-ready" hidden>
+              <div class="set-row">
+                <p class="set-ready">Canvas connected</p>
+                <button type="button" id="canvas-replace" class="set-textbtn">Replace token</button>
+              </div>
+            </div>
+            <div id="canvas-entry">
+              <label for="canvasToken">Access token</label>
+              <div class="edu-sheet-field">
+                <input id="canvasToken" name="canvasToken" type="password" autocomplete="off" />
+              </div>
+              <p class="set-hint">Canvas → Account → Settings → New Access Token</p>
+            </div>
+            <div class="edu-sheet-actions">
+              <button type="submit" class="edu-sheet-btn edu-sheet-btn--gold">Save</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="edu-sheet edu-sheet--set" data-pane="onedrive" hidden>
+          <div class="edu-sheet-head">
+            <h2 class="edu-sheet-title">OneDrive</h2>
+            <button type="button" class="edu-sheet-close set-pane-close" aria-label="Close OneDrive">
+              <svg viewBox="0 0 24 24" fill="currentColor" shape-rendering="geometricPrecision" aria-hidden="true">
+                <path d="M5.448 7.252 16.748 18.552a1.275 1.275 0 0 0 1.804-1.804L7.252 5.448a1.275 1.275 0 0 0-1.804 1.804Zm11.3-1.804L5.448 16.748a1.275 1.275 0 0 0 1.804 1.804L18.552 7.252a1.275 1.275 0 0 0-1.804-1.804Z"/>
+              </svg>
+            </button>
+          </div>
+          <div class="edu-sheet-body">
+            <p class="set-hint" id="onedrive-status">School OneDrive. Connect with @eastsideprep.org.</p>
+            <div class="edu-sheet-actions">
+              <button type="button" id="onedrive-start" class="edu-sheet-btn">Connect</button>
+            </div>
+            <p id="onedrive-code" class="od-code" hidden></p>
+            <a id="onedrive-open" class="set-link" href="https://login.microsoft.com/device" target="_blank" rel="noopener" hidden>Open Microsoft sign-in</a>
+          </div>
+        </div>
+
+        <div class="edu-sheet edu-sheet--set" data-pane="outlook" hidden>
+          <div class="edu-sheet-head">
+            <h2 class="edu-sheet-title">Outlook</h2>
+            <button type="button" class="edu-sheet-close set-pane-close" aria-label="Close Outlook">
+              <svg viewBox="0 0 24 24" fill="currentColor" shape-rendering="geometricPrecision" aria-hidden="true">
+                <path d="M5.448 7.252 16.748 18.552a1.275 1.275 0 0 0 1.804-1.804L7.252 5.448a1.275 1.275 0 0 0-1.804 1.804Zm11.3-1.804L5.448 16.748a1.275 1.275 0 0 0 1.804 1.804L18.552 7.252a1.275 1.275 0 0 0-1.804-1.804Z"/>
+              </svg>
+            </button>
+          </div>
+          <div class="edu-sheet-body">
+            <p class="set-hint" id="outlook-status">School Outlook. Same Microsoft sign-in, mail only.</p>
+            <div class="edu-sheet-actions">
+              <button type="button" id="outlook-start" class="edu-sheet-btn">Connect</button>
+            </div>
+            <p id="outlook-code" class="od-code" hidden></p>
+            <a id="outlook-open" class="set-link" href="https://login.microsoft.com/device" target="_blank" rel="noopener" hidden>Open Microsoft sign-in</a>
+          </div>
+        </div>
+      </div>
+      </form>
     </div>
 
     <svg
@@ -101,5 +513,8 @@
 
     <script src="/liquid-glass.js?v=glass11"></script>
     <script src="/theme-orb.js?v=glass9"></script>
+    <script src="/app.js?v=glass22"></script>
+    <script src="/markdown.js?v=1"></script>
+    <script src="/chatbot.js?v=glass14"></script>
   </body>
 </html>

@@ -47,6 +47,8 @@ rsync -a --delete \
   --exclude 'ml/' \
   --exclude 'scripts/' \
   "$root/" "$stage/"
+# /class/:id and /note/:id hit Vercel's 404.html; keep it the same SPA as index.
+cp "$stage/index.html" "$stage/404.html"
 cd "$stage"
 
 # Temp folder is not linked. Pin the existing JYPE project so the CLI
