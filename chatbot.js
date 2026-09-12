@@ -60,11 +60,46 @@
     window.setTimeout(refreshGlass, reduceMotion ? 0 : 420);
   }
 
+  function composerLineCount() {
+    const text = String(input.value || "");
+    const parts = text.split("\n");
+    const width = Math.max(0, input.clientWidth || input.offsetWidth || 0);
+    if (width < 8) return Math.max(1, parts.length);
+    const cs = getComputedStyle(input);
+    const canvas =
+      composerLineCount._c || (composerLineCount._c = document.createElement("canvas"));
+    const ctx = canvas.getContext("2d");
+    ctx.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+    let lines = 0;
+    for (const part of parts) {
+      if (!part) {
+        lines += 1;
+        continue;
+      }
+      lines += Math.max(1, Math.ceil(ctx.measureText(part).width / width));
+    }
+    return Math.max(1, lines);
+  }
+
   function syncComposerSize() {
     if (!input) return;
-    input.style.height = "auto";
-    input.style.height = Math.min(Math.max(input.scrollHeight, 24), 120) + "px";
     root.classList.toggle("has-input-text", Boolean(input.value.trim()));
+    const lines = composerLineCount();
+    if (lines <= 1) {
+      input.style.height = "";
+      input.style.overflowY = "hidden";
+      root.classList.remove("is-composer-tall");
+      return;
+    }
+    const cs = getComputedStyle(input);
+    let lineH = parseFloat(cs.lineHeight);
+    if (!Number.isFinite(lineH) || lineH < 8) {
+      lineH = (parseFloat(cs.fontSize) || 16) * 1.294;
+    }
+    const next = Math.min(lines * lineH, 120);
+    input.style.height = `${next}px`;
+    input.style.overflowY = lines * lineH > 120 ? "auto" : "hidden";
+    root.classList.add("is-composer-tall");
   }
 
   function parseSseChunk(buffer, onDelta) {

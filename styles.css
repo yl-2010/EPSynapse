@@ -1756,7 +1756,7 @@ html[data-resolved-theme="dark"] .yan-chat-pill.corner.lg-refraction::after {
   padding-bottom: 0.55rem;
 }
 .yan-chat-input {
-  flex: 1; min-width: 0; min-height: 0; height: 1.35em; margin: 0; padding: 0 0.25rem; border: 0;
+  flex: 1; min-width: 0; min-height: 0; height: var(--lh-body); margin: 0; padding: 0 0.25rem; border: 0;
   background: transparent; color: var(--fg); font-family: var(--body);
   font-size: var(--text-body); font-weight: 400; outline: none;
   line-height: var(--lh-body); resize: none; overflow-x: hidden; overflow-y: hidden;
