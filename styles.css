@@ -237,7 +237,8 @@ html.lg-chrome .edu-sheet-field.lg-static,
 html.lg-chrome .edu-sheet-btn.lg-static,
 html.lg-chrome .yan-chat-widget.lg-static,
 html.lg-chrome .yan-chat-map-ios.lg-static,
-html.lg-chrome .yan-chat-bubble.lg-static {
+html.lg-chrome .yan-chat-bubble.lg-static,
+html.lg-chrome .yan-chat-panel.lg-static {
   transition: transform 0.3s var(--ease);
 }
 
@@ -248,7 +249,8 @@ html.lg-chrome .edu-sheet-field.lg-static:hover,
 html.lg-chrome .edu-sheet-btn.lg-static:hover,
 html.lg-chrome .yan-chat-widget.lg-static:hover,
 html.lg-chrome .yan-chat-map-ios.lg-static:hover,
-html.lg-chrome .yan-chat-bubble.lg-static:hover {
+html.lg-chrome .yan-chat-bubble.lg-static:hover,
+html.lg-chrome .yan-chat-panel.lg-static:hover {
   will-change: transform;
 }
 
@@ -260,6 +262,7 @@ html.lg-chrome .edu-sheet-btn.lg-static.lg-refraction::after,
 html.lg-chrome .yan-chat-widget.lg-static.lg-refraction::after,
 html.lg-chrome .yan-chat-map-ios.lg-static.lg-refraction::after,
 html.lg-chrome .yan-chat-bubble.lg-static.lg-refraction::after,
+html.lg-chrome .yan-chat-panel.lg-static.lg-refraction::after,
 html.lg-chrome[data-resolved-theme="dark"] .edu-panel.lg-static.lg-refraction::after,
 html.lg-chrome[data-resolved-theme="dark"] .edu-file-tile.lg-static.lg-refraction::after,
 html.lg-chrome[data-resolved-theme="dark"] .edu-sheet.lg-static.lg-refraction::after,
@@ -267,7 +270,8 @@ html.lg-chrome[data-resolved-theme="dark"] .edu-sheet-field.lg-static.lg-refract
 html.lg-chrome[data-resolved-theme="dark"] .edu-sheet-btn.lg-static.lg-refraction::after,
 html.lg-chrome[data-resolved-theme="dark"] .yan-chat-widget.lg-static.lg-refraction::after,
 html.lg-chrome[data-resolved-theme="dark"] .yan-chat-map-ios.lg-static.lg-refraction::after,
-html.lg-chrome[data-resolved-theme="dark"] .yan-chat-bubble.lg-static.lg-refraction::after {
+html.lg-chrome[data-resolved-theme="dark"] .yan-chat-bubble.lg-static.lg-refraction::after,
+html.lg-chrome[data-resolved-theme="dark"] .yan-chat-panel.lg-static.lg-refraction::after {
   display: none !important;
   background: none;
   mix-blend-mode: normal;
@@ -281,7 +285,8 @@ html.lg-chrome[data-resolved-theme="dark"] .yan-chat-bubble.lg-static.lg-refract
   html.lg-chrome:not([data-resolved-theme="light"]) .edu-sheet-btn.lg-static.lg-refraction::after,
   html.lg-chrome:not([data-resolved-theme="light"]) .yan-chat-widget.lg-static.lg-refraction::after,
   html.lg-chrome:not([data-resolved-theme="light"]) .yan-chat-map-ios.lg-static.lg-refraction::after,
-  html.lg-chrome:not([data-resolved-theme="light"]) .yan-chat-bubble.lg-static.lg-refraction::after {
+  html.lg-chrome:not([data-resolved-theme="light"]) .yan-chat-bubble.lg-static.lg-refraction::after,
+  html.lg-chrome:not([data-resolved-theme="light"]) .yan-chat-panel.lg-static.lg-refraction::after {
     display: none !important;
     background: none;
     mix-blend-mode: normal;
@@ -1616,7 +1621,7 @@ html[data-resolved-theme="light"] .edu-filter.is-on {
 /* ── Chatbot: circle → centered pill → response panel ── */
 .yan-chat {
   --lg-read-blur: 0px;
-  --lg-panel-blur: 0px;
+  --lg-panel-blur: 18px;
   --chat-pad: clamp(1rem, 2.5vw, 1.6rem);
   --chat-circle: var(--corner-orb);
   /* Match .c-tl size so the panel clears the top liquid-glass orbs */
@@ -1651,7 +1656,7 @@ html[data-resolved-theme="light"] .yan-chat {
   --lg-read-blur: 20px;
 }
 .yan-chat.is-history {
-  --lg-panel-blur: 20px;
+  --lg-panel-blur: 22px;
 }
 @media (prefers-reduced-motion: no-preference) {
   .yan-chat {
@@ -1897,6 +1902,9 @@ html[data-resolved-theme="dark"] .yan-chat-send {
   width: var(--pill-w); height: auto;
   border-radius: var(--chat-panel-radius);
   --lg-filter: none; isolation: isolate;
+  background-color: rgba(var(--lg-tint-rgb), var(--lg-fallback-tint));
+  backdrop-filter: blur(var(--lg-panel-blur)) saturate(1.6);
+  -webkit-backdrop-filter: blur(var(--lg-panel-blur)) saturate(1.6);
   box-shadow: 0 10px var(--lg-outer-shadow-blur) var(--lg-outer-shadow);
   pointer-events: none; opacity: 0; transform: translateY(18%) scale(0.92); overflow: hidden;
   display: flex; flex-direction: column;
@@ -1904,7 +1912,9 @@ html[data-resolved-theme="dark"] .yan-chat-send {
     opacity 0.45s var(--ease),
     transform 0.65s var(--chat-spring),
     left 0.7s var(--chat-spring),
-    width 0.7s var(--chat-spring);
+    width 0.7s var(--chat-spring),
+    backdrop-filter 0.4s var(--ease),
+    -webkit-backdrop-filter 0.4s var(--ease);
 }
 .yan-chat-panel::before {
   content: ""; position: absolute; inset: 0; z-index: 1; border-radius: inherit;
@@ -1912,19 +1922,9 @@ html[data-resolved-theme="dark"] .yan-chat-send {
   background-color: rgba(var(--lg-tint-rgb), var(--lg-tint-opacity)); pointer-events: none;
 }
 .yan-chat-panel.lg-refraction::after {
-  content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit;
-  backdrop-filter: blur(var(--lg-panel-blur)) var(--lg-filter);
-  -webkit-backdrop-filter: blur(var(--lg-panel-blur)) var(--lg-filter);
-  isolation: isolate; pointer-events: none;
-}
-.yan-chat-panel.lg-fallback {
-  background-color: rgba(var(--lg-tint-rgb), var(--lg-fallback-tint));
-  backdrop-filter: blur(14px) saturate(1.5); -webkit-backdrop-filter: blur(14px) saturate(1.5);
-  transition: backdrop-filter 0.4s var(--ease), -webkit-backdrop-filter 0.4s var(--ease);
-}
-.yan-chat.is-history .yan-chat-panel.lg-fallback {
-  backdrop-filter: blur(20px) saturate(1.5);
-  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  display: none !important;
+  background: none;
+  mix-blend-mode: normal;
 }
 .yan-chat.has-panel .yan-chat-panel {
   pointer-events: auto; opacity: 1; transform: none;
@@ -2717,16 +2717,19 @@ html[data-resolved-theme="dark"] .edu-sheet-btn--gold {
 .edu-sheet-close.lg-refraction::after,
 .edu-panel.lg-refraction::after,
 .edu-file-tile.lg-refraction::after,
+.yan-chat-panel.lg-refraction::after,
 html.lg-chrome .edu-sheet.lg-static.lg-refraction::after,
 html.lg-chrome .edu-sheet-field.lg-static.lg-refraction::after,
 html.lg-chrome .edu-sheet-btn.lg-static.lg-refraction::after,
 html.lg-chrome .edu-panel.lg-static.lg-refraction::after,
 html.lg-chrome .edu-file-tile.lg-static.lg-refraction::after,
+html.lg-chrome .yan-chat-panel.lg-static.lg-refraction::after,
 html.lg-chrome[data-resolved-theme="dark"] .edu-sheet.lg-static.lg-refraction::after,
 html.lg-chrome[data-resolved-theme="dark"] .edu-sheet-field.lg-static.lg-refraction::after,
 html.lg-chrome[data-resolved-theme="dark"] .edu-sheet-btn.lg-static.lg-refraction::after,
 html.lg-chrome[data-resolved-theme="dark"] .edu-panel.lg-static.lg-refraction::after,
-html.lg-chrome[data-resolved-theme="dark"] .edu-file-tile.lg-static.lg-refraction::after {
+html.lg-chrome[data-resolved-theme="dark"] .edu-file-tile.lg-static.lg-refraction::after,
+html.lg-chrome[data-resolved-theme="dark"] .yan-chat-panel.lg-static.lg-refraction::after {
   display: none !important;
   mix-blend-mode: normal;
   background: none;

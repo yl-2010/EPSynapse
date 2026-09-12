@@ -352,7 +352,8 @@
         list.contains("edu-sheet-close") ||
         list.contains("edu-sheet-head") ||
         list.contains("edu-panel") ||
-        list.contains("edu-file-tile"))
+        list.contains("edu-file-tile") ||
+        list.contains("yan-chat-panel"))
     );
   }
 
@@ -1541,7 +1542,7 @@ void main() {
 
     document
       .querySelectorAll(
-        ".edu-sheet, .edu-sheet-field, .edu-sheet-btn, .edu-sheet-close, .edu-sheet-head, .edu-panel, .edu-file-tile"
+        ".edu-sheet, .edu-sheet-field, .edu-sheet-btn, .edu-sheet-close, .edu-sheet-head, .edu-panel, .edu-file-tile, .yan-chat-panel"
       )
       .forEach(applyTextBoxFrost);
   }
