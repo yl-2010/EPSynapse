@@ -60,7 +60,11 @@ struct CornerChrome: View {
                     }
                 }
                 .padding(cornerPad)
-                .safeAreaPadding()
+                .safeAreaPadding(.top)
+                .safeAreaPadding(.horizontal)
+                .padding(.bottom, chat.keyboardScrubLift)
+                .safeAreaPadding(chat.keyboardScrubLift > 0 ? Edge.Set() : .bottom)
+                .ignoresSafeArea(chat.keyboardScrubLift > 0 ? .all : [], edges: .bottom)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -39,7 +39,10 @@ struct ChatOverlay: View {
                         transaction.disablesAnimations = true
                         withTransaction(transaction) { dragY = next }
                     },
-                    onEnd: finishDismissDrag
+                    onEnd: finishDismissDrag,
+                    onScrubStart: { lift in
+                        if lift > 0 { chat.keyboardScrubLift = lift }
+                    }
                 )
                 .frame(width: 0, height: 0)
                 .allowsHitTesting(false)
@@ -70,6 +73,12 @@ struct ChatOverlay: View {
         }
         .onDisappear {
             chat.composerOpen = false
+            chat.keyboardScrubLift = 0
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            if chat.keyboardScrubLift > 0 {
+                chat.keyboardScrubLift = 0
+            }
         }
     }
 
@@ -230,9 +239,13 @@ struct ChatOverlay: View {
                 minimize()
             }
         } else {
+            let refocus = chat.keyboardScrubLift > 0
             AgentKeyboardScrub.snapBack()
             withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
                 dragY = 0
+            }
+            if refocus {
+                composerFocused = true
             }
         }
     }
@@ -242,6 +255,7 @@ struct ChatOverlay: View {
         draft = ""
         isOpen = false
         dragY = 0
+        chat.keyboardScrubLift = 0
         AgentKeyboardScrub.commitHide()
     }
 
@@ -391,12 +405,18 @@ final class KeyboardAccessoryInstallerView: UIView {
         if let field = findTextField(from: superview) ?? findTextField(from: window) {
             if field.inputAccessoryView !== KeyboardAnchorView.shared {
                 field.inputAccessoryView = KeyboardAnchorView.shared
+                if field.isFirstResponder {
+                    field.reloadInputViews()
+                }
             }
             return
         }
         if let view = findTextView(from: superview) ?? findTextView(from: window) {
             if view.inputAccessoryView !== KeyboardAnchorView.shared {
                 view.inputAccessoryView = KeyboardAnchorView.shared
+                if view.isFirstResponder {
+                    view.reloadInputViews()
+                }
             }
         }
     }
@@ -463,11 +483,13 @@ private struct AgentDismissBridge: UIViewRepresentable {
     var overlayFrame: CGRect
     var onDrag: (CGFloat) -> Void
     var onEnd: (CGFloat, CGFloat, CGFloat) -> Void
+    var onScrubStart: (CGFloat) -> Void
 
     func makeUIView(context: Context) -> AgentDismissInstaller {
         let view = AgentDismissInstaller()
         view.onDrag = onDrag
         view.onEnd = onEnd
+        view.onScrubStart = onScrubStart
         view.overlayFrame = overlayFrame
         return view
     }
@@ -475,6 +497,7 @@ private struct AgentDismissBridge: UIViewRepresentable {
     func updateUIView(_ view: AgentDismissInstaller, context: Context) {
         view.onDrag = onDrag
         view.onEnd = onEnd
+        view.onScrubStart = onScrubStart
         view.overlayFrame = overlayFrame
         view.isEnabled = true
         AgentKeyboardScrub.prepare()
@@ -490,6 +513,7 @@ final class AgentDismissInstaller: UIView, UIGestureRecognizerDelegate {
     var isEnabled = false
     var onDrag: ((CGFloat) -> Void)?
     var onEnd: ((CGFloat, CGFloat, CGFloat) -> Void)?
+    var onScrubStart: ((CGFloat) -> Void)?
 
     private let pan = UIPanGestureRecognizer()
     private var engaged = false
@@ -551,6 +575,10 @@ final class AgentDismissInstaller: UIView, UIGestureRecognizerDelegate {
                 engaged = true
                 originY = location.y
                 AgentKeyboardScrub.begin()
+                onScrubStart?(AgentKeyboardScrub.frozenLift)
+                DispatchQueue.main.async {
+                    AgentKeyboardScrub.dropRealKeyboard()
+                }
             }
             offset = max(0, location.y - originY)
             AgentKeyboardScrub.setOffset(offset)
@@ -626,10 +654,13 @@ final class AgentDismissInstaller: UIView, UIGestureRecognizerDelegate {
 enum AgentKeyboardScrub {
     private static var hosts: [UIView] = []
     private(set) static var coverage: CGFloat = 0
+    private(set) static var frozenLift: CGFloat = 0
     private static var lastKeyboardFrame: CGRect = .zero
     private static var observers: [NSObjectProtocol] = []
     private static var displayLink: CADisplayLink?
     private static var currentOffset: CGFloat = 0
+    private static var puppet: UIView?
+    private static var hidden: [(UIView, CGFloat)] = []
 
     static var keyboardFrame: CGRect { lastKeyboardFrame }
 
@@ -650,10 +681,24 @@ enum AgentKeyboardScrub {
             lastKeyboardFrame = currentKeyboardFrame()
         }
         currentOffset = 0
+        frozenLift = 0
         resolveHosts()
         coverage = max(lastKeyboardFrame.height, hosts.first?.bounds.height ?? 0)
+        if coverage < 20 { coverage = lastKeyboardFrame.height }
         if coverage < 20 { coverage = 0 }
+        pinPuppet()
+        hideHostViews()
+        frozenLift = coverage
         startDisplayLink()
+    }
+
+    static func dropRealKeyboard() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        UIView.setAnimationsEnabled(false)
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        UIView.setAnimationsEnabled(true)
+        CATransaction.commit()
     }
 
     static func setOffset(_ dy: CGFloat) {
@@ -663,7 +708,9 @@ enum AgentKeyboardScrub {
 
     static func snapBack() {
         stopDisplayLink()
-        let views = hosts
+        restoreHidden()
+        resetHostTransforms()
+        let slide = puppet
         currentOffset = 0
         UIView.animate(
             withDuration: 0.32,
@@ -672,9 +719,10 @@ enum AgentKeyboardScrub {
             initialSpringVelocity: 0.4,
             options: [.allowUserInteraction, .beginFromCurrentState]
         ) {
-            for view in views {
-                view.transform = .identity
-            }
+            slide?.transform = .identity
+        } completion: { _ in
+            slide?.removeFromSuperview()
+            if puppet === slide { puppet = nil }
         }
         hosts = []
         coverage = 0
@@ -682,8 +730,8 @@ enum AgentKeyboardScrub {
 
     static func finishOffscreen(from dy: CGFloat, extra: CGFloat, duration: TimeInterval, then: @escaping () -> Void) {
         stopDisplayLink()
-        if hosts.isEmpty { resolveHosts() }
         let views = hosts
+        let slide = puppet
         currentOffset = dy + extra
         UIView.animate(
             withDuration: duration,
@@ -691,8 +739,10 @@ enum AgentKeyboardScrub {
             options: [.curveEaseIn, .beginFromCurrentState]
         ) {
             let ty = dy + extra
+            let transform = CGAffineTransform(translationX: 0, y: ty)
+            slide?.transform = transform
             for view in views {
-                view.transform = CGAffineTransform(translationX: 0, y: ty)
+                view.transform = transform
             }
         } completion: { _ in
             commitHide()
@@ -703,11 +753,15 @@ enum AgentKeyboardScrub {
     static func commitHide() {
         stopDisplayLink()
         currentOffset = 0
+        frozenLift = 0
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         UIView.setAnimationsEnabled(false)
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        restoreHidden()
         resetHostTransforms()
+        puppet?.removeFromSuperview()
+        puppet = nil
         UIView.setAnimationsEnabled(true)
         CATransaction.commit()
         hosts = []
@@ -718,7 +772,11 @@ enum AgentKeyboardScrub {
     static func cancel() {
         stopDisplayLink()
         currentOffset = 0
+        frozenLift = 0
+        restoreHidden()
         resetHostTransforms()
+        puppet?.removeFromSuperview()
+        puppet = nil
         hosts = []
         coverage = 0
     }
@@ -746,14 +804,143 @@ enum AgentKeyboardScrub {
     }
 
     private static func applyOffset() {
-        if hosts.isEmpty { resolveHosts() }
+        if puppet == nil, hosts.isEmpty { resolveHosts() }
         let transform = CGAffineTransform(translationX: 0, y: currentOffset)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
+        puppet?.transform = transform
         for host in hosts {
             host.transform = transform
         }
         CATransaction.commit()
+    }
+
+    private static func pinPuppet() {
+        puppet?.removeFromSuperview()
+        puppet = makePuppet()
+    }
+
+    private static func hideHostViews() {
+        restoreHidden()
+        func hide(_ view: UIView) {
+            if hidden.contains(where: { $0.0 === view }) { return }
+            hidden.append((view, view.alpha))
+            view.alpha = 0
+        }
+        for host in hosts {
+            hide(host)
+        }
+        for window in keyboardWindows() {
+            hide(window)
+        }
+    }
+
+    private static func restoreHidden() {
+        for (view, alpha) in hidden {
+            view.alpha = alpha
+        }
+        hidden = []
+    }
+
+    private static func makePuppet() -> UIView? {
+        guard let key = keyWindow() else { return nil }
+        var kbFrame = lastKeyboardFrame
+        if kbFrame.height < 20 {
+            kbFrame = currentKeyboardFrame()
+            lastKeyboardFrame = kbFrame
+        }
+        guard kbFrame.height > 20 else { return nil }
+
+        let box = UIView(frame: key.convert(kbFrame, from: nil))
+        box.isUserInteractionEnabled = false
+        box.clipsToBounds = true
+        box.isOpaque = false
+
+        var placed = false
+        let overlapping = allWindows()
+            .filter { window in
+                window.alpha > 0.01
+                    && !window.isHidden
+                    && window.convert(window.bounds, to: nil).intersects(kbFrame)
+            }
+            .sorted { $0.windowLevel.rawValue < $1.windowLevel.rawValue }
+
+        for window in overlapping {
+            let local = window.convert(kbFrame, from: nil).intersection(window.bounds)
+            guard local.width > 8, local.height > 8 else { continue }
+            if let snap = window.resizableSnapshotView(
+                from: local,
+                afterScreenUpdates: false,
+                withCapInsets: .zero
+            ) {
+                snap.frame = box.bounds
+                box.addSubview(snap)
+                placed = true
+            }
+        }
+
+        for host in hosts {
+            guard host.bounds.width > 20, host.bounds.height > 40 else { continue }
+            guard let snap = host.snapshotView(afterScreenUpdates: false) else { continue }
+            snap.frame = box.convert(host.convert(host.bounds, to: nil), from: nil)
+            box.addSubview(snap)
+            placed = true
+        }
+
+        if !placed, let image = captureKeyboardImage(frame: kbFrame) {
+            let imageView = UIImageView(image: image)
+            imageView.frame = box.bounds
+            imageView.contentMode = .scaleToFill
+            box.addSubview(imageView)
+            placed = true
+        }
+
+        if !placed {
+            let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial))
+            blur.frame = box.bounds
+            blur.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            box.addSubview(blur)
+        }
+
+        key.addSubview(box)
+        return box
+    }
+
+    private static func captureKeyboardImage(frame: CGRect) -> UIImage? {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = UIScreen.main.scale
+        format.opaque = false
+        let renderer = UIGraphicsImageRenderer(size: frame.size, format: format)
+        let image = renderer.image { ctx in
+            for window in allWindows() where window.alpha > 0.01 && !window.isHidden {
+                let winFrame = window.convert(window.bounds, to: nil)
+                guard winFrame.intersects(frame) else { continue }
+                ctx.cgContext.saveGState()
+                ctx.cgContext.translateBy(x: winFrame.minX - frame.minX, y: winFrame.minY - frame.minY)
+                window.drawHierarchy(in: CGRect(origin: .zero, size: winFrame.size), afterScreenUpdates: false)
+                ctx.cgContext.restoreGState()
+            }
+        }
+        return image.size.width > 1 ? image : nil
+    }
+
+    private static func keyboardWindows() -> [UIWindow] {
+        let key = keyWindow()
+        return allWindows().filter { window in
+            if window === key { return false }
+            if isKeyboardChrome(window) { return true }
+            if window === KeyboardAnchorView.shared.window { return true }
+            return containsKeyboardView(window)
+        }
+    }
+
+    private static func containsKeyboardView(_ root: UIView) -> Bool {
+        let name = NSStringFromClass(type(of: root))
+        if isKeyboardHostName(name) { return true }
+        for sub in root.subviews {
+            if containsKeyboardView(sub) { return true }
+        }
+        return false
     }
 
     private static func startDisplayLink() {
