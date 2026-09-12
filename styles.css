@@ -3573,6 +3573,11 @@ html[data-auth="in"] #stage-out {
   color: var(--muted);
 }
 
+#schedule-blurb {
+  margin: 0 0 0.7rem;
+  line-height: 1.5;
+}
+
 .set-hint[hidden] {
   display: none !important;
 }

@@ -143,7 +143,11 @@ struct SettingsSheet: View {
                     .font(.footnote)
                     .foregroundStyle(EPSTheme.muted)
 
-                fieldLabel("EPS schedule PDF")
+                fieldLabel("four11 schedule")
+                Text("Upload this trimester's four11 schedule so your classes and grades can line up. Use the printed term card with periods A-H from after the latest add/drop, the same classes you have in Canvas right now. EPSynapse syncs schedule, classes, and grades with Canvas, so the PDF you add has to match. If it is stale, that mismatch is on you.")
+                    .font(.footnote)
+                    .foregroundStyle(EPSTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
                 if let name = pickedPDF?.lastPathComponent, !name.isEmpty {
                     Text(name)
                         .font(.footnote)

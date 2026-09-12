@@ -18,7 +18,7 @@
     <title>EPSchedule</title>
     <meta name="description" content="EPSynapse student dashboard" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/styles.css?v=cards5" />
+    <link rel="stylesheet" href="/styles.css?v=cards6" />
     <link
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css"
@@ -340,11 +340,16 @@
             <div class="edu-sheet-field">
               <input id="studentId" name="studentId" maxlength="80" placeholder="Optional" />
             </div>
-            <label id="schedule-pdf-label">Term schedule PDF</label>
-            <p class="set-hint">Printed Fall, Winter, or Spring card with periods A-H.</p>
+            <label id="schedule-pdf-label">four11 schedule</label>
+            <p class="set-hint" id="schedule-blurb">
+              Upload this trimester's four11 schedule so your classes and grades can line up.
+              Use the printed term card with periods A-H from after the latest add/drop, the same
+              classes you have in Canvas right now. EPSynapse syncs schedule, classes, and grades
+              with Canvas, so the PDF you add has to match. If it is stale, that mismatch is on you.
+            </p>
             <div class="edu-sheet-actions">
               <button type="button" id="schedule-pick" class="edu-sheet-btn edu-sheet-btn--gold">
-                Upload schedule PDF
+                Upload four11 schedule
               </button>
             </div>
             <p class="set-hint" id="schedule-status" role="status"></p>
