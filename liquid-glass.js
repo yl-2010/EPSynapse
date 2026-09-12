@@ -343,13 +343,11 @@
   let glowRaf = 0;
 
   function isTextContentBox(el) {
-    return (
-      el.classList.contains("edu-sheet") ||
-      el.classList.contains("edu-sheet-field") ||
-      el.classList.contains("edu-sheet-btn") ||
-      el.classList.contains("edu-sheet-close") ||
-      el.classList.contains("edu-panel") ||
-      el.classList.contains("edu-file-tile")
+    return !!(
+      el.closest &&
+      el.closest(
+        ".edu-sheet, .edu-sheet-field, .edu-sheet-btn, .edu-sheet-close, .edu-sheet-head, .edu-panel, .edu-file-tile"
+      )
     );
   }
 
@@ -528,6 +526,11 @@
   }
 
   function initOrb(el, useSvgBackdrop) {
+    if (isTextContentBox(el)) {
+      applyTextBoxFrost(el);
+      return;
+    }
+
     const shape = el.getAttribute("data-liquid-glass") || "circle";
     const w = Math.max(2, Math.round(el.offsetWidth));
     const h = Math.max(2, Math.round(el.offsetHeight));
@@ -537,11 +540,6 @@
 
     const defs = document.getElementById("liquid-glass-defs");
     if (!defs) return;
-
-    if (isTextContentBox(el)) {
-      applyTextBoxFrost(el);
-      return;
-    }
 
     if (!useSvgBackdrop) {
       el.classList.add("lg-fallback");
@@ -1297,6 +1295,10 @@ void main() {
   }
 
   function attachWebGLSurface(el) {
+    if (isTextContentBox(el)) {
+      applyTextBoxFrost(el);
+      return;
+    }
     el.classList.remove("lg-fallback", "lg-refraction");
     el.classList.add("lg-webgl");
     el.style.removeProperty("--lg-filter");
@@ -1318,6 +1320,10 @@ void main() {
     const byEl = new Map(webgl.surfaces.map((s) => [s.el, s]));
     const next = [];
     orbs.forEach((el) => {
+      if (isTextContentBox(el)) {
+        applyTextBoxFrost(el);
+        return;
+      }
       const w = Math.max(2, Math.round(el.offsetWidth));
       const h = Math.max(2, Math.round(el.offsetHeight));
       const shape = el.getAttribute("data-liquid-glass") || "circle";
@@ -1527,6 +1533,12 @@ void main() {
       if (canvas) canvas.remove();
       initOrb(el, useSvgBackdrop);
     });
+
+    document
+      .querySelectorAll(
+        ".edu-sheet, .edu-sheet-field, .edu-sheet-btn, .edu-sheet-close, .edu-sheet-head, .edu-panel, .edu-file-tile"
+      )
+      .forEach(applyTextBoxFrost);
   }
 
   if (document.readyState === "loading") {
