@@ -14,6 +14,10 @@
     },
     "cloudflare-observability": {
       "url": "https://observability.mcp.cloudflare.com/mcp"
+    },
+    "onenote": {
+      "command": "node",
+      "args": ["server/onenote-mcp.js"]
     }
   }
 }

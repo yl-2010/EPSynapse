@@ -44,6 +44,14 @@ import {
   uploadFile,
 } from "./onedrive.js";
 import {
+  createPage as createOnenotePage,
+  getPage as getOnenotePage,
+  listNotebooks,
+  listPages as listOnenotePages,
+  listSections as listOnenoteSections,
+  onenoteError,
+} from "./onenote.js";
+import {
   ensureFreshToken as ensureOutlookToken,
   listEvents,
   listMessages,
@@ -403,6 +411,73 @@ export const AGENT_TOOLS = [
         type: "object",
         properties: { id: { type: "string" } },
         required: ["id"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_onenote_notebooks",
+      description: "List school OneNote notebooks. Uses the OneDrive Microsoft sign-in.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_onenote_sections",
+      description: "List OneNote sections in a notebook, or all sections if notebookId is omitted.",
+      parameters: {
+        type: "object",
+        properties: { notebookId: { type: "string" } },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_onenote_pages",
+      description: "List OneNote pages in a section, or search pages by keyword.",
+      parameters: {
+        type: "object",
+        properties: {
+          sectionId: { type: "string" },
+          q: { type: "string", description: "Search titles and content" },
+          limit: { type: "number" },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "read_onenote_page",
+      description: "Read one OneNote page as text. Use an id from list_onenote_pages.",
+      parameters: {
+        type: "object",
+        properties: { id: { type: "string" } },
+        required: ["id"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "create_onenote_page",
+      description: "Create a OneNote page in a section. Pass title plus text or HTML.",
+      parameters: {
+        type: "object",
+        properties: {
+          sectionId: { type: "string" },
+          title: { type: "string" },
+          text: { type: "string" },
+          html: { type: "string" },
+        },
+        required: ["sectionId", "title"],
         additionalProperties: false,
       },
     },
@@ -813,6 +888,64 @@ export async function executeAgentTool(call, { ownerId, student, req } = {}) {
           ? file.buffer.toString("utf8").slice(0, MAX_RESULT)
           : `[binary ${file.buffer.length} bytes]`;
         return ok({ name: file.name, contentType: file.contentType, content: text });
+      }
+      case "list_onenote_notebooks": {
+        const token = await graphAccess(student);
+        if (!token) return fail("Connect OneDrive in settings first. OneNote uses that sign-in.");
+        try {
+          return ok({ notebooks: await listNotebooks(token) });
+        } catch (err) {
+          return fail(onenoteError(err));
+        }
+      }
+      case "list_onenote_sections": {
+        const token = await graphAccess(student);
+        if (!token) return fail("Connect OneDrive in settings first. OneNote uses that sign-in.");
+        try {
+          return ok({ sections: await listOnenoteSections(token, input.notebookId) });
+        } catch (err) {
+          return fail(onenoteError(err));
+        }
+      }
+      case "list_onenote_pages": {
+        const token = await graphAccess(student);
+        if (!token) return fail("Connect OneDrive in settings first. OneNote uses that sign-in.");
+        try {
+          return ok({
+            pages: await listOnenotePages(token, {
+              sectionId: input.sectionId,
+              q: input.q,
+              limit: Number(input.limit) || 20,
+            }),
+          });
+        } catch (err) {
+          return fail(onenoteError(err));
+        }
+      }
+      case "read_onenote_page": {
+        const token = await graphAccess(student);
+        if (!token) return fail("Connect OneDrive in settings first. OneNote uses that sign-in.");
+        try {
+          return ok({ page: await getOnenotePage(token, input.id) });
+        } catch (err) {
+          return fail(onenoteError(err));
+        }
+      }
+      case "create_onenote_page": {
+        const token = await graphAccess(student);
+        if (!token) return fail("Connect OneDrive in settings first. OneNote uses that sign-in.");
+        try {
+          return ok(
+            await createOnenotePage(token, {
+              sectionId: input.sectionId,
+              title: input.title,
+              text: input.text,
+              html: input.html,
+            })
+          );
+        } catch (err) {
+          return fail(onenoteError(err));
+        }
       }
       case "write_onedrive_file": {
         const name = String(input.name || "").trim();

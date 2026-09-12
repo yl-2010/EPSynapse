@@ -15,6 +15,7 @@
   const sideEl = document.getElementById("settings-side");
   const statusEl = document.getElementById("settings-status");
   const odStatus = document.getElementById("onedrive-status");
+  const onStatus = document.getElementById("onenote-status");
   const olStatus = document.getElementById("outlook-status");
   const tmStatus = document.getElementById("teams-status");
   const keyStatus = document.getElementById("key-status");
@@ -666,6 +667,15 @@
         me && me.studioOnedrive,
         me && me.onedriveEmail,
         "School files"
+      );
+    }
+    const onSum = document.getElementById("onenote-summary");
+    if (onSum) {
+      onSum.textContent = msNavLabel(
+        me && (me.onenoteConnected || me.onedriveConnected),
+        me && me.studioOnedrive,
+        me && (me.onenoteEmail || me.onedriveEmail),
+        "School notebooks"
       );
     }
     const olSum = document.getElementById("outlook-summary");
@@ -2417,6 +2427,18 @@
     }
   }
 
+  function paintOnenote() {
+    paintMsService({
+      prefix: "onenote",
+      statusEl: onStatus,
+      connected: Boolean(me && (me.onenoteConnected || me.onedriveConnected)),
+      studio: Boolean(me && me.studioOnedrive),
+      email: (me && (me.onenoteEmail || me.onedriveEmail)) || "",
+      pending: me && me.onedrivePending,
+      lastError: lastOdError,
+    });
+  }
+
   function paintOnedrive() {
     paintMsService({
       prefix: "onedrive",
@@ -2427,6 +2449,7 @@
       pending: me && me.onedrivePending,
       lastError: lastOdError,
     });
+    paintOnenote();
     paintNavSummaries();
   }
 
@@ -2984,6 +3007,9 @@
 
   document.getElementById("onedrive-connect")?.addEventListener("click", () => {
     startMsConnect("onedrive", "/v1/me/onedrive/start", "onedrivePending", watchOnedrive, odStatus);
+  });
+  document.getElementById("onenote-connect")?.addEventListener("click", () => {
+    startMsConnect("onedrive", "/v1/me/onedrive/start", "onedrivePending", watchOnedrive, onStatus || odStatus);
   });
   document.getElementById("outlook-connect")?.addEventListener("click", () => {
     startMsConnect("outlook", "/v1/me/outlook/start", "outlookPending", watchOutlook, olStatus);

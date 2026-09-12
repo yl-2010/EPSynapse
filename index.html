@@ -328,6 +328,15 @@
               <path d="M9 6.2L15.2 12L9 17.8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </button>
+          <button type="button" class="set-nav" data-pane="onenote">
+            <span class="set-nav-copy">
+              <span class="set-nav-title">OneNote</span>
+              <span class="set-nav-meta" id="onenote-summary">School notebooks</span>
+            </span>
+            <svg class="set-nav-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M9 6.2L15.2 12L9 17.8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
           <button type="button" class="set-nav" data-pane="outlook">
             <span class="set-nav-copy">
               <span class="set-nav-title">Outlook</span>
@@ -522,6 +531,41 @@
             <p class="set-hint" id="onedrive-studio" hidden>On this Mac the agent can already use the school OneDrive folder in Finder for today's demo.</p>
             <p class="set-hint" id="onedrive-status"></p>
             <a class="set-link" id="onedrive-admin" href="https://login.microsoftonline.com/b2681e8b-dd20-46cf-b163-371a2d7c6014/v2.0/adminconsent?client_id=d3590ed6-52b3-4102-aeff-aad2292ab01c&amp;scope=https://graph.microsoft.com/.default&amp;redirect_uri=https://epsynapse.com/" rel="noopener noreferrer">Ask school IT to approve</a>
+          </div>
+        </div>
+
+        <div class="edu-sheet edu-sheet--set" data-pane="onenote" hidden>
+          <div class="edu-sheet-head">
+            <h2 class="edu-sheet-title">OneNote</h2>
+            <button type="button" class="edu-sheet-close set-pane-close" aria-label="Close OneNote">
+              <svg viewBox="0 0 24 24" fill="currentColor" shape-rendering="geometricPrecision" aria-hidden="true">
+                <path d="M5.448 7.252 16.748 18.552a1.275 1.275 0 0 0 1.804-1.804L7.252 5.448a1.275 1.275 0 0 0-1.804 1.804Zm11.3-1.804L5.448 16.748a1.275 1.275 0 0 0 1.804 1.804L18.552 7.252a1.275 1.275 0 0 0-1.804-1.804Z"/>
+              </svg>
+            </button>
+          </div>
+          <div class="edu-sheet-body">
+            <ol class="set-steps" id="onenote-steps">
+              <li>Sign in with Google on this page if you have not already.</li>
+              <li>Tap Connect OneNote. That starts the same school Microsoft sign-in as OneDrive.</li>
+              <li>Use your @eastsideprep.org account. If Microsoft says the app needs admin approval, that is expected. School IT Accepts once, then every student can connect.</li>
+              <li>OneNote on the settings list must say Connected. The agent can then read and create class notebooks.</li>
+            </ol>
+            <div id="onenote-ready" hidden>
+              <p class="set-ready">OneNote connected</p>
+              <p class="set-hint" id="onenote-email"></p>
+            </div>
+            <div id="onenote-entry">
+              <div class="edu-sheet-actions">
+                <button type="button" id="onenote-connect" class="edu-sheet-btn edu-sheet-btn--gold">Connect OneNote</button>
+              </div>
+            </div>
+            <div id="onenote-pending" hidden>
+              <p id="onenote-code" class="od-code"></p>
+              <a id="onenote-open" class="set-link" href="#">Open Microsoft sign-in</a>
+            </div>
+            <p class="set-hint" id="onenote-studio" hidden>On this Mac the agent can already use the school Microsoft sign-in for today's demo.</p>
+            <p class="set-hint" id="onenote-status"></p>
+            <a class="set-link" id="onenote-admin" href="https://login.microsoftonline.com/b2681e8b-dd20-46cf-b163-371a2d7c6014/v2.0/adminconsent?client_id=d3590ed6-52b3-4102-aeff-aad2292ab01c&amp;scope=https://graph.microsoft.com/.default&amp;redirect_uri=https://epsynapse.com/" rel="noopener noreferrer">Ask school IT to approve</a>
           </div>
         </div>
 

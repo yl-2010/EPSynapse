@@ -50,6 +50,15 @@ import {
   uploadFile,
   WRITE_FOLDER,
 } from "./onedrive.js";
+import {
+  createPage as createOnenotePage,
+  getPage as getOnenotePage,
+  listNotebooks,
+  listPages as listOnenotePages,
+  listSections as listOnenoteSections,
+  onenoteError,
+  snapshotNotebooks,
+} from "./onenote.js";
 import { publicGoogleConfig, verifyIdToken } from "./google.js";
 import {
   acceptPastedToken as acceptOutlookToken,
@@ -213,6 +222,8 @@ function publicMe(student) {
   return {
     ...base,
     onedriveConnected: Boolean(base.onedriveConnected || flags.onedrive),
+    onenoteConnected: Boolean(base.onedriveConnected || flags.onedrive),
+    onenoteEmail: base.onedriveEmail || "",
     outlookConnected: Boolean(base.outlookConnected || flags.outlook),
     teamsConnected: Boolean(base.teamsConnected || flags.teams),
     studioOnedrive: flags.onedrive,
@@ -468,6 +479,17 @@ async function liveSnapshot(student) {
   } else {
     bits.push("OneDrive: not connected.");
   }
+  if (student.graph?.accessToken) {
+    try {
+      const token = await graphToken(student);
+      const notebooks = await listNotebooks(token);
+      bits.push(`OneNote notebooks: ${snapshotNotebooks(notebooks) || "empty"}`);
+    } catch (err) {
+      bits.push(`OneNote: ${onenoteError(err)}`);
+    }
+  } else {
+    bits.push("OneNote: not connected. Uses the OneDrive Microsoft sign-in.");
+  }
   if (vaultNames.length) {
     bits.push(`Uploaded files: ${vaultNames.slice(0, 8).join("; ")}`);
   }
@@ -545,7 +567,7 @@ async function liveSnapshot(student) {
   }
 
   bits.push(
-    "You can add, edit, check off, and delete notes and todos, add HTML or other files to a class or a todo page, and rename classes. You can also list and write OneDrive files, read and send Outlook, and read and send Teams when those are connected. Use the tools."
+    "You can add, edit, check off, and delete notes and todos, add HTML or other files to a class or a todo page, and rename classes. You can also list and write OneDrive files, read and create OneNote pages, read and send Outlook, and read and send Teams when those are connected. Use the tools."
   );
 
   return bits.join("\n").slice(0, 7000);
@@ -1004,6 +1026,118 @@ app.get("/v1/me/onedrive/file", async (req, res) => {
     return res.send(file.buffer);
   } catch (err) {
     return fail(res, err, err.status || 502);
+  }
+});
+
+async function onenoteAccess(student) {
+  if (!student?.graph?.accessToken) {
+    const err = new Error("Connect OneDrive in settings first. OneNote uses that sign-in.");
+    err.status = 400;
+    throw err;
+  }
+  return graphToken(student);
+}
+
+app.get("/v1/me/onenote/status", async (req, res) => {
+  try {
+    const student = await requireStudent(req, res);
+    if (!student) return;
+    const flags = studioFlags(student);
+    const connected = isConnected(student.graph) || flags.onedrive;
+    let notebooks = [];
+    let error = "";
+    if (student.graph?.accessToken) {
+      try {
+        const token = await graphToken(student);
+        notebooks = await listNotebooks(token);
+      } catch (err) {
+        error = onenoteError(err);
+      }
+    }
+    return res.json({
+      connected,
+      email: student.graph?.email || "",
+      notebooks,
+      error,
+      studio: flags.onedrive,
+      adminConsentUrl: adminConsentUrl(),
+    });
+  } catch (err) {
+    return fail(res, err);
+  }
+});
+
+app.get("/v1/me/onenote/notebooks", async (req, res) => {
+  try {
+    const student = await requireStudent(req, res);
+    if (!student) return;
+    const token = await onenoteAccess(student);
+    return res.json({ notebooks: await listNotebooks(token), error: "" });
+  } catch (err) {
+    return res.status(err.status || 502).json({ notebooks: [], error: onenoteError(err) });
+  }
+});
+
+app.get("/v1/me/onenote/sections", async (req, res) => {
+  try {
+    const student = await requireStudent(req, res);
+    if (!student) return;
+    const token = await onenoteAccess(student);
+    return res.json({
+      sections: await listOnenoteSections(token, req.query.notebook || req.query.notebookId),
+      error: "",
+    });
+  } catch (err) {
+    return res.status(err.status || 502).json({ sections: [], error: onenoteError(err) });
+  }
+});
+
+app.get("/v1/me/onenote/pages", async (req, res) => {
+  try {
+    const student = await requireStudent(req, res);
+    if (!student) return;
+    const token = await onenoteAccess(student);
+    return res.json({
+      pages: await listOnenotePages(token, {
+        sectionId: req.query.section || req.query.sectionId,
+        q: req.query.q,
+        limit: Number(req.query.limit) || 20,
+      }),
+      error: "",
+    });
+  } catch (err) {
+    return res.status(err.status || 502).json({ pages: [], error: onenoteError(err) });
+  }
+});
+
+app.get("/v1/me/onenote/page", async (req, res) => {
+  try {
+    const student = await requireStudent(req, res);
+    if (!student) return;
+    const id = String(req.query.id || "").trim();
+    if (!id) return res.status(400).json({ error: "id is required." });
+    const token = await onenoteAccess(student);
+    return res.json({ page: await getOnenotePage(token, id), error: "" });
+  } catch (err) {
+    return fail(res, Object.assign(err, { message: onenoteError(err) }), err.status || 502);
+  }
+});
+
+app.post("/v1/me/onenote/pages", async (req, res) => {
+  try {
+    const student = await requireStudent(req, res);
+    if (!student) return;
+    const token = await onenoteAccess(student);
+    return res.json(
+      await createOnenotePage(token, {
+        sectionId: req.body?.sectionId || req.body?.section,
+        title: req.body?.title,
+        text: req.body?.text,
+        html: req.body?.html,
+      })
+    );
+  } catch (err) {
+    return fail(res, Object.assign(err, { message: onenoteError(err) }), err.status || 400);
   }
 });
 
