@@ -1346,85 +1346,14 @@ html[data-resolved-theme="light"] .edu-filter.is-on {
 .edu-tone-orchid { --card: var(--tone-orchid); }
 .edu-tone-slate { --card: var(--tone-slate); }
 
-.edu-card {
-  background: color-mix(in srgb, var(--card) 16%, transparent);
-  box-shadow:
-    inset 3px 0 0 color-mix(in srgb, var(--card) 78%, transparent),
-    inset 0 0 0 1px color-mix(in srgb, var(--card) 22%, transparent);
-}
-
-.edu-row.edu-card {
-  padding: 0.68rem 0.8rem 0.68rem 0.85rem;
-  border-radius: 12px;
-}
-
-.edu-list:has(> .edu-card:not([data-tag])) {
-  gap: 0.42rem;
-}
-
-.edu-row.edu-card[data-tag]:not(.is-filter-hidden):not(.is-collapse-hidden) {
-  margin-bottom: 0.42rem;
-}
-
-.edu-row.edu-card:hover {
-  background: color-mix(in srgb, var(--card) 24%, transparent);
-}
-
-.edu-card .edu-period {
-  color: var(--card);
-  background: color-mix(in srgb, var(--card) 16%, transparent);
-  border-radius: 7px;
-  height: 1.4rem;
-}
-
-.edu-todo.is-done.edu-card {
-  background: color-mix(in srgb, var(--card) 9%, transparent);
-}
-
-.edu-class-row.is-current.edu-card {
-  color: inherit;
-  background: color-mix(in srgb, var(--card) 28%, transparent);
-  box-shadow:
-    inset 3px 0 0 var(--card),
-    inset 0 0 0 1px color-mix(in srgb, var(--card) 40%, transparent);
-}
-
-.edu-class-row.is-current.edu-card .edu-meta {
-  color: color-mix(in srgb, var(--card) 62%, var(--muted));
-}
-
-.edu-hero--class.edu-card {
-  padding: 0.85rem 1rem 0.95rem;
-  border-radius: 16px;
-  margin-bottom: 1rem;
-}
-
+[class*="edu-tone-"] .edu-period,
 .edu-hero--class .edu-period {
   color: var(--card);
 }
 
-html[data-resolved-theme="dark"] .edu-card {
-  background: color-mix(in srgb, var(--card) 20%, transparent);
-}
-
-html[data-resolved-theme="dark"] .edu-row.edu-card:hover {
-  background: color-mix(in srgb, var(--card) 28%, transparent);
-}
-
-html[data-resolved-theme="dark"] .edu-todo.is-done.edu-card {
-  background: color-mix(in srgb, var(--card) 12%, transparent);
-}
-
-html[data-resolved-theme="light"] .edu-card {
-  background: color-mix(in srgb, var(--card) 16%, transparent);
-}
-
-html[data-resolved-theme="light"] .edu-row.edu-card:hover {
-  background: color-mix(in srgb, var(--card) 24%, transparent);
-}
-
-html[data-resolved-theme="light"] .edu-todo.is-done.edu-card {
-  background: color-mix(in srgb, var(--card) 9%, transparent);
+.edu-meta.edu-course {
+  color: var(--card);
+  font-weight: 600;
 }
 
 /* Liquid-glass circle checkbox */

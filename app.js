@@ -1174,9 +1174,9 @@
     return hashTone(klass?.id || klass?.canvasCourseId || klass?.courseId || klass?.name || "");
   }
 
-  function cardClass(tone) {
+  function toneClass(tone) {
     const key = TONE_CYCLE.includes(tone) ? tone : "slate";
-    return `edu-card edu-tone-${key}`;
+    return `edu-tone-${key}`;
   }
 
   function classForWork(item) {
@@ -1311,7 +1311,7 @@
   }
 
   function gradeRow(c) {
-    return `<li class="edu-row edu-class-row ${cardClass(classTone(c))}">
+    return `<li class="edu-row edu-class-row ${toneClass(classTone(c))}">
       <a class="edu-row-link" data-route href="/grades">
         <span class="edu-name">${periodTagHtml(c.period)}<span class="edu-hero-class-name">${escapeHtml(c.name)}</span></span>
         <span class="edu-meta edu-grade">${escapeHtml(formatCourseGrade(c))}</span>
@@ -1331,7 +1331,7 @@
     const tag = w.tag || "HW";
     const href = canvasHref(w.canvasLink);
     const late = w.late ? " is-late" : "";
-    return `<li class="edu-row${late} ${cardClass(tone || workTone(w))}">
+    return `<li class="edu-row${late} ${toneClass(tone || workTone(w))}">
       <a class="edu-row-link" href="${escapeHtml(href)}" target="_blank" rel="noopener">
         <span class="edu-name"><span class="edu-tag edu-tag-${escapeHtml(tag)}">${escapeHtml(tag)}</span> ${escapeHtml(w.title)}</span>
         <span class="edu-meta edu-grade">${escapeHtml(formatWorkScore(w))}</span>
@@ -1355,9 +1355,9 @@
   function todoRow(t) {
     const tag = t.tag || "HW";
     const due = t.due ? `<span class="edu-meta">${escapeHtml(formatDue(t.due))}</span>` : "";
-    const klass = t.courseName ? `<span class="edu-meta">${escapeHtml(t.courseName)}</span>` : "";
+    const klass = t.courseName ? `<span class="edu-meta edu-course">${escapeHtml(t.courseName)}</span>` : "";
     const href = canvasHref(t.canvasLink);
-    return `<li class="edu-row edu-todo${t.done ? " is-done" : ""} ${cardClass(workTone(t))}" data-id="${escapeHtml(t.id || t.canvasId || "")}" data-tag="${escapeHtml(tag)}">
+    return `<li class="edu-row edu-todo${t.done ? " is-done" : ""} ${toneClass(workTone(t))}" data-id="${escapeHtml(t.id || t.canvasId || "")}" data-tag="${escapeHtml(tag)}">
       <button type="button" class="edu-check${t.done ? " is-checked" : ""}" data-liquid-glass="circle" data-filter-id="lg-check-${escapeHtml(t.id)}" data-todo-id="${escapeHtml(t.id || t.canvasId || "")}" aria-label="${t.done ? "Mark incomplete" : "Mark complete"}"><span class="edu-check-dot"></span></button>
       <a class="edu-row-link" href="${escapeHtml(href)}" target="_blank" rel="noopener">
         <span class="edu-name"><span class="edu-tag edu-tag-${escapeHtml(tag)}">${escapeHtml(tag)}</span> ${escapeHtml(t.title)}</span>
@@ -1387,7 +1387,7 @@
     const highlight = isCurrentClass(c);
     const href = classHref(c);
     const meta = c.courseCode || "";
-    return `<li class="edu-row edu-class-row${highlight ? " is-current" : ""} ${cardClass(classTone(c))}">
+    return `<li class="edu-row edu-class-row${highlight ? " is-current" : ""} ${toneClass(classTone(c))}">
       <a class="edu-row-link" data-route href="${escapeHtml(href)}">
         <span class="edu-name">${periodTagHtml(c.period)}<span class="edu-hero-class-name">${escapeHtml(fullerClassName(c.name, gradeForClass(c)?.name))}</span></span>
         <span class="edu-meta">${escapeHtml(meta)}</span>
@@ -1711,7 +1711,7 @@
     appEl.classList.add("is-settled");
     appEl.innerHTML = `
       <p class="edu-home-mark"><a class="edu-home-research" data-route href="/">Back</a></p>
-      <header class="edu-hero edu-hero--detail edu-hero--detail-canvas edu-hero--class ${cardClass(classTone(klass))}">
+      <header class="edu-hero edu-hero--detail edu-hero--detail-canvas edu-hero--class ${toneClass(classTone(klass))}">
         <div class="edu-hero-lead">
           <h1 class="edu-hero-title edu-hero-title--class">${period}<span class="edu-hero-class-name">${escapeHtml(fullerClassName(klass.name, courseGrade?.name))}</span></h1>
           <p class="edu-hero-sub">${escapeHtml(sub)}</p>
