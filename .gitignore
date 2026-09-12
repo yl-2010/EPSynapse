@@ -46,6 +46,7 @@ __pycache__/
 *.pyc
 .venv/
 models/fine-tuned-bert/
+models/fine-tuned-next/
 data/raw/
 data/processed/corpus.parquet
 data/processed/corpus.csv

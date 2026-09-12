@@ -12,6 +12,7 @@
 
   const charts = document.getElementById("research-charts");
   const status = document.getElementById("research-status");
+  const updated = document.getElementById("research-updated");
   const form = document.getElementById("research-toggles");
 
   function pct(n) {
@@ -50,6 +51,19 @@
       n === 0
         ? "No scored examples yet. Frozen eval is still zeros."
         : `${n} examples · ${frozenN} eval · ${userN} user`;
+    const stamp = payload.updated_at || payload.frozen_updated_at || "";
+    if (updated) {
+      if (stamp) {
+        const when = new Date(stamp);
+        updated.hidden = false;
+        updated.textContent = Number.isNaN(when.getTime())
+          ? `Last updated ${stamp}`
+          : `Last updated ${when.toLocaleString()}`;
+      } else {
+        updated.hidden = true;
+        updated.textContent = "";
+      }
+    }
     if (typeof window.reinitLiquidGlass === "function") window.reinitLiquidGlass();
   }
 

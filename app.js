@@ -885,12 +885,26 @@
     );
   }
 
+  function nextMeetingLine(klass) {
+    const meetings = lastHome.meetings || [];
+    const period = String(klass?.period || "").toUpperCase();
+    const mine = meetings.filter((m) => {
+      if (klass?.id && m.classId) return m.classId === klass.id;
+      return period && String(m.period || "").toUpperCase() === period;
+    });
+    const current = mine.find((m) => m.current);
+    if (current) return `In session now · ${current.start}–${current.end}`;
+    const next = mine[0];
+    if (next?.start) return `Next · ${next.start}–${next.end}`;
+    return "";
+  }
+
   function renderClass(id) {
     const klass = findClass(id);
     if (!klass) {
       appEl.classList.add("is-settled");
       appEl.innerHTML = `
-        <p class="edu-home-mark">EPSynapse</p>
+        <p class="edu-home-mark"><a class="edu-home-research" data-route href="/">Home</a></p>
         <p class="edu-empty">No class with that id. Upload a term schedule PDF or connect Canvas.</p>
       `;
       return;
@@ -929,12 +943,15 @@
     const period = klass.period
       ? `<span class="edu-tag edu-period edu-period--hero">${escapeHtml(klass.period)}</span>`
       : "";
+    const next = nextMeetingLine(klass);
+    const sub = [klass.term, klass.subject, klass.courseCode, next].filter(Boolean).join(" · ");
     appEl.classList.add("is-settled");
     appEl.innerHTML = `
+      <p class="edu-home-mark"><a class="edu-home-research" data-route href="/">Home</a></p>
       <header class="edu-hero edu-hero--detail edu-hero--detail-canvas">
         <div class="edu-hero-lead">
           <h1 class="edu-hero-title edu-hero-title--class">${period}<span class="edu-hero-class-name">${escapeHtml(klass.name)}</span></h1>
-          <p class="edu-hero-sub">${escapeHtml([klass.term, klass.subject, klass.courseCode].filter(Boolean).join(" · "))}</p>
+          <p class="edu-hero-sub">${escapeHtml(sub)}</p>
         </div>
       </header>
       <div class="edu-grid edu-grid--home">
@@ -981,7 +998,7 @@
     if (!note) {
       appEl.classList.add("is-settled");
       appEl.innerHTML = `
-        <p class="edu-home-mark">EPSynapse</p>
+        <p class="edu-home-mark"><a class="edu-home-research" data-route href="/">Home</a></p>
         <p class="edu-empty">That note is not on this account.</p>
       `;
       return;
@@ -991,6 +1008,7 @@
     const gold = note.userGoldSubject || note.subject || "";
     appEl.classList.add("is-settled");
     appEl.innerHTML = `
+      <p class="edu-home-mark"><a class="edu-home-research" data-route href="/">Home</a></p>
       <header class="edu-hero edu-hero--detail">
         <div class="edu-hero-lead">
           <h1 class="edu-hero-title">${escapeHtml(note.title || "Note")}</h1>

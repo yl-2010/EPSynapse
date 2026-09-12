@@ -142,6 +142,21 @@ def main() -> None:
             f"micro_f1={arm['micro_f1']:.4f} macro_f1={arm['macro_f1']:.4f}"
         )
 
+    if "student_key" not in results["arms"]:
+        empty_class = {
+            s: {"precision": 0.0, "recall": 0.0, "f1": 0.0, "support": 0} for s in SUBJECTS
+        }
+        results["arms"]["student_key"] = {
+            "name": "student_key",
+            "n": 0,
+            "accuracy": 0.0,
+            "micro_f1": 0.0,
+            "macro_f1": 0.0,
+            "per_class": empty_class,
+            "protocol": "live_only",
+            "label": "Student-key model",
+        }
+
     results["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(results, indent=2) + "\n")

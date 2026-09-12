@@ -6,6 +6,7 @@ struct HomeView: View {
     @EnvironmentObject private var dashboard: DashboardStore
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.openURL) private var openURL
 
     @State private var showSettings = false
     @State private var scrollToTopTick = 0
@@ -142,6 +143,19 @@ struct HomeView: View {
                     .font(.footnote)
                     .foregroundStyle(EPSTheme.muted)
             }
+
+            Button {
+                openURL(EPSLinks.research)
+            } label: {
+                Text("Research")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(EPSTheme.fg)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+            }
+            .buttonStyle(.plain)
+            .epsGlassRounded(cornerRadius: 14, interactive: true)
+            .accessibilityHint("Opens the public research page in Safari")
         }
     }
 }
