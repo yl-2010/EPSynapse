@@ -169,6 +169,8 @@
         fallback.hidden = false;
         fallback.textContent = redirectLabel;
         fallback.classList.toggle("home-google-fallback--text", showGis);
+        if (showGis) fallback.removeAttribute("data-liquid-glass");
+        else fallback.setAttribute("data-liquid-glass", "rounded");
       }
       if (redirectBtn) {
         redirectBtn.hidden = false;
