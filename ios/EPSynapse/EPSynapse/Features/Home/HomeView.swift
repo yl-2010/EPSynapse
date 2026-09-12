@@ -60,6 +60,7 @@ struct HomeView: View {
                 .frame(maxWidth: .infinity)
             }
             .scrollIndicators(.hidden)
+            .scrollDismissesKeyboard(.never)
             .onReceive(NotificationCenter.default.publisher(for: .epsScrollHomeToTop)) { _ in
                 withAnimation(.easeOut(duration: 0.35)) {
                     proxy.scrollTo("home-top", anchor: .top)

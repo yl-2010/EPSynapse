@@ -8,6 +8,8 @@ struct ChatOverlay: View {
     @State private var draft = ""
     @State private var turns: [ChatTurn] = []
     @State private var busy = false
+    @State private var dragY: CGFloat = 0
+    @State private var overlayFrame: CGRect = .zero
     @FocusState private var composerFocused: Bool
 
     private var showPanel: Bool { isOpen && !turns.isEmpty }
@@ -24,6 +26,28 @@ struct ChatOverlay: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             composer
+        }
+        .background {
+            GeometryReader { geo in
+                Color.clear.preference(key: AgentOverlayFrameKey.self, value: geo.frame(in: .global))
+            }
+        }
+        .onPreferenceChange(AgentOverlayFrameKey.self) { overlayFrame = $0 }
+        .offset(y: dragY)
+        .background {
+            if isOpen {
+                AgentDismissBridge(
+                    overlayFrame: overlayFrame,
+                    onDrag: { next in
+                        var transaction = Transaction()
+                        transaction.disablesAnimations = true
+                        withTransaction(transaction) { dragY = next }
+                    },
+                    onEnd: finishDismissDrag
+                )
+                .frame(width: 0, height: 0)
+                .allowsHitTesting(false)
+            }
         }
         .onKeyPress(.escape) {
             if isOpen {
@@ -93,7 +117,6 @@ struct ChatOverlay: View {
         .frame(minHeight: pillSide)
         .frame(maxWidth: isOpen ? .infinity : pillSide)
         .epsGlassCapsule(interactive: true)
-        .modifier(InteractiveKeyboardDismiss(isFocused: $composerFocused))
     }
 
     private var messagePanel: some View {
@@ -125,7 +148,7 @@ struct ChatOverlay: View {
                     }
                     .padding(.bottom, 4)
                 }
-                .scrollDismissesKeyboard(.interactively)
+                .scrollDismissesKeyboard(.never)
                 .onChange(of: turns.last?.content) { _, _ in
                     if let last = turns.last {
                         withAnimation(.easeOut(duration: 0.2)) {
@@ -175,10 +198,35 @@ struct ChatOverlay: View {
             .frame(width: 13, height: 3)
     }
 
+    private func finishDismissDrag(offset: CGFloat, velocity: CGFloat, travel: CGFloat) {
+        let flick = velocity > 850
+        let reverse = velocity < -420
+        let far = offset > max(travel * 0.32, 72)
+        if !reverse, flick || far {
+            let extra = max(travel - offset, 90)
+            let duration = flick
+                ? min(0.28, max(0.12, extra / max(velocity, 900)))
+                : 0.2
+            withAnimation(.easeIn(duration: duration)) {
+                dragY = offset + extra
+            }
+            AgentKeyboardScrub.finishOffscreen(from: offset, extra: extra, duration: duration) {
+                minimize()
+            }
+        } else {
+            AgentKeyboardScrub.snapBack()
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                dragY = 0
+            }
+        }
+    }
+
     private func minimize() {
         composerFocused = false
         draft = ""
         isOpen = false
+        dragY = 0
+        AgentKeyboardScrub.commitHide()
     }
 
     private func clearChat() {
@@ -254,28 +302,296 @@ struct ChatOverlay: View {
     }
 }
 
-/// Swipe down on the composer resigns focus. The keyboard then owns the hide
-/// motion, including interactive dismiss from the transcript scroll.
-private struct InteractiveKeyboardDismiss: ViewModifier {
-    var isFocused: FocusState<Bool>.Binding
+private struct AgentOverlayFrameKey: PreferenceKey {
+    static var defaultValue: CGRect = .zero
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        value = nextValue()
+    }
+}
 
-    func body(content: Content) -> some View {
-        content
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 24, coordinateSpace: .local)
-                    .onEnded { value in
-                        let dy = value.translation.height
-                        let dx = value.translation.width
-                        guard isFocused.wrappedValue,
-                              dy > 36,
-                              dy > abs(dx) * 1.15
-                        else { return }
-                        isFocused.wrappedValue = false
-                    }
-            )
-            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidHideNotification)) { _ in
-                guard isFocused.wrappedValue else { return }
-                isFocused.wrappedValue = false
+/// Window pan so a downward page scroll can keep going into the agent bar.
+/// Once the finger hits the bar, the bar and keyboard track 1:1. A flick closes.
+private struct AgentDismissBridge: UIViewRepresentable {
+    var overlayFrame: CGRect
+    var onDrag: (CGFloat) -> Void
+    var onEnd: (CGFloat, CGFloat, CGFloat) -> Void
+
+    func makeUIView(context: Context) -> AgentDismissInstaller {
+        let view = AgentDismissInstaller()
+        view.onDrag = onDrag
+        view.onEnd = onEnd
+        view.overlayFrame = overlayFrame
+        return view
+    }
+
+    func updateUIView(_ view: AgentDismissInstaller, context: Context) {
+        view.onDrag = onDrag
+        view.onEnd = onEnd
+        view.overlayFrame = overlayFrame
+        view.isEnabled = true
+        AgentKeyboardScrub.prepare()
+    }
+
+    static func dismantleUIView(_ view: AgentDismissInstaller, coordinator: ()) {
+        view.detach()
+    }
+}
+
+final class AgentDismissInstaller: UIView, UIGestureRecognizerDelegate {
+    var overlayFrame: CGRect = .zero
+    var isEnabled = false
+    var onDrag: ((CGFloat) -> Void)?
+    var onEnd: ((CGFloat, CGFloat, CGFloat) -> Void)?
+
+    private let pan = UIPanGestureRecognizer()
+    private var engaged = false
+    private var originY: CGFloat = 0
+    private var offset: CGFloat = 0
+    private weak var hostWindow: UIWindow?
+    private weak var hostView: UIView?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false
+        backgroundColor = .clear
+        pan.addTarget(self, action: #selector(handlePan))
+        pan.cancelsTouchesInView = false
+        pan.maximumNumberOfTouches = 1
+        pan.delegate = self
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        attach(to: window)
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        if hostView == nil { attach(to: window) }
+    }
+
+    func detach() {
+        hostView?.removeGestureRecognizer(pan)
+        hostView = nil
+        hostWindow = nil
+        AgentKeyboardScrub.cancel()
+    }
+
+    private func attach(to window: UIWindow?) {
+        let target = window?.rootViewController?.view ?? window
+        if hostView === target { return }
+        hostView?.removeGestureRecognizer(pan)
+        hostWindow = window
+        hostView = target
+        target?.addGestureRecognizer(pan)
+    }
+
+    @objc private func handlePan(_ gesture: UIPanGestureRecognizer) {
+        guard isEnabled, let view = gesture.view else { return }
+        if view.window?.rootViewController?.presentedViewController != nil { return }
+
+        let location = gesture.location(in: nil)
+        switch gesture.state {
+        case .began, .changed:
+            if !engaged {
+                guard hitBar(location) else { return }
+                engaged = true
+                originY = location.y
+                AgentKeyboardScrub.begin()
             }
+            offset = max(0, location.y - originY)
+            AgentKeyboardScrub.setOffset(offset)
+            onDrag?(offset)
+        case .ended, .cancelled, .failed:
+            if engaged {
+                let velocity = gesture.velocity(in: view).y
+                let travel = max(overlayFrame.height + AgentKeyboardScrub.coverage, 160)
+                onEnd?(offset, velocity, travel)
+            }
+            engaged = false
+            offset = 0
+        default:
+            break
+        }
+    }
+
+    private func hitBar(_ location: CGPoint) -> Bool {
+        var bar = overlayFrame
+        if bar.height < 8, let window = hostWindow ?? window {
+            bar = CGRect(
+                x: 0,
+                y: window.bounds.maxY - 88,
+                width: window.bounds.width,
+                height: 88
+            )
+        }
+        bar = bar.insetBy(dx: -36, dy: 0)
+        guard bar.height > 8 else { return false }
+        return location.y >= bar.minY && location.x >= bar.minX && location.x <= bar.maxX
+    }
+
+    override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard isEnabled, let pan = gestureRecognizer as? UIPanGestureRecognizer else { return false }
+        if window?.rootViewController?.presentedViewController != nil { return false }
+        let velocity = pan.velocity(in: pan.view)
+        let translation = pan.translation(in: pan.view)
+        if hypot(velocity.x, velocity.y) > 8 {
+            return velocity.y > abs(velocity.x) * 0.35
+        }
+        return translation.y > abs(translation.x) * 0.35
+    }
+
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+        true
+    }
+}
+
+enum AgentKeyboardScrub {
+    private static weak var host: UIView?
+    private(set) static var coverage: CGFloat = 0
+    private static var lastKeyboardFrame: CGRect = .zero
+    private static var observer: NSObjectProtocol?
+
+    static func prepare() {
+        listenIfNeeded()
+    }
+
+    static func begin() {
+        listenIfNeeded()
+        if lastKeyboardFrame.height < 20 {
+            lastKeyboardFrame = currentKeyboardFrame()
+        }
+        host = findHost(matching: lastKeyboardFrame)
+        coverage = max(lastKeyboardFrame.height, host?.bounds.height ?? 0)
+        if coverage < 20 { coverage = 0 }
+    }
+
+    static func setOffset(_ dy: CGFloat) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        host?.transform = CGAffineTransform(translationX: 0, y: max(0, dy))
+        CATransaction.commit()
+    }
+
+    static func snapBack() {
+        let view = host
+        UIView.animate(
+            withDuration: 0.32,
+            delay: 0,
+            usingSpringWithDamping: 0.86,
+            initialSpringVelocity: 0.4,
+            options: [.allowUserInteraction, .beginFromCurrentState]
+        ) {
+            view?.transform = .identity
+        }
+        host = nil
+        coverage = 0
+    }
+
+    static func finishOffscreen(from dy: CGFloat, extra: CGFloat, duration: TimeInterval, then: @escaping () -> Void) {
+        let view = host
+        UIView.animate(
+            withDuration: duration,
+            delay: 0,
+            options: [.curveEaseIn, .beginFromCurrentState]
+        ) {
+            view?.transform = CGAffineTransform(translationX: 0, y: dy + extra)
+        } completion: { _ in
+            commitHide()
+            then()
+        }
+    }
+
+    static func commitHide() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        UIView.setAnimationsEnabled(false)
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        host?.transform = .identity
+        UIView.setAnimationsEnabled(true)
+        CATransaction.commit()
+        host = nil
+        coverage = 0
+        lastKeyboardFrame = .zero
+    }
+
+    static func cancel() {
+        host?.transform = .identity
+        host = nil
+        coverage = 0
+    }
+
+    private static func listenIfNeeded() {
+        guard observer == nil else { return }
+        observer = NotificationCenter.default.addObserver(
+            forName: UIResponder.keyboardWillChangeFrameNotification,
+            object: nil,
+            queue: .main
+        ) { note in
+            if let frame = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
+                lastKeyboardFrame = frame
+            }
+        }
+    }
+
+    private static func currentKeyboardFrame() -> CGRect {
+        if lastKeyboardFrame.height > 20 { return lastKeyboardFrame }
+        for scene in UIApplication.shared.connectedScenes {
+            guard let windowScene = scene as? UIWindowScene else { continue }
+            for window in windowScene.windows where NSStringFromClass(type(of: window)).contains("Keyboard") {
+                return window.convert(window.bounds, to: nil)
+            }
+        }
+        return .zero
+    }
+
+    private static func findHost(matching keyboardScreenFrame: CGRect) -> UIView? {
+        if let named = keyboardWindow() { return named }
+        guard keyboardScreenFrame.height > 20 else { return keyboardWindow() }
+
+        var best: UIView?
+        var bestScore = CGFloat.greatestFiniteMagnitude
+
+        func consider(_ view: UIView) {
+            let frame = view.convert(view.bounds, to: nil)
+            guard frame.height > 30, frame.height < keyboardScreenFrame.height * 1.8 else { return }
+            let score = abs(frame.minY - keyboardScreenFrame.minY)
+                + abs(frame.maxY - keyboardScreenFrame.maxY)
+                + abs(frame.height - keyboardScreenFrame.height)
+            guard score < bestScore else { return }
+            bestScore = score
+            best = view
+        }
+
+        func walk(_ view: UIView) {
+            consider(view)
+            for sub in view.subviews { walk(sub) }
+        }
+
+        for scene in UIApplication.shared.connectedScenes {
+            guard let windowScene = scene as? UIWindowScene else { continue }
+            for window in windowScene.windows { walk(window) }
+        }
+        if bestScore < 180 { return best }
+        return keyboardWindow()
+    }
+
+    private static func keyboardWindow() -> UIWindow? {
+        for scene in UIApplication.shared.connectedScenes {
+            guard let windowScene = scene as? UIWindowScene else { continue }
+            for window in windowScene.windows {
+                let name = NSStringFromClass(type(of: window))
+                if name.contains("Keyboard") { return window }
+            }
+        }
+        return nil
     }
 }
