@@ -519,6 +519,11 @@ html[data-resolved-theme="dark"] .edu-check.lg-refraction::after {
   height: var(--corner-orb);
 }
 
+#settings-open svg {
+  transform-origin: 50% 50%;
+  transition: transform 0.55s var(--ease);
+}
+
 .c-tr {
   /* Empty theme orb: above every page element (no chat on this site) */
   z-index: 100;
@@ -2583,6 +2588,47 @@ html[data-resolved-theme="dark"] .edu-sheet-backdrop {
   display: none !important;
 }
 
+.edu-sheet-backdrop.is-open {
+  animation: settings-backdrop-in 0.36s var(--ease) both;
+}
+
+.edu-sheet-backdrop.is-open.is-leaving {
+  animation: settings-backdrop-out 0.24s ease both;
+}
+
+.edu-sheet-backdrop.is-open:not(.is-leaving) .set-stage > #settings-main {
+  animation: settings-sheet-in 0.5s var(--ease) both;
+}
+
+@keyframes settings-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes settings-backdrop-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes settings-sheet-in {
+  from {
+    opacity: 0;
+    transform: translate(-10%, 16%) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 .set-stage {
   --set-card: min(30rem, calc(100vw - 2rem));
   --set-keys: min(28rem, calc(100vw - 2.5rem));
@@ -2683,8 +2729,13 @@ html[data-resolved-theme="dark"] .edu-sheet-backdrop {
 @media (prefers-reduced-motion: reduce) {
   .set-stage,
   .set-side,
-  .set-stage > #settings-main {
+  .set-stage > #settings-main,
+  #settings-open svg,
+  .edu-sheet-backdrop.is-open,
+  .edu-sheet-backdrop.is-open.is-leaving,
+  .edu-sheet-backdrop.is-open:not(.is-leaving) .set-stage > #settings-main {
     transition: none;
+    animation: none !important;
   }
 }
 

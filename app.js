@@ -721,10 +721,33 @@
     closePane(immediate);
   }
 
+  let sheetAnimTimer = 0;
+  let gearTurn = 0;
+
+  function prefersReducedMotion() {
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
+
+  function spinSettingsGear() {
+    const icon = document.querySelector("#settings-open svg");
+    if (!icon) return;
+    gearTurn += 90;
+    icon.style.transform = `rotate(${gearTurn}deg)`;
+  }
+
   function openSheet() {
     if (!signedInViaGoogle()) return;
     closePane(true);
+    window.clearTimeout(sheetAnimTimer);
+    sheet.classList.remove("is-leaving");
     sheet.hidden = false;
+    if (prefersReducedMotion()) {
+      sheet.classList.add("is-open");
+    } else {
+      sheet.classList.remove("is-open");
+      void sheet.offsetWidth;
+      sheet.classList.add("is-open");
+    }
     document.querySelector("#settings-main .edu-sheet-body")?.scrollTo(0, 0);
     const keyEntry = document.getElementById("key-entry");
     const canvasEntry = document.getElementById("canvas-entry");
@@ -738,12 +761,25 @@
     paintOnedrive();
     paintOutlook();
     glassAfterMove();
+    window.setTimeout(glassAfterMove, 280);
+    window.setTimeout(glassAfterMove, 520);
   }
 
   function closeSheet() {
     hideSchoolResults();
     closePane(true);
-    sheet.hidden = true;
+    const finish = () => {
+      sheet.hidden = true;
+      sheet.classList.remove("is-open", "is-leaving");
+    };
+    if (sheet.hidden && !sheet.classList.contains("is-open")) return;
+    if (prefersReducedMotion() || !sheet.classList.contains("is-open")) {
+      finish();
+      return;
+    }
+    sheet.classList.add("is-leaving");
+    window.clearTimeout(sheetAnimTimer);
+    sheetAnimTimer = window.setTimeout(finish, 260);
   }
 
   function closeChatOverlay() {
@@ -1987,7 +2023,10 @@
   document.getElementById("schedulePdf")?.addEventListener("change", () => {
     if (document.getElementById("schedulePdf")?.files?.[0]) uploadSchedulePdf();
   });
-  document.getElementById("settings-open").addEventListener("click", openSheet);
+  document.getElementById("settings-open").addEventListener("click", () => {
+    spinSettingsGear();
+    openSheet();
+  });
   document.getElementById("settings-close").addEventListener("click", () => {
     closeSheet();
   });
