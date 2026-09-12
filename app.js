@@ -232,7 +232,9 @@
   }
 
   function googleRedirectUri() {
-    return `${location.origin}${location.pathname || "/"}`;
+    const path = location.pathname || "/";
+    if (path === "/") return location.origin;
+    return `${location.origin}${path}`;
   }
 
   async function startGoogleRedirect() {
