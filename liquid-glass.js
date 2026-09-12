@@ -389,10 +389,12 @@
     ".dash-login.lg-static, .dash-entry.lg-static, .dash-agent.lg-static, .yan-chat-widget.lg-static, .yan-chat-map-ios.lg-static, .yan-chat-bubble.lg-static, .sheet.lg-static, .edu-panel, .edu-file-tile";
 
   const STATIC_BOX_MAG_SCALE = 0.6;
+  // Hover travel / squish / press — half the original motion.
+  const HOVER_ANIM = 0.5;
 
   function bindStaticBoxMagnetic(el) {
     if (!el || !document.documentElement.classList.contains("lg-chrome")) return;
-    bindMagnetic(el, 0.28 * STATIC_BOX_MAG_SCALE, { clamp: true });
+    bindMagnetic(el, 0.28 * HOVER_ANIM * STATIC_BOX_MAG_SCALE, { clamp: true });
   }
 
   function unobserveChromeGlass(el) {
@@ -1642,8 +1644,8 @@ void main() {
       // corner stays 90°. No rotation — that shears the long edges.
       const ax = Math.abs(nx);
       const ay = Math.abs(ny);
-      const amount = 0.04;
-      const maxGrowPx = 3;
+      const amount = 0.04 * HOVER_ANIM;
+      const maxGrowPx = 3 * HOVER_ANIM;
       let sx = 1 + amount * ax - amount * 0.5 * ay;
       let sy = 1 + amount * ay - amount * 0.5 * ax;
       const cap = (s, size) => {
@@ -1657,9 +1659,9 @@ void main() {
       el._lgRot = 0;
       return;
     }
-    // ~4% directional stretch, pixel-capped so orbs stay clear of neighbors.
-    const maxGrowPx = 4;
-    let along = 1 + 0.04 * falloff;
+    // Directional stretch, pixel-capped so orbs stay clear of neighbors.
+    const maxGrowPx = 4 * HOVER_ANIM;
+    let along = 1 + 0.04 * HOVER_ANIM * falloff;
     const growPx = (along - 1) * Math.max(rect.width, rect.height) * 0.5;
     if (growPx > maxGrowPx) {
       along = 1 + (2 * maxGrowPx) / Math.max(rect.width, rect.height, 1);
@@ -1707,7 +1709,7 @@ void main() {
     if (chrome && document.documentElement.classList.contains("lg-scrolling")) {
       return;
     }
-    const strength = el._lgMagStrength || 0.28;
+    const strength = el._lgMagStrength || 0.28 * HOVER_ANIM;
     const clamp = !!el._lgMagClamp;
     const r = el.getBoundingClientRect();
     let mx = (clientX - r.left - r.width / 2) * strength;
@@ -1815,7 +1817,7 @@ void main() {
       if (el._drag) return;
       // Rectangles keep concentric bounds — no press squash. Orbs still flex.
       if (el._lgMagClamp) return;
-      el._lgPress = 0.985;
+      el._lgPress = 1 - 0.015 * HOVER_ANIM;
       applyMagneticT(el);
     });
     el.addEventListener("pointerup", () => {
@@ -1845,32 +1847,34 @@ void main() {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     document
       .querySelectorAll(".corner:not(.yan-chat-pill)")
-      .forEach((el) => bindMagnetic(el, 0.28));
+      .forEach((el) => bindMagnetic(el, 0.28 * HOVER_ANIM));
     document
       .querySelectorAll(".stat-tile")
-      .forEach((el) => bindMagnetic(el, 0.28));
+      .forEach((el) => bindMagnetic(el, 0.28 * HOVER_ANIM));
     document
       .querySelectorAll(".edu-vote")
-      .forEach((el) => bindMagnetic(el, 0.28));
+      .forEach((el) => bindMagnetic(el, 0.28 * HOVER_ANIM));
     document.querySelectorAll(".yan-chat-pill").forEach((el) => {
-      bindMagnetic(el, 0.18);
+      bindMagnetic(el, 0.18 * HOVER_ANIM);
       const chat = el.closest(".yan-chat");
       el._lgMagClamp = !!(chat && chat.classList.contains("is-open"));
     });
     document
       .querySelectorAll(".yan-chat-close, .yan-chat-history-btn")
-      .forEach((el) => bindMagnetic(el, 0.28));
+      .forEach((el) => bindMagnetic(el, 0.28 * HOVER_ANIM));
     document.querySelectorAll(".yan-chat-panel").forEach((el) => {
-      bindMagnetic(el, 0.28 * STATIC_BOX_MAG_SCALE, { clamp: true });
+      bindMagnetic(el, 0.28 * HOVER_ANIM * STATIC_BOX_MAG_SCALE, { clamp: true });
     });
     document.querySelectorAll(".edu-panel, .edu-file-tile").forEach((el) => {
-      bindMagnetic(el, 0.28 * STATIC_BOX_MAG_SCALE, { clamp: true });
+      bindMagnetic(el, 0.28 * HOVER_ANIM * STATIC_BOX_MAG_SCALE, { clamp: true });
     });
     if (document.documentElement.classList.contains("lg-chrome")) {
       document
         .querySelectorAll(STATIC_BOX_SEL)
         .forEach((el) =>
-          bindMagnetic(el, 0.28 * STATIC_BOX_MAG_SCALE, { clamp: true })
+          bindMagnetic(el, 0.28 * HOVER_ANIM * STATIC_BOX_MAG_SCALE, {
+            clamp: true,
+          })
         );
     }
     syncMagneticFromPointer();
