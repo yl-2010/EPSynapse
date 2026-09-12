@@ -27,6 +27,34 @@
         letter-spacing: 0.14em;
         color: var(--accent);
       }
+      .edu-mail-unread .edu-name { font-weight: 650; }
+      .edu-mail-body {
+        margin: 0.65rem 0 0;
+        white-space: pre-wrap;
+        font-size: var(--text-footnote);
+        color: var(--muted);
+        max-height: 12rem;
+        overflow: auto;
+      }
+      .edu-compose {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        margin-top: 0.85rem;
+      }
+      .edu-compose input,
+      .edu-compose textarea {
+        width: 100%;
+        box-sizing: border-box;
+        border: 0;
+        border-radius: 14px;
+        padding: 0.65rem 0.8rem;
+        background: color-mix(in srgb, var(--fg) 6%, transparent);
+        color: var(--fg);
+        font: inherit;
+        font-size: var(--text-footnote);
+      }
+      .edu-compose textarea { min-height: 5.2rem; resize: vertical; }
     </style>
   </head>
   <body>
@@ -210,6 +238,13 @@
         <p class="edu-empty" id="onedrive-status">School OneDrive. Tap Connect, then sign in with @eastsideprep.org.</p>
         <p id="onedrive-code" class="od-code" hidden></p>
         <a id="onedrive-open" class="edu-empty" href="https://login.microsoft.com/device" target="_blank" rel="noopener" hidden>Open Microsoft sign-in</a>
+
+        <div class="edu-sheet-actions">
+          <button type="button" id="outlook-start" class="edu-sheet-btn" data-liquid-glass="rounded" data-filter-id="lg-edu-ol-start">Connect Outlook</button>
+        </div>
+        <p class="edu-empty" id="outlook-status">School Outlook. Same Microsoft sign-in, mail only.</p>
+        <p id="outlook-code" class="od-code" hidden></p>
+        <a id="outlook-open" class="edu-empty" href="https://login.microsoft.com/device" target="_blank" rel="noopener" hidden>Open Microsoft sign-in</a>
 
         <label for="provider">Model</label>
         <div class="edu-sheet-field" data-liquid-glass="rounded" data-filter-id="lg-edu-provider">

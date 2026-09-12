@@ -10,15 +10,19 @@
   const form = sheet.querySelector(".edu-sheet");
   const statusEl = document.getElementById("settings-status");
   const odStatus = document.getElementById("onedrive-status");
+  const olStatus = document.getElementById("outlook-status");
   const keyStatus = document.getElementById("key-status");
   const providerSel = document.getElementById("provider");
 
   let apiBase = "";
   let me = null;
-  let pollTimer = 0;
+  let odPollTimer = 0;
+  let olPollTimer = 0;
   const TAGS = ["CW", "HW", "QA", "MA"];
   const typeFilter = new Set(TAGS);
-  let lastHome = { courses: [], assignments: [], files: [] };
+  let lastHome = { courses: [], assignments: [], files: [], messages: [] };
+  let openMail = null;
+  let mailBusy = false;
 
   function escapeHtml(s) {
     return String(s || "")
@@ -81,6 +85,7 @@
     }
     refreshKeyStatus();
     paintOnedrive();
+    paintOutlook();
     queueMicrotask(() => window.reinitLiquidGlass?.());
   }
 
@@ -181,8 +186,50 @@
     return `<a class="edu-file-tile" href="${escapeHtml(href)}" target="_blank" rel="noopener" data-liquid-glass="rounded" data-filter-id="lg-file-${i}" title="${escapeHtml(f.name)}"><span class="edu-file-name">${escapeHtml(f.name)}</span></a>`;
   }
 
-  function renderHome({ courses, assignments, files }) {
-    lastHome = { courses, assignments, files };
+  function formatMailWhen(iso) {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return String(iso).slice(0, 10);
+    return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  }
+
+  function mailRow(m) {
+    const unread = m.unread ? " edu-mail-unread" : "";
+    const who = m.fromAddress || m.from || "";
+    return `<li class="edu-row${unread}">
+      <button type="button" class="edu-row-link" data-mail-id="${escapeHtml(m.id)}" style="all:unset;cursor:pointer;display:block;width:100%">
+        <span class="edu-name">${escapeHtml(m.subject || "(no subject)")}</span>
+        <span class="edu-meta">${escapeHtml(who)} · ${escapeHtml(formatMailWhen(m.received))}</span>
+      </button>
+    </li>`;
+  }
+
+  function mailPanelHtml(messages) {
+    if (!me?.outlookConnected) {
+      return `<p class="edu-empty">Connect Outlook in settings</p>`;
+    }
+    const rows = (messages || []).map(mailRow).join("");
+    const list = rows ? `<ul class="edu-list">${rows}</ul>` : `<p class="edu-empty">Inbox is empty</p>`;
+    const open = openMail
+      ? `<div class="edu-mail-open">
+          <p class="edu-name">${escapeHtml(openMail.subject || "")}</p>
+          <p class="edu-meta">${escapeHtml(openMail.from || "")}</p>
+          <pre class="edu-mail-body">${escapeHtml(openMail.body || openMail.preview || "")}</pre>
+        </div>`
+      : "";
+    const sendLabel = mailBusy ? "Sending…" : "Send";
+    return `${list}${open}
+      <form class="edu-compose" id="outlook-compose">
+        <input id="outlook-to" name="to" type="text" placeholder="To (comma-separated)" required />
+        <input id="outlook-subject" name="subject" placeholder="Subject" required maxlength="200" />
+        <textarea id="outlook-body" name="body" placeholder="Message" required maxlength="8000"></textarea>
+        <button type="submit" class="edu-sheet-btn edu-sheet-btn--gold" data-liquid-glass="rounded" data-filter-id="lg-edu-ol-send"${mailBusy ? " disabled" : ""}>${sendLabel}</button>
+        <p class="edu-empty" id="outlook-send-status"></p>
+      </form>`;
+  }
+
+  function renderHome({ courses, assignments, files, messages }) {
+    lastHome = { courses, assignments, files, messages: messages || lastHome.messages || [] };
     const open = (assignments || []).filter((t) => !t.done && matchesTag(t));
     const done = (assignments || []).filter((t) => t.done && matchesTag(t));
     const dates = (assignments || [])
@@ -212,6 +259,7 @@
           ${panelHtml("Classes", listOrEmpty((courses || []).map(classRow).join(""), classEmpty), "lg-edu-classes")}
           ${panelHtml("Dates", listOrEmpty(dates.map(dateRow).join(""), "No upcoming dates"), "lg-edu-dates", "", filterBarHtml("dates"))}
           ${panelHtml("Files", fileTiles ? `<div class="edu-files">${fileTiles}</div>` : `<p class="edu-empty">${escapeHtml(fileEmpty)}</p>`, "lg-edu-files")}
+          ${panelHtml("Mail", mailPanelHtml(lastHome.messages), "lg-edu-mail")}
         </div>
       </div>
     `;
@@ -228,12 +276,16 @@
       ? api("/v1/me/canvas/assignments").then((r) => r.assignments || []).catch(() => [])
       : Promise.resolve([]);
     const files = me?.onedriveConnected
-      ? api("/v1/me/onedrive/files").then((r) => r.files || []).catch(() => [])
+      ? api("/v1/me/onedrive/files", { timeoutMs: 20000 }).then((r) => r.files || []).catch(() => [])
+      : Promise.resolve([]);
+    const messages = me?.outlookConnected
+      ? api("/v1/me/outlook/messages?limit=12", { timeoutMs: 20000 }).then((r) => r.messages || []).catch(() => [])
       : Promise.resolve([]);
     renderHome({
       courses: await courses,
       assignments: await assignments,
       files: await files,
+      messages: await messages,
     });
   }
 
@@ -278,6 +330,49 @@
     }
     setStatus(odStatus, "School OneDrive. Tap Connect, then sign in with @eastsideprep.org.");
     showOnedriveCode("", "");
+  }
+
+  function showOutlookCode(code, uri) {
+    const codeEl = document.getElementById("outlook-code");
+    const openEl = document.getElementById("outlook-open");
+    if (!codeEl || !openEl) return;
+    if (code) {
+      codeEl.hidden = false;
+      codeEl.textContent = code;
+    } else {
+      codeEl.hidden = true;
+      codeEl.textContent = "";
+    }
+    if (uri) {
+      openEl.hidden = false;
+      openEl.href = uri;
+    } else {
+      openEl.hidden = true;
+    }
+  }
+
+  function paintOutlook() {
+    if (!me) {
+      setStatus(olStatus, "School Outlook. Same Microsoft sign-in, mail only.");
+      showOutlookCode("", "");
+      return;
+    }
+    if (me.outlookConnected) {
+      setStatus(olStatus, me.outlookEmail ? `Outlook · ${me.outlookEmail}` : "Outlook connected");
+      showOutlookCode("", "");
+      return;
+    }
+    const p = me.outlookPending;
+    if (p && (p.user_code || p.verification_uri)) {
+      setStatus(
+        olStatus,
+        "Enter this code on the Microsoft page, then sign in with your school email. Allow mail access."
+      );
+      showOutlookCode(p.user_code, p.verification_uri || "https://login.microsoft.com/device");
+      return;
+    }
+    setStatus(olStatus, "School Outlook. Same Microsoft sign-in, mail only.");
+    showOutlookCode("", "");
   }
 
   function refreshKeyStatus() {
@@ -336,7 +431,7 @@
     } catch {
       loading.hidden = true;
       stage.hidden = false;
-      renderHome({ courses: [], assignments: [], files: [] });
+      renderHome({ courses: [], assignments: [], files: [], messages: [] });
       openSheet();
     }
   }
@@ -386,6 +481,7 @@
       form.canvasToken.value = "";
       setStatus(statusEl, me.displayName ? `Saved · ${me.displayName}` : "Saved.");
       paintOnedrive();
+      paintOutlook();
       await loadDashboard();
       closeSheet();
     } catch (err) {
@@ -409,12 +505,12 @@
           },
         });
         paintOnedrive();
-        clearInterval(pollTimer);
-        pollTimer = setInterval(async () => {
+        clearInterval(odPollTimer);
+        odPollTimer = setInterval(async () => {
           try {
-            const st = await api("/v1/me/onedrive/status");
+            const st = await api("/v1/me/onedrive/status", { timeoutMs: 15000 });
             if (st.connected) {
-              clearInterval(pollTimer);
+              clearInterval(odPollTimer);
               me = Object.assign({}, me, {
                 onedriveConnected: true,
                 onedriveEmail: st.email || "",
@@ -433,6 +529,109 @@
       }
     } catch (err) {
       setStatus(odStatus, err.message || "Could not start OneDrive.");
+    }
+  });
+
+  document.getElementById("outlook-start").addEventListener("click", async () => {
+    try {
+      if (!me) {
+        setStatus(olStatus, "Save school and student ID first.");
+        return;
+      }
+      const started = await api("/v1/me/outlook/start", { method: "POST", body: "{}", timeoutMs: 20000 });
+      if (started.user_code) {
+        me = Object.assign({}, me, {
+          outlookPending: {
+            user_code: started.user_code,
+            verification_uri: started.verification_uri,
+            message: started.message,
+          },
+        });
+        paintOutlook();
+        if (started.verification_uri) window.open(started.verification_uri, "_blank", "noopener");
+        clearInterval(olPollTimer);
+        olPollTimer = setInterval(async () => {
+          try {
+            const st = await api("/v1/me/outlook/status", { timeoutMs: 15000 });
+            if (st.connected) {
+              clearInterval(olPollTimer);
+              me = Object.assign({}, me, {
+                outlookConnected: true,
+                outlookEmail: st.email || "",
+                outlookPending: null,
+              });
+              paintOutlook();
+              await loadDashboard();
+            } else if (st.pending && (st.pending.user_code || st.pending.verification_uri)) {
+              me = Object.assign({}, me, { outlookPending: st.pending });
+              paintOutlook();
+            }
+          } catch {
+            /* keep polling */
+          }
+        }, 4000);
+      } else {
+        setStatus(olStatus, started.message || "Microsoft would not start Outlook sign-in.");
+        showOutlookCode("", "");
+      }
+    } catch (err) {
+      setStatus(olStatus, err.message || "Could not start Outlook.");
+    }
+  });
+
+  appEl.addEventListener("click", async (ev) => {
+    const btn = ev.target.closest("[data-mail-id]");
+    if (!btn) return;
+    const id = btn.getAttribute("data-mail-id");
+    if (!id) return;
+    try {
+      const data = await api(`/v1/me/outlook/message?id=${encodeURIComponent(id)}`, { timeoutMs: 20000 });
+      openMail = data.message || null;
+      renderHome(lastHome);
+    } catch (err) {
+      openMail = { subject: "Could not open", body: err.message || "Read failed." };
+      renderHome(lastHome);
+    }
+  });
+
+  appEl.addEventListener("submit", async (ev) => {
+    const compose = ev.target.closest("#outlook-compose");
+    if (!compose) return;
+    ev.preventDefault();
+    if (mailBusy) return;
+    const to = compose.to.value.trim();
+    const subject = compose.subject.value.trim();
+    const body = compose.body.value.trim();
+    const status = document.getElementById("outlook-send-status");
+    if (!to || !subject || !body) {
+      if (status) status.textContent = "To, subject, and body are required.";
+      return;
+    }
+    if (!window.confirm(`Send this email to ${to}?`)) return;
+    mailBusy = true;
+    renderHome(lastHome);
+    try {
+      const sent = await api("/v1/me/outlook/send", {
+        method: "POST",
+        body: JSON.stringify({ to, subject, body }),
+        timeoutMs: 25000,
+      });
+      mailBusy = false;
+      openMail = null;
+      renderHome(lastHome);
+      const again = document.getElementById("outlook-send-status");
+      if (again) again.textContent = sent.sent ? `Sent to ${sent.to}` : "Sent.";
+    } catch (err) {
+      mailBusy = false;
+      renderHome(lastHome);
+      const form = document.getElementById("outlook-compose");
+      if (form) {
+        form.to.value = to;
+        form.subject.value = subject;
+        form.body.value = body;
+      }
+      const again = document.getElementById("outlook-send-status");
+      if (again) again.textContent = err.message || "Send failed.";
     }
   });
 

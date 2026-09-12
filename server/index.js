@@ -36,10 +36,22 @@ import {
   WRITE_FOLDER,
 } from "./onedrive.js";
 import {
+  acceptPastedToken as acceptOutlookToken,
+  ensureFreshToken as ensureOutlookToken,
+  isConnected as outlookConnected,
+  listMessages,
+  pollDeviceCode as pollOutlookCode,
+  publicPending as outlookPending,
+  readMessage,
+  sendMessage,
+  startDeviceCode as startOutlookCode,
+} from "./outlook.js";
+import {
   clearSessionCookie,
   createSession,
   destroySession,
   mergeGraph,
+  mergeOutlook,
   publicProfile,
   safeFileId,
   saveStudent,
@@ -102,10 +114,24 @@ async function persistGraph(student, patch) {
   return saveStudent(student);
 }
 
+async function persistOutlook(student, patch) {
+  mergeOutlook(student, patch);
+  return saveStudent(student);
+}
+
 async function graphToken(student) {
   const fresh = await ensureFreshToken(student.graph);
   if (fresh !== student.graph) {
     mergeGraph(student, fresh);
+    await saveStudent(student);
+  }
+  return fresh.accessToken;
+}
+
+async function outlookToken(student) {
+  const fresh = await ensureOutlookToken(student.outlook);
+  if (fresh !== student.outlook) {
+    mergeOutlook(student, fresh);
     await saveStudent(student);
   }
   return fresh.accessToken;
@@ -147,6 +173,23 @@ async function liveSnapshot(student) {
     }
   } else {
     bits.push("OneDrive: not connected.");
+  }
+
+  if (student.outlook?.accessToken) {
+    try {
+      const token = await outlookToken(student);
+      const inbox = await listMessages(token, { limit: 8 });
+      const lines = (inbox || []).map((m) => {
+        const when = String(m.received || "").slice(0, 16);
+        const flag = m.unread ? "unread" : "read";
+        return `${when} ${flag} ${m.fromAddress || m.from}: ${m.subject}`;
+      });
+      bits.push(`Outlook inbox: ${lines.join(" | ") || "empty"}`);
+    } catch {
+      bits.push("Outlook: could not read inbox this turn.");
+    }
+  } else {
+    bits.push("Outlook: not connected.");
   }
 
   return bits.join("\n").slice(0, 4000);
@@ -383,6 +426,152 @@ app.get("/v1/me/onedrive/file", async (req, res) => {
     return res.send(file.buffer);
   } catch (err) {
     return fail(res, err, err.status || 502);
+  }
+});
+
+app.post("/v1/me/outlook/start", async (req, res) => {
+  try {
+    const student = await requireStudent(req, res);
+    if (!student) return;
+    const started = await startOutlookCode();
+    if (!started.ok) {
+      return res.json({
+        user_code: "",
+        verification_uri: "",
+        message: started.error || "Microsoft would not start Outlook sign-in.",
+        authorizeUrl: started.authorizeUrl || "",
+      });
+    }
+    await persistOutlook(student, {
+      pending: {
+        device_code: started.device_code,
+        clientId: started.clientId,
+        scope: started.scope,
+        interval: started.interval,
+        expiresAt: started.expiresAt,
+        user_code: started.user_code,
+        verification_uri: started.verification_uri,
+        message: started.message,
+      },
+    });
+    return res.json({
+      user_code: started.user_code,
+      verification_uri: started.verification_uri,
+      verification_uri_complete: started.verification_uri_complete || "",
+      message: started.message,
+      interval: started.interval,
+    });
+  } catch (err) {
+    return fail(res, err);
+  }
+});
+
+app.get("/v1/me/outlook/status", async (req, res) => {
+  try {
+    const student = await requireStudent(req, res);
+    if (!student) return;
+    const pending = student.outlook?.pending;
+    if (pending?.device_code) {
+      const poll = await pollOutlookCode(pending.device_code, pending.clientId);
+      if (poll.ok) {
+        await persistOutlook(student, {
+          accessToken: poll.accessToken,
+          refreshToken: poll.refreshToken,
+          exp: poll.exp,
+          email: poll.email,
+          clientId: poll.clientId || pending.clientId || "",
+          scope: poll.scope || pending.scope || "",
+          pending: null,
+        });
+      } else if (!poll.pending) {
+        await persistOutlook(student, { pending: null });
+      }
+    }
+    return res.json({
+      connected: outlookConnected(student.outlook),
+      pending: outlookPending(student.outlook),
+      email: student.outlook?.email || "",
+    });
+  } catch (err) {
+    return fail(res, err);
+  }
+});
+
+app.post("/v1/me/outlook/token", async (req, res) => {
+  try {
+    const student = await requireStudent(req, res);
+    if (!student) return;
+    const accepted = acceptOutlookToken(req.body?.accessToken);
+    if (!accepted.ok) {
+      return res.status(400).json({ error: accepted.error || "That token is not an Outlook token." });
+    }
+    await persistOutlook(student, {
+      accessToken: accepted.accessToken,
+      refreshToken: accepted.refreshToken,
+      exp: accepted.exp,
+      email: accepted.email,
+      clientId: accepted.clientId,
+      scope: accepted.scope,
+      pending: null,
+    });
+    return res.json({
+      connected: true,
+      email: accepted.email,
+      pending: null,
+    });
+  } catch (err) {
+    return fail(res, err, 400);
+  }
+});
+
+app.get("/v1/me/outlook/messages", async (req, res) => {
+  try {
+    const student = await requireStudent(req, res);
+    if (!student) return;
+    if (!student.outlook?.accessToken) {
+      return res.status(400).json({ error: "Connect Outlook in settings first." });
+    }
+    const token = await outlookToken(student);
+    const search = String(req.query.q || "").trim();
+    const limit = Number(req.query.limit) || 20;
+    const messages = await listMessages(token, { search, limit });
+    return res.json({ messages });
+  } catch (err) {
+    return fail(res, err, err.status || 502);
+  }
+});
+
+app.get("/v1/me/outlook/message", async (req, res) => {
+  try {
+    const student = await requireStudent(req, res);
+    if (!student) return;
+    if (!student.outlook?.accessToken) {
+      return res.status(400).json({ error: "Connect Outlook in settings first." });
+    }
+    const token = await outlookToken(student);
+    const message = await readMessage(token, req.query.id);
+    return res.json({ message });
+  } catch (err) {
+    return fail(res, err, err.status || 502);
+  }
+});
+
+app.post("/v1/me/outlook/send", async (req, res) => {
+  try {
+    const student = await requireStudent(req, res);
+    if (!student) return;
+    if (!student.outlook?.accessToken) {
+      return res.status(400).json({ error: "Connect Outlook in settings first." });
+    }
+    const token = await outlookToken(student);
+    const sent = await sendMessage(token, {
+      to: req.body?.to,
+      subject: req.body?.subject,
+      body: req.body?.body,
+    });
+    return res.json(sent);
+  } catch (err) {
+    return fail(res, err, err.status || 400);
   }
 });
 

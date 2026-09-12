@@ -43,6 +43,18 @@ function emptyGraph() {
   };
 }
 
+function emptyOutlook() {
+  return {
+    accessToken: "",
+    refreshToken: "",
+    exp: 0,
+    email: "",
+    pending: null,
+    clientId: "",
+    scope: "",
+  };
+}
+
 function normalizeSchool(raw) {
   const school = String(raw ?? "").trim().replace(/\s+/g, " ");
   if (!school) throw new Error("School is required.");
@@ -98,6 +110,7 @@ function studentPath(fileId) {
 function hydrate(raw) {
   const src = raw && typeof raw === "object" ? raw : {};
   const graph = src.graph && typeof src.graph === "object" ? src.graph : {};
+  const outlook = src.outlook && typeof src.outlook === "object" ? src.outlook : {};
   return {
     school: String(src.school || ""),
     studentId: String(src.studentId || ""),
@@ -110,6 +123,15 @@ function hydrate(raw) {
       exp: Number(graph.exp) || 0,
       email: String(graph.email || ""),
       pending: graph.pending ?? null,
+    },
+    outlook: {
+      accessToken: String(outlook.accessToken || ""),
+      refreshToken: String(outlook.refreshToken || ""),
+      exp: Number(outlook.exp) || 0,
+      email: String(outlook.email || ""),
+      pending: outlook.pending ?? null,
+      clientId: String(outlook.clientId || ""),
+      scope: String(outlook.scope || ""),
     },
     createdAt: String(src.createdAt || ""),
     updatedAt: String(src.updatedAt || ""),
@@ -142,6 +164,9 @@ export function publicProfile(student) {
     onedriveConnected: graphConnected(s.graph),
     onedriveEmail: s.graph.email || "",
     onedrivePending: publicPending(s.graph.pending),
+    outlookConnected: graphConnected(s.outlook),
+    outlookEmail: s.outlook.email || "",
+    outlookPending: publicPending(s.outlook.pending),
   };
 }
 
@@ -207,6 +232,7 @@ export async function upsertStudent({
     canvasToken: "",
     displayName: "",
     graph: emptyGraph(),
+    outlook: emptyOutlook(),
     createdAt: now,
     updatedAt: now,
   };
@@ -220,6 +246,7 @@ export async function upsertStudent({
   if (displayName !== undefined) student.displayName = String(displayName).trim();
   student.updatedAt = now;
   if (!student.graph) student.graph = emptyGraph();
+  if (!student.outlook) student.outlook = emptyOutlook();
   return saveStudent(student);
 }
 
@@ -346,16 +373,31 @@ export function clearSessionCookie(req, res) {
   appendSetCookie(res, cookieHeader(req, "", true));
 }
 
+function mergeTokenBag(bag, patch, extraKeys = []) {
+  const src = patch && typeof patch === "object" ? patch : {};
+  if (src.accessToken !== undefined) bag.accessToken = String(src.accessToken);
+  if (src.refreshToken !== undefined) bag.refreshToken = String(src.refreshToken);
+  if (src.exp !== undefined) bag.exp = Number(src.exp) || 0;
+  if (src.email !== undefined) bag.email = String(src.email);
+  if (src.pending !== undefined) bag.pending = src.pending;
+  for (const key of extraKeys) {
+    if (src[key] !== undefined) bag[key] = String(src[key] || "");
+  }
+  return bag;
+}
+
 export function mergeGraph(student, patch) {
   if (!student.graph || typeof student.graph !== "object") {
     student.graph = emptyGraph();
   }
-  const g = student.graph;
-  const src = patch && typeof patch === "object" ? patch : {};
-  if (src.accessToken !== undefined) g.accessToken = String(src.accessToken);
-  if (src.refreshToken !== undefined) g.refreshToken = String(src.refreshToken);
-  if (src.exp !== undefined) g.exp = Number(src.exp) || 0;
-  if (src.email !== undefined) g.email = String(src.email);
-  if (src.pending !== undefined) g.pending = src.pending;
+  mergeTokenBag(student.graph, patch);
+  return student;
+}
+
+export function mergeOutlook(student, patch) {
+  if (!student.outlook || typeof student.outlook !== "object") {
+    student.outlook = emptyOutlook();
+  }
+  mergeTokenBag(student.outlook, patch, ["clientId", "scope"]);
   return student;
 }
