@@ -128,8 +128,30 @@ function periodFromCode(code) {
 
 function numOrNull(v) {
   if (v === null || v === undefined || v === "") return null;
+  if (typeof v === "string") {
+    const cleaned = v.replace(/%/g, "").replace(/,/g, "").trim();
+    if (!cleaned) return null;
+    const n = Number(cleaned);
+    return Number.isFinite(n) ? n : null;
+  }
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
+}
+
+function pickNum(...vals) {
+  for (const v of vals) {
+    const n = numOrNull(v);
+    if (n != null) return n;
+  }
+  return null;
+}
+
+function pickLetter(...vals) {
+  for (const v of vals) {
+    const s = String(v || "").trim();
+    if (s && s !== "—" && s !== "-") return s;
+  }
+  return "";
 }
 
 function studentEnrollment(course) {
@@ -141,29 +163,68 @@ function studentEnrollment(course) {
   );
 }
 
+function scoresFromEnrollment(enr) {
+  if (!enr) {
+    return {
+      currentScore: null,
+      currentGrade: "",
+      finalScore: null,
+      finalGrade: "",
+      htmlUrl: "",
+    };
+  }
+  const g = enr.grades || {};
+  return {
+    currentScore: pickNum(
+      g.current_score,
+      enr.computed_current_score,
+      enr.current_period_computed_current_score,
+      g.unposted_current_score,
+      enr.computed_unposted_current_score,
+      enr.current_period_computed_unposted_current_score,
+      g.final_score,
+      enr.computed_final_score
+    ),
+    currentGrade: pickLetter(
+      g.current_grade,
+      enr.computed_current_grade,
+      enr.computed_current_letter_grade,
+      enr.current_period_computed_current_grade,
+      g.unposted_current_grade,
+      enr.computed_unposted_current_grade,
+      g.final_grade,
+      enr.computed_final_grade
+    ),
+    finalScore: pickNum(g.final_score, enr.computed_final_score),
+    finalGrade: pickLetter(g.final_grade, enr.computed_final_grade),
+    htmlUrl: String(g.html_url || enr.html_url || "").trim(),
+  };
+}
+
 function mapCourse(c) {
-  const enr = studentEnrollment(c);
-  const g = enr?.grades || {};
+  const scored = scoresFromEnrollment(studentEnrollment(c));
   return {
     id: String(c.id),
     name: String(c.name || c.course_code || "Class").trim(),
     courseCode: String(c.course_code || "").trim(),
     period: periodFromCode(c.course_code),
-    currentScore: numOrNull(
-      enr?.current_period_computed_current_score ??
-        g.current_score ??
-        enr?.computed_current_score
-    ),
-    currentGrade: String(
-      enr?.current_period_computed_current_grade ??
-        g.current_grade ??
-        enr?.computed_current_grade ??
-        enr?.computed_current_letter_grade ??
-        ""
-    ).trim(),
-    finalScore: numOrNull(g.final_score ?? enr?.computed_final_score),
-    finalGrade: String(g.final_grade ?? enr?.computed_final_grade ?? "").trim(),
-    htmlUrl: String(g.html_url || c.html_url || "").trim(),
+    currentScore: scored.currentScore,
+    currentGrade: scored.currentGrade,
+    finalScore: scored.finalScore,
+    finalGrade: scored.finalGrade,
+    htmlUrl: scored.htmlUrl || String(c.html_url || "").trim(),
+  };
+}
+
+function mergeScores(course, enr) {
+  const scored = scoresFromEnrollment(enr);
+  return {
+    ...course,
+    currentScore: course.currentScore != null ? course.currentScore : scored.currentScore,
+    currentGrade: course.currentGrade || scored.currentGrade,
+    finalScore: course.finalScore != null ? course.finalScore : scored.finalScore,
+    finalGrade: course.finalGrade || scored.finalGrade,
+    htmlUrl: course.htmlUrl || scored.htmlUrl,
   };
 }
 
@@ -176,28 +237,37 @@ async function attachEnrollmentGrades(host, token, courses) {
       "/users/self/enrollments?type[]=StudentEnrollment&state[]=active&per_page=100"
     );
   } catch {
-    return courses;
+    enrollments = [];
+  }
+  if (!Array.isArray(enrollments) || !enrollments.length) {
+    try {
+      enrollments = await canvasFetch(
+        host,
+        token,
+        "/users/self/enrollments?state[]=active&per_page=100"
+      );
+    } catch {
+      return courses;
+    }
   }
   if (!Array.isArray(enrollments)) return courses;
   const byCourse = new Map();
   for (const e of enrollments) {
     if (!e?.course_id) continue;
-    byCourse.set(String(e.course_id), e);
+    if (e.type && !/student/i.test(String(e.type)) && !/student/i.test(String(e.role || ""))) {
+      continue;
+    }
+    const id = String(e.course_id);
+    const prev = byCourse.get(id);
+    if (!prev) {
+      byCourse.set(id, e);
+      continue;
+    }
+    const next = scoresFromEnrollment(e);
+    const old = scoresFromEnrollment(prev);
+    if (old.currentScore == null && next.currentScore != null) byCourse.set(id, e);
   }
-  return courses.map((c) => {
-    if (c.currentScore != null || c.currentGrade) return c;
-    const e = byCourse.get(String(c.id));
-    if (!e) return c;
-    const g = e.grades || {};
-    return {
-      ...c,
-      currentScore: numOrNull(g.current_score ?? e.computed_current_score),
-      currentGrade: String(g.current_grade ?? e.computed_current_grade ?? "").trim(),
-      finalScore: numOrNull(g.final_score ?? e.computed_final_score),
-      finalGrade: String(g.final_grade ?? e.computed_final_grade ?? "").trim(),
-      htmlUrl: c.htmlUrl || String(g.html_url || "").trim(),
-    };
-  });
+  return courses.map((c) => mergeScores(c, byCourse.get(String(c.id))));
 }
 
 export async function listCourses(host, token) {
@@ -206,7 +276,7 @@ export async function listCourses(host, token) {
     rows = await canvasFetch(
       host,
       token,
-      "/courses?enrollment_state=active&include[]=total_scores&include[]=current_grading_period_scores&per_page=100"
+      "/courses?enrollment_state=active&include[]=enrollments&include[]=total_scores&include[]=current_grading_period_scores&per_page=100"
     );
   } catch {
     rows = await canvasFetch(
@@ -217,7 +287,6 @@ export async function listCourses(host, token) {
   }
   if (!Array.isArray(rows)) return [];
   const mapped = rows.filter((c) => c && c.id && !c.access_restricted_by_date).map(mapCourse);
-  if (mapped.some((c) => c.currentScore != null || c.currentGrade)) return mapped;
   return attachEnrollmentGrades(host, token, mapped);
 }
 
