@@ -17,47 +17,55 @@ struct HomeView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("EPSynapse")
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(EPSTheme.accent)
-                    .tracking(0.8)
-                    .padding(.bottom, 2)
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("EPSynapse")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(EPSTheme.accent)
+                        .tracking(0.8)
+                        .padding(.bottom, 2)
+                        .id("home-top")
 
-                if isWide {
-                    HStack(alignment: .top, spacing: 16) {
+                    if isWide {
+                        HStack(alignment: .top, spacing: 16) {
+                            VStack(spacing: 16) {
+                                TodoPanel()
+                                CompletedPanel()
+                            }
+                            .frame(maxWidth: .infinity, alignment: .top)
+                            VStack(spacing: 16) {
+                                ClassesPanel()
+                                DatesPanel()
+                                FilesPanel()
+                                MailPanel()
+                            }
+                            .frame(maxWidth: .infinity, alignment: .top)
+                        }
+                    } else {
                         VStack(spacing: 16) {
                             TodoPanel()
-                            CompletedPanel()
-                        }
-                        .frame(maxWidth: .infinity, alignment: .top)
-                        VStack(spacing: 16) {
                             ClassesPanel()
                             DatesPanel()
                             FilesPanel()
                             MailPanel()
+                            CompletedPanel()
                         }
-                        .frame(maxWidth: .infinity, alignment: .top)
-                    }
-                } else {
-                    VStack(spacing: 16) {
-                        TodoPanel()
-                        ClassesPanel()
-                        DatesPanel()
-                        FilesPanel()
-                        MailPanel()
-                        CompletedPanel()
                     }
                 }
+                .padding(.horizontal, pagePad)
+                .padding(.top, AdaptiveLayout.isPad ? 96 : 88)
+                .padding(.bottom, 108)
+                .frame(maxWidth: AdaptiveLayout.pageMaxWidth)
+                .frame(maxWidth: .infinity)
             }
-            .padding(.horizontal, pagePad)
-            .padding(.top, AdaptiveLayout.isPad ? 96 : 88)
-            .padding(.bottom, 108)
-            .frame(maxWidth: AdaptiveLayout.pageMaxWidth)
-            .frame(maxWidth: .infinity)
+            .scrollIndicators(.hidden)
+            .onReceive(NotificationCenter.default.publisher(for: .epsScrollHomeToTop)) { _ in
+                withAnimation(.easeOut(duration: 0.35)) {
+                    proxy.scrollTo("home-top", anchor: .top)
+                }
+            }
         }
-        .scrollIndicators(.hidden)
         .refreshable {
             await dashboard.load(from: session)
         }

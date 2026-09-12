@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct ChatOverlay: View {
     @EnvironmentObject private var session: SessionStore
@@ -7,7 +8,7 @@ struct ChatOverlay: View {
     @State private var draft = ""
     @State private var turns: [ChatTurn] = []
     @State private var busy = false
-    @State private var dragOffset: CGFloat = 0
+    @FocusState private var composerFocused: Bool
 
     private var showPanel: Bool { isOpen && !turns.isEmpty }
     private var pillSide: CGFloat { 56 }
@@ -24,8 +25,6 @@ struct ChatOverlay: View {
             }
             composer
         }
-        .offset(y: dragOffset)
-        .gesture(minimizeDrag)
         .onKeyPress(.escape) {
             if isOpen {
                 minimize()
@@ -45,7 +44,7 @@ struct ChatOverlay: View {
                 Button {
                     minimize()
                 } label: {
-                    plusGlyph(minus: true)
+                    minusGlyph
                         .foregroundStyle(EPSTheme.fg)
                         .frame(width: 36, height: 36)
                 }
@@ -59,6 +58,7 @@ struct ChatOverlay: View {
                     .foregroundStyle(EPSTheme.fg)
                     .textInputAutocapitalization(.sentences)
                     .submitLabel(.send)
+                    .focused($composerFocused)
                     .onSubmit { send() }
 
                 Button {
@@ -78,7 +78,8 @@ struct ChatOverlay: View {
                     EPSHaptics.tap()
                     isOpen = true
                 } label: {
-                    plusGlyph(minus: false)
+                    Image(systemName: "ellipsis.bubble.fill")
+                        .font(.system(size: 22, weight: .semibold))
                         .foregroundStyle(EPSTheme.fg)
                         .frame(width: pillSide, height: pillSide)
                 }
@@ -92,6 +93,7 @@ struct ChatOverlay: View {
         .frame(minHeight: pillSide)
         .frame(maxWidth: isOpen ? .infinity : pillSide)
         .epsGlassCapsule(interactive: true)
+        .modifier(InteractiveKeyboardDismiss(isFocused: $composerFocused))
     }
 
     private var messagePanel: some View {
@@ -101,7 +103,8 @@ struct ChatOverlay: View {
                 Button {
                     clearChat()
                 } label: {
-                    plusGlyph(minus: false)
+                    Image(systemName: "plus")
+                        .font(.system(size: 12, weight: .bold))
                         .rotationEffect(.degrees(45))
                         .foregroundStyle(EPSTheme.fg)
                         .frame(width: 28, height: 28)
@@ -122,6 +125,7 @@ struct ChatOverlay: View {
                     }
                     .padding(.bottom, 4)
                 }
+                .scrollDismissesKeyboard(.interactively)
                 .onChange(of: turns.last?.content) { _, _ in
                     if let last = turns.last {
                         withAnimation(.easeOut(duration: 0.2)) {
@@ -166,36 +170,15 @@ struct ChatOverlay: View {
         .padding(isUser ? .leading : .trailing, 28)
     }
 
-    private func plusGlyph(minus: Bool) -> some View {
-        ZStack {
-            Capsule()
-                .frame(width: 13, height: 3)
-            if !minus {
-                Capsule()
-                    .frame(width: 3, height: 13)
-            }
-        }
-    }
-
-    private var minimizeDrag: some Gesture {
-        DragGesture(minimumDistance: 16)
-            .onChanged { value in
-                if value.translation.height > 0 {
-                    dragOffset = value.translation.height * 0.35
-                }
-            }
-            .onEnded { value in
-                if value.translation.height > 48 {
-                    minimize()
-                }
-                dragOffset = 0
-            }
+    private var minusGlyph: some View {
+        Capsule()
+            .frame(width: 13, height: 3)
     }
 
     private func minimize() {
+        composerFocused = false
         draft = ""
         isOpen = false
-        dragOffset = 0
     }
 
     private func clearChat() {
@@ -268,5 +251,31 @@ struct ChatOverlay: View {
             }
         }
         busy = false
+    }
+}
+
+/// Swipe down on the composer resigns focus. The keyboard then owns the hide
+/// motion, including interactive dismiss from the transcript scroll.
+private struct InteractiveKeyboardDismiss: ViewModifier {
+    var isFocused: FocusState<Bool>.Binding
+
+    func body(content: Content) -> some View {
+        content
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 24, coordinateSpace: .local)
+                    .onEnded { value in
+                        let dy = value.translation.height
+                        let dx = value.translation.width
+                        guard isFocused.wrappedValue,
+                              dy > 36,
+                              dy > abs(dx) * 1.15
+                        else { return }
+                        isFocused.wrappedValue = false
+                    }
+            )
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidHideNotification)) { _ in
+                guard isFocused.wrappedValue else { return }
+                isFocused.wrappedValue = false
+            }
     }
 }

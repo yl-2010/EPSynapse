@@ -14,103 +14,22 @@ struct SettingsSheet: View {
     @State private var draftKey = ""
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                header
-                statusLine
-
-                fieldLabel("School")
-                glassField { TextField("Eastside Prep", text: $school) }
-
-                fieldLabel("Student ID")
-                glassField { TextField("Required", text: $studentId) }
-
-                fieldLabel("Canvas URL")
-                glassField { TextField("https://eastsideprep.instructure.com", text: $canvasHost) }
-
-                fieldLabel("Canvas access token")
-                glassField { SecureField("Token", text: $canvasToken) }
-                Text("Account → Settings → New Access Token")
-                    .font(.footnote)
-                    .foregroundStyle(EPSTheme.muted)
-
-                goldButton("Save") {
-                    Task {
-                        await session.save(
-                            school: school,
-                            studentId: studentId,
-                            canvasHost: canvasHost,
-                            canvasToken: canvasToken
-                        )
-                        if session.settingsStatus.hasPrefix("Saved") {
-                            canvasToken = ""
-                            await dashboard.load(from: session)
-                            isPresented = false
-                        }
-                    }
+        VStack(alignment: .leading, spacing: 0) {
+            header
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    statusLine
+                    accountSection
+                    microsoftSection
+                    agentSection
                 }
-
-                actionRow {
-                    glassAction("Connect OneDrive") {
-                        Task { await session.startOnedrive() }
-                    }
-                }
-                Text(session.onedriveStatus)
-                    .font(.footnote)
-                    .foregroundStyle(EPSTheme.muted)
-                deviceCode(session.odCode, uri: session.odURI)
-
-                actionRow {
-                    glassAction("Connect Outlook") {
-                        Task {
-                            await session.startOutlook()
-                            openDeviceURI(session.olURI)
-                        }
-                    }
-                }
-                Text(session.outlookStatus)
-                    .font(.footnote)
-                    .foregroundStyle(EPSTheme.muted)
-                deviceCode(session.olCode, uri: session.olURI)
-
-                fieldLabel("Model")
-                glassField {
-                    Picker("Model", selection: $session.provider) {
-                        ForEach(session.providers) { provider in
-                            Text(provider.recommended ? "\(provider.label) · recommended" : provider.label)
-                                .tag(provider.id)
-                        }
-                    }
-                    .labelsHidden()
-                    .tint(EPSTheme.fg)
-                }
-
-                fieldLabel("Model key (stays on this device)")
-                glassField {
-                    SecureField("Groq / Gemini / OpenRouter", text: $draftKey)
-                }
-
-                HStack(spacing: 8) {
-                    goldButton("Save key") {
-                        session.saveKey(draftKey)
-                        if !draftKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            draftKey = ""
-                        }
-                    }
-                    glassAction("Clear key") {
-                        session.clearKey()
-                        draftKey = ""
-                    }
-                }
-                Text(session.keyStatus)
-                    .font(.footnote)
-                    .foregroundStyle(EPSTheme.muted)
+                .padding(20)
+                .frame(maxWidth: AdaptiveLayout.formMaxWidth)
+                .frame(maxWidth: .infinity)
             }
-            .padding(20)
-            .frame(maxWidth: AdaptiveLayout.formMaxWidth)
-            .frame(maxWidth: .infinity)
+            .scrollIndicators(.hidden)
+            .scrollDismissesKeyboard(.interactively)
         }
-        .scrollIndicators(.hidden)
         .presentationDetents([.large])
         .presentationBackground(.ultraThinMaterial)
         .onAppear { hydrate() }
@@ -152,7 +71,9 @@ struct SettingsSheet: View {
             .epsSizedGlassCircle(side: 28)
             .accessibilityLabel("Close settings")
         }
-        .padding(.bottom, 8)
+        .padding(.horizontal, 20)
+        .padding(.top, 18)
+        .padding(.bottom, 12)
         .overlay(alignment: .bottom) {
             Rectangle()
                 .fill(EPSTheme.accent.opacity(0.38))
@@ -168,6 +89,124 @@ struct SettingsSheet: View {
         )
         .font(.footnote)
         .foregroundStyle(EPSTheme.muted)
+    }
+
+    private var accountSection: some View {
+        settingsGroup("Account") {
+            fieldLabel("School")
+            glassField { TextField("Eastside Prep", text: $school) }
+
+            fieldLabel("Student ID")
+            glassField { TextField("Required", text: $studentId) }
+
+            fieldLabel("Canvas URL")
+            glassField { TextField("https://eastsideprep.instructure.com", text: $canvasHost) }
+
+            fieldLabel("Canvas access token")
+            glassField { SecureField("Token", text: $canvasToken) }
+            Text("Account → Settings → New Access Token")
+                .font(.footnote)
+                .foregroundStyle(EPSTheme.muted)
+
+            goldButton("Save") {
+                Task {
+                    await session.save(
+                        school: school,
+                        studentId: studentId,
+                        canvasHost: canvasHost,
+                        canvasToken: canvasToken
+                    )
+                    if session.settingsStatus.hasPrefix("Saved") {
+                        canvasToken = ""
+                        await dashboard.load(from: session)
+                        isPresented = false
+                    }
+                }
+            }
+        }
+    }
+
+    private var microsoftSection: some View {
+        settingsGroup("Microsoft") {
+            fieldLabel("OneDrive")
+            actionRow {
+                glassAction(session.profile?.onedriveConnected == true ? "Reconnect OneDrive" : "Connect OneDrive") {
+                    Task { await session.startOnedrive() }
+                }
+            }
+            Text(session.onedriveStatus)
+                .font(.footnote)
+                .foregroundStyle(EPSTheme.muted)
+            deviceCode(session.odCode, uri: session.odURI)
+
+            fieldLabel("Outlook")
+                .padding(.top, 6)
+            actionRow {
+                glassAction(session.profile?.outlookConnected == true ? "Reconnect Outlook" : "Connect Outlook") {
+                    Task {
+                        await session.startOutlook()
+                        openDeviceURI(session.olURI)
+                    }
+                }
+            }
+            Text(session.outlookStatus)
+                .font(.footnote)
+                .foregroundStyle(EPSTheme.muted)
+            deviceCode(session.olCode, uri: session.olURI)
+        }
+    }
+
+    private var agentSection: some View {
+        settingsGroup("Agent") {
+            fieldLabel("Model")
+            glassField {
+                Picker("Model", selection: $session.provider) {
+                    ForEach(session.providers) { provider in
+                        Text(provider.recommended ? "\(provider.label) · recommended" : provider.label)
+                            .tag(provider.id)
+                    }
+                }
+                .labelsHidden()
+                .tint(EPSTheme.fg)
+            }
+
+            fieldLabel("Model key (stays on this device)")
+            glassField {
+                SecureField("Groq / Gemini / OpenRouter", text: $draftKey)
+            }
+
+            HStack(spacing: 8) {
+                goldButton("Save key") {
+                    session.saveKey(draftKey)
+                    if !draftKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        draftKey = ""
+                    }
+                }
+                glassAction("Clear key") {
+                    session.clearKey()
+                    draftKey = ""
+                }
+            }
+            Text(session.keyStatus)
+                .font(.footnote)
+                .foregroundStyle(EPSTheme.muted)
+        }
+    }
+
+    private func settingsGroup<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(EPSTheme.fg)
+                .padding(.leading, 10)
+                .overlay(alignment: .leading) {
+                    Capsule()
+                        .fill(EPSTheme.accent)
+                        .frame(width: 3)
+                }
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func fieldLabel(_ title: String) -> some View {

@@ -2,9 +2,10 @@ import SwiftUI
 
 extension Notification.Name {
     static let epsOpenSettings = Notification.Name("eps.openSettings")
+    static let epsScrollHomeToTop = Notification.Name("eps.scrollHomeToTop")
 }
 
-/// Floating settings mark, theme orb, and chat pill.
+/// Logo, theme orb, settings, and chat pill.
 struct CornerChrome: View {
     @EnvironmentObject private var theme: ThemeStore
 
@@ -12,30 +13,55 @@ struct CornerChrome: View {
     private var cornerPad: CGFloat { AdaptiveLayout.isPad ? 20 : 16 }
 
     var body: some View {
-        VStack {
-            HStack(alignment: .top) {
-                settingsButton
+        ZStack {
+            VStack {
+                HStack(alignment: .top) {
+                    logoButton
+                    Spacer(minLength: 0)
+                        .allowsHitTesting(false)
+                    themeOrb
+                }
                 Spacer(minLength: 0)
                     .allowsHitTesting(false)
-                themeOrb
             }
-            Spacer(minLength: 0)
-                .allowsHitTesting(false)
-            HStack(alignment: .bottom) {
+            .padding(cornerPad)
+            .safeAreaPadding(.top)
+            .safeAreaPadding(.horizontal)
+            .ignoresSafeArea(.keyboard, edges: .bottom)
+
+            VStack {
                 Spacer(minLength: 0)
                     .allowsHitTesting(false)
-                ChatOverlay()
+                HStack(alignment: .bottom) {
+                    settingsButton
+                    Spacer(minLength: 0)
+                        .allowsHitTesting(false)
+                }
             }
+            .padding(cornerPad)
+            .safeAreaPadding(.bottom)
+            .safeAreaPadding(.horizontal)
+            .ignoresSafeArea(.keyboard, edges: .bottom)
+
+            VStack {
+                Spacer(minLength: 0)
+                    .allowsHitTesting(false)
+                HStack(alignment: .bottom) {
+                    Spacer(minLength: 0)
+                        .allowsHitTesting(false)
+                    ChatOverlay()
+                }
+            }
+            .padding(cornerPad)
+            .safeAreaPadding()
         }
-        .padding(cornerPad)
-        .safeAreaPadding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private var settingsButton: some View {
+    private var logoButton: some View {
         Button {
             EPSHaptics.tap()
-            NotificationCenter.default.post(name: .epsOpenSettings, object: nil)
+            NotificationCenter.default.post(name: .epsScrollHomeToTop, object: nil)
         } label: {
             EPSMark()
                 .fill(EPSTheme.accent)
@@ -45,6 +71,22 @@ struct CornerChrome: View {
         }
         .buttonStyle(.plain)
         .epsGlassRounded(cornerRadius: orbSide * 0.4, interactive: true)
+        .accessibilityLabel("EPSynapse")
+    }
+
+    private var settingsButton: some View {
+        Button {
+            EPSHaptics.tap()
+            NotificationCenter.default.post(name: .epsOpenSettings, object: nil)
+        } label: {
+            Image(systemName: "gearshape.fill")
+                .font(.system(size: orbSide * 0.38, weight: .semibold))
+                .foregroundStyle(EPSTheme.fg)
+                .frame(width: orbSide, height: orbSide)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .epsSizedGlassCircle(side: orbSide)
         .accessibilityLabel("Open settings")
     }
 
