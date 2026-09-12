@@ -37,6 +37,8 @@
     "9. Close settings. Type a question here. Homework, a class, Canvas, the day. The chat uses the key saved on your Google account.",
     "",
     "If you skip Save key, chat will send you back to these steps.",
+    "",
+    "If chat later goes quiet, Groq usually rejected the key or hit the free limit. Open [epsynapse.com/groq](/groq).",
   ].join("\n");
   const CANVAS_GUIDE = [
     "Chat is ready. Classes and homework still need a Canvas token. That token does not go in this box.",
@@ -52,7 +54,22 @@
     "Full click-by-click is on [epsynapse.com/canvas](/canvas).",
   ].join("\n");
   const READY_GUIDE =
-    "Your Groq key and Canvas token are saved on this account. When OneDrive, Outlook, and Teams say Connected in settings, the agent can use them too. Ask about a class, homework, or the day.";
+    "Your Groq key and Canvas token are saved on this account. When OneDrive, Outlook, and Teams say Connected in settings, the agent can use them too. Ask about a class, homework, or the day. If chat stops, Groq usually rejected the key or hit the free limit (about 1000 chats a day). Create a new gsk_ at [console.groq.com/keys](https://console.groq.com/keys), paste it in Settings → Chat key, or wait. A second key on the same Groq login does not reset a daily cap. Steps on [epsynapse.com/groq](/groq).";
+  const LIMIT_GUIDE = [
+    "Chat stopped because Groq refused the saved key. That is Groq, not this page.",
+    "",
+    "Two usual causes.",
+    "1. The key was rejected. Groq shows a key only once. If it was copied short, deleted, or replaced, create a new one.",
+    "2. The Groq account hit its free limit. About 30 chats a minute and 1000 a day for this model, or a token burst. A new key on the same Groq login does not reset that.",
+    "",
+    "How to get going again.",
+    "1. Open [console.groq.com/keys](https://console.groq.com/keys).",
+    "2. Tap **Create API Key**. Copy the `gsk_` value now.",
+    "3. Gear → **Chat key** → paste → **Save key**.",
+    "4. If the same Groq account was limited, wait, or make the key on a different Groq login, or switch Model to Gemini.",
+    "5. Longer walkthrough: [epsynapse.com/groq](/groq).",
+  ].join("\n");
+  const LS_KEY_ERR = "epsynapse.chat.keyError";
 
   let messages = [];
   let sessionId = "";
@@ -219,6 +236,9 @@
       if (json && json.type === "mutation") return { mutation: json };
       if (json && json.type === "navigate") return { navigate: json };
       if (json && json.type === "status") return { status: String(json.text || "Working…") };
+      if (json && json.type === "error") {
+        return { error: String(json.text || ""), code: String(json.code || "") };
+      }
       const choice = json && json.choices && json.choices[0];
       if (!choice) return null;
       const src = choice.delta || choice.message || {};
@@ -350,6 +370,38 @@
     return Boolean(ready && !ready.hidden);
   }
 
+  function isKeyFailure(text, status, code) {
+    if (code === "key_rejected" || code === "key_limited") return true;
+    if (status === 401 || status === 403 || status === 429) return true;
+    return /free limit|rate limit|key was rejected|every saved key|invalid api key|incorrect api key/i.test(
+      String(text || "")
+    );
+  }
+
+  function rememberKeyError(text) {
+    try {
+      localStorage.setItem(LS_KEY_ERR, String(text || "1").slice(0, 2000));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function clearKeyError() {
+    try {
+      localStorage.removeItem(LS_KEY_ERR);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function keyFailureGuide(serverText) {
+    const extra = String(serverText || "").trim();
+    if (extra && /console\.groq|Create API Key|epsynapse\.com\/groq/i.test(extra)) {
+      return extra;
+    }
+    return LIMIT_GUIDE;
+  }
+
   function syncPlaceholder() {
     if (!input) return;
     input.placeholder = hasChatKey()
@@ -370,11 +422,11 @@
     el.className = "yan-chat-bubble yan-chat-bubble--assistant";
     el.dataset.liquidGlass = "rounded";
     el.dataset.filterId = "lg-edu-chat-guide";
-    writeBubble(
-      el,
-      "assistant",
-      !hasChatKey() ? SETUP_GUIDE : hasCanvas() ? READY_GUIDE : CANVAS_GUIDE
-    );
+    let body = READY_GUIDE;
+    if (!hasChatKey()) body = SETUP_GUIDE;
+    else if (localStorage.getItem(LS_KEY_ERR)) body = LIMIT_GUIDE;
+    else if (!hasCanvas()) body = CANVAS_GUIDE;
+    writeBubble(el, "assistant", body);
     turn.appendChild(el);
     messagesEl.appendChild(turn);
     scrollChatToEnd(turn);
@@ -876,10 +928,15 @@
         } catch {
           /* empty */
         }
-        writeBubble(slot.body, "assistant", errBody.error || "Chat failed.");
+        const errText = errBody.error || "Chat failed.";
+        const shown = isKeyFailure(errText, res.status, errBody.code)
+          ? keyFailureGuide(errText)
+          : errText;
+        writeBubble(slot.body, "assistant", shown);
         if (slot.think) slot.think.remove();
         messages.pop();
-        if (res.status === 401) {
+        if (isKeyFailure(errText, res.status, errBody.code)) {
+          rememberKeyError(shown);
           window.__epsynapseOpenChatKey?.();
         }
         return;
@@ -891,8 +948,22 @@
       let answer = "";
       let thought = "";
       let mutated = false;
+      let sawError = false;
       const applyChatDelta = (delta) => {
         if (delta.status && slot.think) writeThinking(slot.think, delta.status);
+        if (delta.error) {
+          const shown = isKeyFailure(delta.error, 0, delta.code)
+            ? keyFailureGuide(delta.error)
+            : delta.error;
+          sawError = true;
+          answer = shown;
+          writeBubble(slot.body, "assistant", shown);
+          if (isKeyFailure(delta.error, 0, delta.code)) {
+            rememberKeyError(shown);
+            window.__epsynapseOpenChatKey?.();
+          }
+          return;
+        }
         if (delta.mutation) {
           mutated = true;
           window.dispatchEvent(new CustomEvent("epsynapse-agent-mutation", { detail: delta.mutation }));
@@ -905,6 +976,7 @@
           writeThinking(slot.think, thought);
         }
         if (delta.content) {
+          if (sawError) return;
           answer += delta.content;
           writeBubble(slot.body, "assistant", answer);
         }
@@ -938,6 +1010,12 @@
       if (!answer) {
         answer = mutated ? "Done" : "The model returned an empty reply.";
         writeBubble(slot.body, "assistant", answer);
+      }
+      if (isKeyFailure(answer)) {
+        rememberKeyError(answer);
+        window.__epsynapseOpenChatKey?.();
+      } else {
+        clearKeyError();
       }
       messages.push({ role: "assistant", content: answer || "" });
       saveChat();
@@ -1016,6 +1094,10 @@
   if (messages.length && !sessionId) sessionId = newChatId();
   paintSavedChat();
   syncPlaceholder();
+  window.__epsynapseClearChatKeyError = () => {
+    clearKeyError();
+    window.__epsynapseRefreshChatGuide?.();
+  };
   window.__epsynapseRefreshChatGuide = () => {
     syncPlaceholder();
     if (!messages.length && (state() === "panel" || messagesEl?.querySelector(".yan-chat-turn--guide"))) {

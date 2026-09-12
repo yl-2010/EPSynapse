@@ -166,7 +166,11 @@ async function completeJson(req, student, system, user) {
   if (!upstream.ok) {
     const extraErr =
       typeof explainUpstreamError === "function"
-        ? explainUpstreamError(upstream.status, text, { keyCount: keys.length })
+        ? explainUpstreamError(upstream.status, text, {
+            keyCount: keys.length,
+            source,
+            provider: provider.id,
+          })
         : `Model host returned ${upstream.status}`;
     const fail = new Error(extraErr);
     fail.status = upstream.status === 401 ? 401 : 502;

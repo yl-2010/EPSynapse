@@ -12,6 +12,7 @@ import {
   consumeSse,
   explainUpstreamError,
   extractChatDelta,
+  upstreamErrorCode,
   extractToolCalls,
   finishedToolCalls,
   formatUiContextBlock,
@@ -93,7 +94,6 @@ import {
   readStudioFile,
   sendStudioChat,
   studioFlags,
-  studioOnenoteToken,
   studioOutlookToken,
   writeStudioFile,
 } from "./studio-ms.js";
@@ -225,14 +225,13 @@ function publicMe(student) {
   return {
     ...base,
     onedriveConnected: Boolean(base.onedriveConnected || flags.onedrive),
-    onenoteConnected: Boolean(base.onedriveConnected || flags.onenote || flags.onedrive),
+    onenoteConnected: Boolean(base.onedriveConnected || flags.onedrive),
     onenoteEmail: base.onedriveEmail || "",
     outlookConnected: Boolean(base.outlookConnected || flags.outlook),
     teamsConnected: Boolean(base.teamsConnected || flags.teams),
     studioOnedrive: flags.onedrive,
     studioOutlook: flags.outlook,
     studioTeams: flags.teams,
-    studioOnenote: flags.onenote,
     adminConsentUrl: adminConsentUrl(),
   };
 }
@@ -483,19 +482,7 @@ async function liveSnapshot(student) {
   } else {
     bits.push("OneDrive: not connected.");
   }
-  if (flags.onenote) {
-    try {
-      const token = await studioOnenoteToken();
-      if (token) {
-        const notebooks = await listNotebooks(token);
-        bits.push(`OneNote notebooks: ${snapshotNotebooks(notebooks) || "empty"}`);
-      } else {
-        bits.push("OneNote: school session on this Mac needs a refresh.");
-      }
-    } catch (err) {
-      bits.push(`OneNote: ${onenoteError(err)}`);
-    }
-  } else if (student.graph?.accessToken) {
+  if (student.graph?.accessToken) {
     try {
       const token = await graphToken(student);
       const notebooks = await listNotebooks(token);
@@ -1054,14 +1041,12 @@ app.get("/v1/me/onedrive/file", async (req, res) => {
 });
 
 async function onenoteAccess(student) {
-  if (studioFlags(student).onenote) {
-    const tok = await studioOnenoteToken();
-    if (tok) return tok;
+  if (!student?.graph?.accessToken) {
+    const err = new Error("Connect OneDrive in settings first. OneNote uses that sign-in.");
+    err.status = 400;
+    throw err;
   }
-  if (student?.graph?.accessToken) return graphToken(student);
-  const err = new Error("Connect OneDrive in settings first. OneNote uses that sign-in.");
-  err.status = 400;
-  throw err;
+  return graphToken(student);
 }
 
 app.get("/v1/me/onenote/status", async (req, res) => {
@@ -1069,26 +1054,23 @@ app.get("/v1/me/onenote/status", async (req, res) => {
     const student = await requireStudent(req, res);
     if (!student) return;
     const flags = studioFlags(student);
-    const connected = isConnected(student.graph) || flags.onenote || flags.onedrive;
+    const connected = isConnected(student.graph) || flags.onedrive;
     let notebooks = [];
     let error = "";
-    try {
-      if (flags.onenote) {
-        const token = await studioOnenoteToken();
-        if (token) notebooks = await listNotebooks(token);
-      } else if (student.graph?.accessToken) {
+    if (student.graph?.accessToken) {
+      try {
         const token = await graphToken(student);
         notebooks = await listNotebooks(token);
+      } catch (err) {
+        error = onenoteError(err);
       }
-    } catch (err) {
-      error = onenoteError(err);
     }
     return res.json({
       connected,
       email: student.graph?.email || "",
       notebooks,
       error,
-      studio: flags.onenote,
+      studio: flags.onedrive,
       adminConsentUrl: adminConsentUrl(),
     });
   } catch (err) {
@@ -2005,13 +1987,18 @@ app.post("/v1/agent/chat", async (req, res) => {
           }
         }
         if (kinds.size) return finishMutations("Done");
+        const errExtras = { keyCount: keys.length, source, provider: provider.id };
+        const message = explainUpstreamError(upstream.status, text, errExtras);
+        const code = upstreamErrorCode(upstream.status, text);
         if (res.headersSent) {
-          writeEvent({ choices: [{ delta: { content: explainUpstreamError(upstream.status, text, { keyCount: keys.length }) } }] });
+          writeEvent({ type: "error", code, text: message });
+          writeEvent({ choices: [{ delta: { content: message } }] });
           writeEvent("[DONE]");
           return res.end();
         }
         return res.status(upstream.status === 401 ? 401 : 502).json({
-          error: explainUpstreamError(upstream.status, text, { keyCount: keys.length }),
+          error: message,
+          code,
         });
       }
 

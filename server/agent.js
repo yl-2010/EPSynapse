@@ -16,6 +16,7 @@ export const SYSTEM_PROMPT = [
   "If they want mail sent, tell them to use the Mail panel Send button. You cannot send from chat.",
   "If there is no snapshot, say you do not have live school data yet.",
   "If they ask about a bubble that said it could not reach api.epsynapse.com, or why a normal question (an emoji, homework, a book chapter, anything) got no model answer: that text is a browser or app catch, not a refusal. The public site and the API are different hosts. Chat POSTs to api.epsynapse.com, a Mac process on port 3006 published through a Cloudflare tunnel. A first reply can work and a follow-up still fail, because the second ask sends the whole thread and the Mac can stay quiet long enough that the tunnel drops. When that fetch throws, the model never ran. Tell them to retry. If it keeps failing, the tunnel or the Mac API is down. Do not treat the original question as blocked or unsafe.",
+  "If they ask why chat stopped, why Groq failed, or why a new key fixed it: Groq free keys get rejected when copied short, deleted, or replaced. They also hit a free limit of about 30 chats a minute and 1000 a day, or a token burst. Limits sit on the Groq login, so a second key on the same Groq account does not reset a daily cap. A new key helps when the old one was rejected, or when they used a different Groq login. Tell them to create a gsk_ at console.groq.com/keys, paste it in Settings Chat key, wait, add a key from another Groq login, or switch Model to Gemini. Full steps are on epsynapse.com/groq. Do not ask them to paste the key in chat.",
   "School mutations: 1-3 short lines. No period when the reply is one word, one phrase, or one sentence.",
   "Write the bubble in markdown: headings, lists, bold, italics, code, tables. For math use LaTeX: $inline$ and $$display$$, or \\(inline\\) and \\[display\\]. Never HTML tags or markdown images.",
 ].join(" ");
@@ -162,14 +163,23 @@ export function studentStoredKeys(student) {
 export function resolveApiKeys(req, providerId, student) {
   const header = req.get("authorization") || "";
   const bearer = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
-  if (bearer) return { keys: [bearer], source: "student" };
   const stored = studentStoredKeys(student);
-  if (stored.length) return { keys: stored, source: "account" };
-  if (providerId === "groq") {
-    const demo = demoGroqKeys();
-    if (demo.length) return { keys: demo, source: "demo" };
-  }
-  return { keys: [], source: "none" };
+  const seen = new Set();
+  const keys = [];
+  const add = (raw) => {
+    const key = String(raw || "").trim();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    keys.push(key);
+  };
+  add(bearer);
+  stored.forEach(add);
+  if (providerId === "groq") demoGroqKeys().forEach(add);
+  let source = "none";
+  if (bearer) source = "student";
+  else if (stored.length) source = "account";
+  else if (keys.length) source = "demo";
+  return { keys, source };
 }
 
 export function resolveApiKey(req, providerId, student) {
@@ -325,19 +335,93 @@ export function finishedToolCalls(calls) {
   return (calls || []).filter((c) => c?.function?.name);
 }
 
+function groqBodyHint(text) {
+  const raw = String(text || "");
+  try {
+    const json = JSON.parse(raw);
+    const err = json && typeof json === "object" ? json.error || json : null;
+    if (err && typeof err === "object") {
+      return String(err.message || err.code || raw);
+    }
+  } catch {
+    /* leftover was not JSON */
+  }
+  return raw;
+}
+
+export function upstreamErrorCode(status, text) {
+  const hint = groqBodyHint(text).toLowerCase();
+  if (
+    status === 401 ||
+    status === 403 ||
+    /invalid api key|incorrect api key|invalid_api_key|unauthorized/.test(hint)
+  ) {
+    return "key_rejected";
+  }
+  if (status === 429 || /rate limit|rate_limit|tokens per|too many requests/.test(hint)) {
+    return "key_limited";
+  }
+  return "upstream";
+}
+
+function groqFixSteps() {
+  return [
+    "1. Open [console.groq.com/keys](https://console.groq.com/keys).",
+    "2. Tap Create API Key. Copy the `gsk_` value now. Groq shows it only once.",
+    "3. Gear, Chat key, paste, Save key. Chat key must say Groq.",
+    "4. Ask again here. Do not paste the key in this box.",
+    "Full click-by-click is on [epsynapse.com/groq](/groq).",
+  ].join("\n");
+}
+
 export function explainUpstreamError(status, text, extras = {}) {
   const many = Number(extras.keyCount) > 1;
-  if (status === 401 || status === 403) {
+  const source = String(extras.source || "");
+  const provider = String(extras.provider || "groq");
+  const code = upstreamErrorCode(status, text);
+  if (provider === "groq" && code === "key_rejected") {
+    const head = many
+      ? "Every saved Groq key was rejected."
+      : "That Groq key was rejected.";
+    return [
+      `${head} Groq deleted it, or the copy was short.`,
+      "Create a new key, then Save key. That is the usual fix when chat dies and a fresh gsk_ brings it back.",
+      "",
+      groqFixSteps(),
+    ].join("\n");
+  }
+  if (provider === "groq" && code === "key_limited") {
+    if (source === "demo") {
+      return [
+        "The shared table key hit Groq's free limit.",
+        "Make your own free key so you are not sharing that quota.",
+        "",
+        groqFixSteps(),
+      ].join("\n");
+    }
+    const head = many
+      ? "Every saved Groq key hit its free limit."
+      : "This Groq account hit its free limit.";
+    return [
+      `${head} This model is about 30 chats a minute and 1000 a day, or a token burst.`,
+      "Limits sit on the Groq login. A second key on the same Groq account does not reset a daily cap.",
+      "Wait, add a key from a different Groq login, or switch Model to Gemini in Settings.",
+      "If a new key on the same login fixed it, the old one was rejected, not limited. Save that new key.",
+      "",
+      groqFixSteps(),
+    ].join("\n");
+  }
+  if (code === "key_rejected") {
     return many
       ? "Every saved key was rejected. Check you copied the whole key from the provider dashboard."
       : "That key was rejected. Check you copied the whole key from the provider dashboard.";
   }
-  if (status === 429) {
+  if (code === "key_limited") {
     return many
       ? "Every saved key hit its free limit. Wait a bit, or add another key."
       : "This key hit its free limit. Add another key, wait a bit, or try another provider.";
   }
-  const clipped = String(text || "").replace(/\s+/g, " ").slice(0, 240);
+  const clipped = groqBodyHint(text).replace(/\s+/g, " ").slice(0, 240);
   return clipped || `Provider returned ${status}.`;
 }
 
