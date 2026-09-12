@@ -1,0 +1,405 @@
+(() => {
+  const LS_SID = "epsynapse.sid";
+  const LS_KEY = "epsynapse.agent.key";
+  const LS_PROV = "epsynapse.agent.provider";
+
+  const loading = document.getElementById("stage-loading");
+  const stage = document.getElementById("stage-full");
+  const appEl = document.getElementById("edu-app");
+  const sheet = document.getElementById("settings-sheet");
+  const form = sheet.querySelector(".edu-sheet");
+  const statusEl = document.getElementById("settings-status");
+  const odStatus = document.getElementById("onedrive-status");
+  const keyStatus = document.getElementById("key-status");
+  const providerSel = document.getElementById("provider");
+
+  let apiBase = "";
+  let me = null;
+  let pollTimer = 0;
+
+  function escapeHtml(s) {
+    return String(s || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function sid() {
+    return localStorage.getItem(LS_SID) || "";
+  }
+
+  async function api(path, opts = {}) {
+    const headers = Object.assign({ Accept: "application/json" }, opts.headers || {});
+    const session = sid();
+    if (session) headers["X-EPSynapse-Session"] = session;
+    if (opts.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
+    const res = await fetch(apiBase + path, {
+      credentials: "include",
+      ...opts,
+      headers,
+    });
+    const text = await res.text();
+    let body = {};
+    try {
+      body = text ? JSON.parse(text) : {};
+    } catch {
+      body = { error: text.slice(0, 200) };
+    }
+    if (body.sessionId) localStorage.setItem(LS_SID, body.sessionId);
+    if (!res.ok) {
+      const err = new Error(body.error || `Request failed (${res.status})`);
+      err.status = res.status;
+      err.body = body;
+      throw err;
+    }
+    return body;
+  }
+
+  function setStatus(el, text) {
+    if (el) el.textContent = text || "";
+  }
+
+  function openSheet() {
+    sheet.hidden = false;
+    if (me) {
+      form.school.value = me.school || "Eastside Prep";
+      form.studentId.value = me.studentId || "";
+      form.canvasHost.value = me.canvasHost || "https://eastsideprep.instructure.com";
+    }
+    refreshKeyStatus();
+    paintOnedrive();
+  }
+
+  function closeSheet() {
+    sheet.hidden = true;
+  }
+
+  function panelHtml(title, body, filterId, extraClass) {
+    return `<section class="edu-panel${extraClass ? " " + extraClass : ""}" data-liquid-glass="rounded" data-filter-id="${escapeHtml(filterId)}">
+      <div class="edu-panel-head"><h2 class="edu-panel-title">${escapeHtml(title)}</h2></div>
+      ${body}
+    </section>`;
+  }
+
+  function listOrEmpty(itemsHtml, empty) {
+    if (!itemsHtml) return `<p class="edu-empty">${escapeHtml(empty || "Nothing here")}</p>`;
+    return `<ul class="edu-list">${itemsHtml}</ul>`;
+  }
+
+  function formatDue(iso) {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return String(iso).slice(0, 10);
+    return d.toLocaleString(undefined, {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
+
+  function todoRow(t) {
+    const tag = t.tag || "HW";
+    const due = t.due ? `<span class="edu-meta">${escapeHtml(formatDue(t.due))}</span>` : "";
+    const klass = t.courseName ? `<span class="edu-meta">${escapeHtml(t.courseName)}</span>` : "";
+    const href = t.canvasLink || "#";
+    return `<li class="edu-row edu-todo${t.done ? " is-done" : ""}">
+      <span class="edu-check${t.done ? " is-checked" : ""}" data-liquid-glass="circle" data-filter-id="lg-check-${escapeHtml(t.id)}" aria-hidden="true"><span class="edu-check-dot"></span></span>
+      <a class="edu-row-link" href="${escapeHtml(href)}" target="_blank" rel="noopener">
+        <span class="edu-name"><span class="edu-tag edu-tag-${escapeHtml(tag)}">${escapeHtml(tag)}</span> ${escapeHtml(t.title)}</span>
+        ${klass}${due}
+      </a>
+    </li>`;
+  }
+
+  function classRow(c) {
+    const period = c.period
+      ? `<span class="edu-tag edu-period">${escapeHtml(c.period)}</span>`
+      : "";
+    return `<li class="edu-row edu-class-row">
+      <span class="edu-name">${period}<span class="edu-hero-class-name">${escapeHtml(c.name)}</span></span>
+      <span class="edu-meta">${escapeHtml(c.courseCode || "")}</span>
+    </li>`;
+  }
+
+  function dateRow(t) {
+    const tag = t.tag || "HW";
+    return `<li class="edu-row${tag === "MA" ? " is-ma" : ""}">
+      <span class="edu-name"><span class="edu-tag edu-tag-${escapeHtml(tag)}">${escapeHtml(tag)}</span> ${escapeHtml(t.title)}</span>
+      <span class="edu-meta">${escapeHtml(formatDue(t.due))}</span>
+    </li>`;
+  }
+
+  function fileTile(f, i) {
+    const href = f.webUrl || `${apiBase}/v1/me/onedrive/file?id=${encodeURIComponent(f.id)}`;
+    return `<a class="edu-file-tile" href="${escapeHtml(href)}" target="_blank" rel="noopener" data-liquid-glass="rounded" data-filter-id="lg-file-${i}" title="${escapeHtml(f.name)}"><span class="edu-file-name">${escapeHtml(f.name)}</span></a>`;
+  }
+
+  function renderHome({ courses, assignments, files }) {
+    const open = (assignments || []).filter((t) => !t.done);
+    const done = (assignments || []).filter((t) => t.done);
+    const dates = (assignments || [])
+      .filter((t) => t.due)
+      .sort((a, b) => String(a.due).localeCompare(String(b.due)))
+      .slice(0, 12);
+    const fileTiles = (files || []).map(fileTile).join("");
+
+    const todoEmpty = me?.canvasConnected
+      ? "No open work"
+      : "Connect Canvas in settings";
+    const classEmpty = me?.canvasConnected ? "No classes" : "Connect Canvas in settings";
+    const fileEmpty = me?.onedriveConnected
+      ? "No files in /EPSynapse yet"
+      : "Connect OneDrive in settings";
+
+    appEl.classList.add("is-settled");
+    appEl.innerHTML = `
+      <div class="edu-grid edu-grid--home">
+        <div class="edu-col edu-col--main">
+          ${panelHtml("TODO", listOrEmpty(open.map(todoRow).join(""), todoEmpty), "lg-edu-todo")}
+          ${panelHtml("Completed", listOrEmpty(done.map(todoRow).join(""), "Nothing completed yet"), "lg-edu-completed", "edu-panel--completed")}
+        </div>
+        <div class="edu-col edu-col--side">
+          ${panelHtml("Classes", listOrEmpty((courses || []).map(classRow).join(""), classEmpty), "lg-edu-classes")}
+          ${panelHtml("Dates", listOrEmpty(dates.map(dateRow).join(""), "No upcoming dates"), "lg-edu-dates")}
+          ${panelHtml("Files", fileTiles ? `<div class="edu-files">${fileTiles}</div>` : `<p class="edu-empty">${escapeHtml(fileEmpty)}</p>`, "lg-edu-files")}
+        </div>
+      </div>
+    `;
+    if (typeof window.reinitLiquidGlass === "function") window.reinitLiquidGlass();
+  }
+
+  async function loadDashboard() {
+    loading.hidden = true;
+    stage.hidden = false;
+    const courses = me?.canvasConnected
+      ? api("/v1/me/canvas/courses").then((r) => r.courses || []).catch(() => [])
+      : Promise.resolve([]);
+    const assignments = me?.canvasConnected
+      ? api("/v1/me/canvas/assignments").then((r) => r.assignments || []).catch(() => [])
+      : Promise.resolve([]);
+    const files = me?.onedriveConnected
+      ? api("/v1/me/onedrive/files").then((r) => r.files || []).catch(() => [])
+      : Promise.resolve([]);
+    renderHome({
+      courses: await courses,
+      assignments: await assignments,
+      files: await files,
+    });
+  }
+
+  function paintOnedrive() {
+    if (!me) {
+      setStatus(odStatus, "");
+      return;
+    }
+    if (me.onedriveConnected) {
+      setStatus(odStatus, me.onedriveEmail ? `OneDrive · ${me.onedriveEmail}` : "OneDrive connected");
+      return;
+    }
+    const p = me.onedrivePending;
+    if (p && (p.user_code || p.verification_uri)) {
+      setStatus(
+        odStatus,
+        `${p.message || "Sign in with your school account."} Code ${p.user_code || ""} ${p.verification_uri || ""}`.trim()
+      );
+      return;
+    }
+    setStatus(odStatus, "OneDrive not connected.");
+  }
+
+  function refreshKeyStatus() {
+    const key = localStorage.getItem(LS_KEY) || "";
+    const id = providerSel.value || localStorage.getItem(LS_PROV) || "groq";
+    if (key) {
+      setStatus(keyStatus, `Using your ${id} key · ends ${key.slice(-4)}`);
+      return;
+    }
+    setStatus(keyStatus, "No model key. Groq is the short path: console.groq.com/keys");
+  }
+
+  function fillProviders(list) {
+    providerSel.innerHTML = "";
+    (list || []).forEach((p) => {
+      const opt = document.createElement("option");
+      opt.value = p.id;
+      opt.textContent = p.label + (p.recommended ? " · recommended" : "");
+      providerSel.appendChild(opt);
+    });
+    const chosen = localStorage.getItem(LS_PROV) || "groq";
+    if ([].some.call(providerSel.options, (o) => o.value === chosen)) {
+      providerSel.value = chosen;
+    }
+  }
+
+  async function boot() {
+    try {
+      const runtime = await fetch("/runtime-config.json", { cache: "no-store" }).then((r) => r.json());
+      const host = location.hostname;
+      apiBase =
+        host === "localhost" || host === "127.0.0.1"
+          ? runtime.localApiBase || "http://127.0.0.1:3006"
+          : runtime.apiBase || "";
+      window.__epsynapseApiBase = apiBase;
+    } catch {
+      apiBase = "http://127.0.0.1:3006";
+      window.__epsynapseApiBase = apiBase;
+    }
+
+    try {
+      const cfg = await api("/v1/agent/config");
+      fillProviders(cfg.providers);
+    } catch {
+      fillProviders([
+        { id: "groq", label: "Groq", recommended: true },
+        { id: "gemini", label: "Gemini" },
+        { id: "openrouter", label: "OpenRouter" },
+      ]);
+    }
+    refreshKeyStatus();
+
+    try {
+      me = await api("/v1/me");
+      await loadDashboard();
+    } catch {
+      loading.hidden = true;
+      stage.hidden = false;
+      renderHome({ courses: [], assignments: [], files: [] });
+      openSheet();
+    }
+  }
+
+  document.getElementById("settings-open").addEventListener("click", openSheet);
+  document.getElementById("settings-close").addEventListener("click", () => {
+    closeSheet();
+  });
+  sheet.addEventListener("click", (ev) => {
+    if (ev.target === sheet) closeSheet();
+  });
+
+  form.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const studentId = form.studentId.value.trim();
+    if (!studentId) {
+      setStatus(statusEl, "Student ID is required.");
+      form.studentId.focus();
+      return;
+    }
+    setStatus(statusEl, "Saving…");
+    const payload = {
+      school: form.school.value.trim() || "Eastside Prep",
+      studentId,
+      canvasHost: form.canvasHost.value.trim(),
+    };
+    const canvasToken = form.canvasToken.value.trim();
+    if (canvasToken) payload.canvasToken = canvasToken;
+    try {
+      me = await api("/v1/me", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      form.canvasToken.value = "";
+      setStatus(statusEl, me.displayName ? `Saved · ${me.displayName}` : "Saved.");
+      paintOnedrive();
+      await loadDashboard();
+      closeSheet();
+    } catch (err) {
+      setStatus(statusEl, err.message || "Could not save.");
+    }
+  });
+
+  document.getElementById("onedrive-start").addEventListener("click", async () => {
+    try {
+      if (!me) {
+        setStatus(odStatus, "Save school and student ID first.");
+        return;
+      }
+      const started = await api("/v1/me/onedrive/start", { method: "POST", body: "{}" });
+      if (started.user_code) {
+        setStatus(
+          odStatus,
+          `${started.message || "Open the Microsoft page and enter this code."} ${started.user_code} ${started.verification_uri || ""}`
+        );
+        if (started.verification_uri) window.open(started.verification_uri, "_blank", "noopener");
+        clearInterval(pollTimer);
+        pollTimer = setInterval(async () => {
+          try {
+            const st = await api("/v1/me/onedrive/status");
+            if (st.connected) {
+              clearInterval(pollTimer);
+              me = Object.assign({}, me, {
+                onedriveConnected: true,
+                onedriveEmail: st.email || "",
+                onedrivePending: null,
+              });
+              paintOnedrive();
+              await loadDashboard();
+            }
+          } catch {
+            /* keep polling */
+          }
+        }, 4000);
+      } else {
+        setStatus(
+          odStatus,
+          started.message ||
+            "Device code blocked. Sign in at Outlook, then paste the access_token from the URL hash."
+        );
+        if (started.authorizeUrl) window.open(started.authorizeUrl, "_blank", "noopener");
+      }
+    } catch (err) {
+      setStatus(odStatus, err.message || "Could not start OneDrive.");
+    }
+  });
+
+  document.getElementById("onedrive-paste").addEventListener("click", async () => {
+    const token = document.getElementById("onedriveToken").value.trim();
+    if (!token) {
+      setStatus(odStatus, "Paste a Graph access token first.");
+      return;
+    }
+    try {
+      const st = await api("/v1/me/onedrive/token", {
+        method: "POST",
+        body: JSON.stringify({ accessToken: token }),
+      });
+      document.getElementById("onedriveToken").value = "";
+      me = Object.assign({}, me || {}, {
+        onedriveConnected: Boolean(st.connected),
+        onedriveEmail: st.email || "",
+        onedrivePending: null,
+      });
+      paintOnedrive();
+      await loadDashboard();
+    } catch (err) {
+      setStatus(odStatus, err.message || "Token rejected.");
+    }
+  });
+
+  document.getElementById("key-save").addEventListener("click", () => {
+    const key = document.getElementById("modelKey").value.trim();
+    if (!key) {
+      setStatus(keyStatus, "Paste a key first.");
+      return;
+    }
+    localStorage.setItem(LS_KEY, key);
+    localStorage.setItem(LS_PROV, providerSel.value || "groq");
+    document.getElementById("modelKey").value = "";
+    refreshKeyStatus();
+  });
+
+  document.getElementById("key-clear").addEventListener("click", () => {
+    localStorage.removeItem(LS_KEY);
+    document.getElementById("modelKey").value = "";
+    refreshKeyStatus();
+  });
+
+  providerSel.addEventListener("change", () => {
+    localStorage.setItem(LS_PROV, providerSel.value || "groq");
+    refreshKeyStatus();
+  });
+
+  boot();
+})();

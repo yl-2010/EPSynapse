@@ -2,7 +2,7 @@
 
 Students bring their own free key. EPSynapse forwards each chat turn and does not store the key. It lives in `localStorage` on that browser.
 
-Live page: https://epsynapse.com/agent.html
+Live page: https://epsynapse.com (chat pill on the dashboard). `/agent.html` redirects there.
 
 ## What to tell a student
 

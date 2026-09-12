@@ -8,7 +8,8 @@ export const SYSTEM_PROMPT = [
   "You are the EPSynapse personal agent for Eastside Prep students.",
   "Be direct and useful. Skip filler.",
   "Help with school life: classes, homework planning, LPC, EBC, clubs, college-counseling questions they can take to an adult.",
-  "You do not have live school data unless they pasted it in this chat. Say so instead of inventing counts or policies.",
+  "If a live student snapshot is attached, use it. Do not invent courses, due dates, or files that are not in the snapshot.",
+  "If there is no snapshot, say you do not have live school data yet.",
   "If they ask you to remember something, work only with what is already in this conversation.",
 ].join(" ");
 
@@ -98,11 +99,15 @@ export function upstreamHeaders(provider, key) {
   };
 }
 
-export function upstreamBody(provider, messages) {
+export function upstreamBody(provider, messages, snapshot = "") {
+  const extra = String(snapshot || "").trim();
+  const system = extra
+    ? `${SYSTEM_PROMPT}\n\nLive student snapshot:\n${extra}`
+    : SYSTEM_PROMPT;
   return {
     model: provider.model,
     stream: true,
-    messages: [{ role: "system", content: SYSTEM_PROMPT }, ...messages],
+    messages: [{ role: "system", content: system }, ...messages],
     ...(provider.extraBody || {}),
   };
 }

@@ -3,166 +3,208 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>EPSynapse — JYPE at Frontier Cascadia</title>
-    <meta
-      name="description"
-      content="JYPE is at Frontier Cascadia. EPSynapse is the placeholder until the build lands."
-    />
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=IBM+Plex+Mono:wght@400;500&display=swap"
-      rel="stylesheet"
-    />
-    <style>
-      :root {
-        --paper: #efe6d6;
-        --ink: #1c1612;
-        --rule: #c8b8a0;
-        --rust: #c4491f;
-        --fir: #2c4a3e;
-        --muted: #6a5d4e;
-      }
-      * { box-sizing: border-box; }
-      html, body { margin: 0; min-height: 100%; }
-      body {
-        background:
-          radial-gradient(circle at 12% 8%, rgba(196, 73, 31, 0.07), transparent 32%),
-          radial-gradient(circle at 88% 92%, rgba(44, 74, 62, 0.08), transparent 36%),
-          var(--paper);
-        color: var(--ink);
-        font-family: "IBM Plex Mono", ui-monospace, monospace;
-        font-size: 14px;
-        line-height: 1.55;
-      }
-      body::before {
-        content: "";
-        position: fixed;
-        inset: 0;
-        pointer-events: none;
-        opacity: 0.18;
-        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
-      }
-      main {
-        position: relative;
-        max-width: 42rem;
-        margin: 0 auto;
-        padding: 4.5rem 1.25rem 5rem;
-      }
-      .rule {
-        height: 1px;
-        background: var(--rule);
-        border: 0;
-        margin: 1.6rem 0;
-      }
-      .kicker {
-        color: var(--rust);
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-        font-size: 11px;
-      }
-      h1 {
-        font-family: Fraunces, Georgia, serif;
-        font-size: clamp(3.4rem, 12vw, 6.4rem);
-        font-weight: 700;
-        line-height: 0.88;
-        letter-spacing: -0.04em;
-        margin: 0.35rem 0 0.6rem;
-      }
-      .lede {
-        font-family: Fraunces, Georgia, serif;
-        font-size: 1.35rem;
-        font-weight: 500;
-        line-height: 1.35;
-        max-width: 28rem;
-      }
-      .meta {
-        display: grid;
-        gap: 0.35rem;
-        color: var(--muted);
-      }
-      .roster {
-        list-style: none;
-        padding: 0;
-        margin: 0;
-        display: grid;
-        gap: 0.45rem;
-      }
-      .roster li {
-        display: flex;
-        justify-content: space-between;
-        gap: 1rem;
-        border-bottom: 1px dashed var(--rule);
-        padding-bottom: 0.4rem;
-      }
-      .roster span:last-child { color: var(--fir); }
-      .status {
-        display: flex;
-        align-items: center;
-        gap: 0.55rem;
-      }
-      .dot {
-        width: 0.55rem;
-        height: 0.55rem;
-        border-radius: 50%;
-        background: var(--rule);
-        flex: 0 0 auto;
-      }
-      .dot.up { background: var(--fir); }
-      .dot.down { background: var(--rust); }
-      a { color: inherit; }
-    </style>
-  </head>
-  <body>
-    <main>
-      <p class="kicker">Frontier Cascadia · 12 Sep 2026 · Founders Hall</p>
-      <h1>EPSynapse</h1>
-      <p class="lede">Placeholder for the JYPE table. The site is up. The product is not, yet.</p>
-      <hr class="rule" />
-      <ul class="roster">
-        <li><span>Jeffery Xu</span><span>J</span></li>
-        <li><span>Yan Levin</span><span>Y</span></li>
-        <li><span>Prasham Dhruva</span><span>P</span></li>
-        <li><span>Everette Deng</span><span>E</span></li>
-      </ul>
-      <hr class="rule" />
-      <p class="meta">
-        <span>School polling first. Then whatever else fits in twelve hours.</span>
-        <span>Agents push <code>main</code>. Deploys are manual.</span>
-        <span><a href="/agent.html">Personal agent</a>. Students paste a free Groq or Gemini key.</span>
-      </p>
-      <p class="status">
-        <span class="dot" id="dot"></span>
-        <span id="api">Checking api.epsynapse.com…</span>
-      </p>
-    </main>
+    <meta name="color-scheme" content="light dark" />
     <script>
-      (async function () {
-        var dot = document.getElementById("dot");
-        var label = document.getElementById("api");
+      (function () {
         try {
-          var cfg = await fetch("/runtime-config.json", { cache: "no-store" }).then(function (r) {
-            return r.json();
-          });
-          var host = location.hostname;
-          var apiBase =
-            host === "localhost" || host === "127.0.0.1"
-              ? cfg.localApiBase || "http://127.0.0.1:3006"
-              : cfg.apiBase;
-          var res = await fetch(apiBase + "/health", { cache: "no-store" });
-          var body = await res.json();
-          if (body && body.ok) {
-            dot.className = "dot up";
-            label.textContent = "Mac API up · " + body.service;
-            return;
-          }
-          throw new Error("bad health");
-        } catch (err) {
-          dot.className = "dot down";
-          label.textContent = "Mac API not reachable yet";
-        }
+          var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var r = document.documentElement;
+          r.dataset.theme = "system";
+          r.dataset.resolvedTheme = dark ? "dark" : "light";
+          r.style.colorScheme = dark ? "dark" : "light";
+        } catch (e) {}
       })();
     </script>
+    <title>EPSynapse</title>
+    <meta name="description" content="student dashboard for Eastside Prep" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <button
+      type="button"
+      class="corner c-tl squircle"
+      data-liquid-glass="squircle"
+      data-filter-id="lg-tl"
+      id="settings-open"
+      aria-label="Open settings"
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path
+          fill="currentColor"
+          d="M6.2 4h12.1v2.55H9.05v3.7h8.4v2.45h-8.4v4.2H18.6V20H6.2z"
+        />
+      </svg>
+    </button>
+
+    <button
+      type="button"
+      class="corner c-tr circle"
+      data-liquid-glass="circle"
+      data-filter-id="lg-tr"
+      aria-label="Toggle theme"
+      draggable="false"
+    ></button>
+
+    <div id="stage-loading" class="stage stage-loading" aria-live="polite">…</div>
+
+    <div id="stage-full" class="stage stage-full" hidden>
+      <main id="edu-app" class="edu-app" aria-live="polite"></main>
+
+      <div id="edu-chat" class="yan-chat" data-state="closed">
+        <div
+          class="yan-chat-panel"
+          data-liquid-glass="rounded"
+          data-filter-id="lg-edu-chat-panel"
+          hidden
+          aria-hidden="true"
+          role="region"
+          aria-label="Personal assistant"
+        >
+          <button
+            type="button"
+            class="yan-chat-close yan-chat-close--panel circle"
+            data-liquid-glass="circle"
+            data-filter-id="lg-edu-chat-x-panel"
+            data-edu-chat-clear
+            aria-label="New chat"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" style="transform: rotate(45deg)">
+              <g fill="currentColor">
+                <rect x="10.35" y="4.5" width="3.3" height="15" rx="1.65" />
+                <rect x="4.5" y="10.35" width="15" height="3.3" rx="1.65" />
+              </g>
+            </svg>
+          </button>
+          <div class="yan-chat-messages" aria-live="polite"></div>
+          <div class="yan-chat-history" hidden aria-hidden="true"></div>
+        </div>
+
+        <div
+          class="yan-chat-pill corner circle c-br"
+          data-liquid-glass="circle"
+          data-filter-id="lg-edu-chat-pill"
+        >
+          <button
+            type="button"
+            class="yan-chat-minimize yan-chat-close yan-chat-close--pill circle"
+            data-liquid-glass="circle"
+            data-filter-id="lg-edu-chat-minimize"
+            data-edu-chat-minimize
+            aria-label="Hide chat"
+            tabindex="-1"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <g fill="currentColor">
+                <rect x="4.5" y="10.35" width="15" height="3.3" rx="1.65" />
+              </g>
+            </svg>
+          </button>
+
+          <button
+            type="button"
+            class="yan-chat-launcher"
+            aria-label="Personal assistant"
+            aria-expanded="false"
+            aria-controls="edu-chat-input"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <g fill="currentColor">
+                <rect x="10.35" y="4.5" width="3.3" height="15" rx="1.65" />
+                <rect x="4.5" y="10.35" width="15" height="3.3" rx="1.65" />
+              </g>
+            </svg>
+          </button>
+
+          <form class="yan-chat-form" action="#" autocomplete="off">
+            <label class="visually-hidden" for="edu-chat-input">Ask your personal agent</label>
+            <textarea
+              id="edu-chat-input"
+              class="yan-chat-input"
+              name="q"
+              rows="1"
+              inputmode="text"
+              enterkeyhint="enter"
+              placeholder="Ask your personal agent…"
+              maxlength="4000"
+              tabindex="-1"
+              autocomplete="off"
+              wrap="soft"
+              aria-multiline="true"
+            ></textarea>
+            <button
+              type="submit"
+              class="yan-chat-send circle"
+              data-liquid-glass="circle"
+              data-filter-id="lg-edu-chat-send"
+              aria-label="Send"
+            >
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <g stroke="currentColor" stroke-width="3.3" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 18.2V6.4" />
+                  <path d="M6.9 11.3L12 6.2L17.1 11.3" />
+                </g>
+              </svg>
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div id="settings-sheet" class="edu-sheet-backdrop" hidden>
+      <form class="edu-sheet" data-liquid-glass="rounded" data-filter-id="lg-edu-sheet" autocomplete="off">
+        <h2 class="edu-panel-title">Settings</h2>
+        <p class="edu-empty" id="settings-status">School + student ID is your record. Honor system for the hackathon.</p>
+
+        <label for="school">School</label>
+        <input id="school" name="school" value="Eastside Prep" maxlength="80" />
+
+        <label for="studentId">Student ID</label>
+        <input id="studentId" name="studentId" required maxlength="80" />
+
+        <label for="canvasHost">Canvas URL</label>
+        <input id="canvasHost" name="canvasHost" value="https://eastsideprep.instructure.com" />
+
+        <label for="canvasToken">Canvas access token</label>
+        <input id="canvasToken" name="canvasToken" type="password" autocomplete="off" />
+        <p class="edu-empty">Account → Settings → New Access Token</p>
+
+        <button type="submit" id="settings-save">Save</button>
+        <button type="button" id="onedrive-start">Connect OneDrive</button>
+        <p class="edu-empty" id="onedrive-status"></p>
+        <label for="onedriveToken">Paste Graph token if device code is blocked</label>
+        <input id="onedriveToken" name="onedriveToken" autocomplete="off" />
+        <button type="button" id="onedrive-paste">Save OneDrive token</button>
+
+        <label for="provider">Model</label>
+        <select id="provider" name="provider"></select>
+
+        <label for="modelKey">Model key (stays in this browser)</label>
+        <input id="modelKey" name="modelKey" type="password" autocomplete="off" placeholder="Groq / Gemini / OpenRouter" />
+        <button type="button" id="key-save">Save key</button>
+        <button type="button" id="key-clear">Clear key</button>
+        <p class="edu-empty" id="key-status"></p>
+
+        <button type="button" id="settings-close">Close</button>
+      </form>
+    </div>
+
+    <svg
+      class="liquid-glass-svg"
+      xmlns="http://www.w3.org/2000/svg"
+      width="0"
+      height="0"
+      aria-hidden="true"
+      focusable="false"
+      color-interpolation-filters="sRGB"
+      style="position: absolute; width: 0; height: 0; overflow: hidden; pointer-events: none"
+    >
+      <defs id="liquid-glass-defs"></defs>
+    </svg>
+
+    <script src="/liquid-glass.js"></script>
+    <script src="/theme-orb.js"></script>
+    <script src="/app.js"></script>
+    <script src="/chatbot.js"></script>
   </body>
 </html>
