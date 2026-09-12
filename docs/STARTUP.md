@@ -4,6 +4,29 @@ Production site (**https://epsynapse.com**) is on Vercel. The Mac exposes the Ex
 
 ---
 
+## Pick up a server change (do this on the Mac Studio)
+
+`git push` updates GitHub. It does not restart Express. The site can be new while `api.epsynapse.com` is still the old process. That is why grades were missing or stuck at 0%.
+
+Sit at the Mac Studio. Not a MacBook. Terminal:
+
+```bash
+cd /Users/yanlevin/github/JYPE
+git checkout main
+git pull --rebase origin main
+launchctl kickstart -k "gui/$(id -u)/com.jype.server"
+curl -sS -f http://127.0.0.1:3006/health
+curl -sS -f https://api.epsynapse.com/health
+```
+
+Both curls should print JSON with `"ok":true`. If the first one fails, the LaunchAgent is not loaded. Start it with `npm run server` from the repo root, then hit `/health` again.
+
+Logs if something looks wrong: `/tmp/jype-server.log`.
+
+Do this after anyone lands a change under `server/`. The grades work is in `server/canvas.js` and `server/index.js`. Until this restart, the live API will not have it.
+
+---
+
 ## After a Mac restart
 
 LaunchAgents auto-start the JYPE API + tunnel on login.
