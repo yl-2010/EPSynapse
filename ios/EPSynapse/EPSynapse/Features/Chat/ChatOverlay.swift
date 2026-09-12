@@ -27,7 +27,11 @@ struct ChatOverlay: View {
             composer
         }
         .background {
-            AgentFrameProbe { overlayFrame = $0 }
+            AgentFrameProbe { next in
+                if overlayFrame != next {
+                    overlayFrame = next
+                }
+            }
         }
         .offset(y: dragY)
         .background {
@@ -62,13 +66,17 @@ struct ChatOverlay: View {
         .onChange(of: chat.wantsChatOpen) { _, want in
             if want {
                 isOpen = true
-                chat.wantsChatOpen = false
+                Task { @MainActor in
+                    chat.wantsChatOpen = false
+                }
             }
         }
         .onChange(of: isOpen) { _, open in
-            chat.composerOpen = open
+            Task { @MainActor in
+                chat.composerOpen = open
+            }
         }
-        .onAppear {
+        .task {
             chat.composerOpen = isOpen
         }
         .onDisappear {
@@ -479,7 +487,10 @@ final class AgentFrameProbeView: UIView {
 
     func report() {
         guard window != nil, bounds.width > 1, bounds.height > 1 else { return }
-        onChange?(convert(bounds, to: nil))
+        let rect = convert(bounds, to: nil)
+        DispatchQueue.main.async { [onChange] in
+            onChange?(rect)
+        }
     }
 }
 

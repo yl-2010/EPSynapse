@@ -10,7 +10,12 @@ final class ChatStore: ObservableObject {
     @Published var currentSessionId: String?
     @Published var turns: [ChatTurn] = []
     @Published var busy = false {
-        didSet { refreshWorking() }
+        didSet {
+            guard oldValue != busy else { return }
+            Task { @MainActor in
+                refreshWorking()
+            }
+        }
     }
     @Published var historyReveal: CGFloat = 0
     @Published var historyDragging = false
@@ -318,7 +323,7 @@ final class ChatStore: ObservableObject {
         return persisted == nil || persisted?.isEmpty == true
     }
 
-    static func lastReadOnPersist(existing: CachedChat?, now: Date) -> String {
+    private static func lastReadOnPersist(existing: CachedChat?, now: Date) -> String {
         guard let existing else { return ChatISODate.string(from: now) }
         if let kept = existing.lastRead, !kept.isEmpty { return kept }
         if !existing.updated.isEmpty { return existing.updated }
@@ -330,7 +335,7 @@ final class ChatStore: ObservableObject {
         return updated > ChatISODate.date(from: lastRead)
     }
 
-    static func cachedUnread(_ cached: CachedChat) -> Bool {
+    private static func cachedUnread(_ cached: CachedChat) -> Bool {
         if let lastRead = cached.lastRead, !lastRead.isEmpty {
             return isUnread(updated: ChatISODate.date(from: cached.updated), lastRead: lastRead)
         }

@@ -235,16 +235,13 @@ struct ChatHistoryStatusDot: View {
             .fill(EPSTheme.accent)
             .frame(width: 8, height: 8)
             .opacity(working && !reduceMotion && dimmed ? 0.25 : 1)
-            .onAppear(perform: syncPulse)
-            .onChange(of: working) { _, _ in
-                syncPulse()
-            }
-            .onChange(of: reduceMotion) { _, _ in
-                syncPulse()
+            .task(id: "\(working)-\(reduceMotion)") {
+                await syncPulse()
             }
     }
 
-    private func syncPulse() {
+    @MainActor
+    private func syncPulse() async {
         dimmed = false
         guard working, !reduceMotion else { return }
         withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {

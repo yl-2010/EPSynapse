@@ -27,9 +27,8 @@ struct ChatHistoryOverlay: View {
                     .padding(.leading, 8)
                     .offset(x: (chat.historyReveal - 1) * travel)
             }
-            .onAppear { chat.historyPanelWidth = width }
-            .onChange(of: geo.size) { _, size in
-                chat.historyPanelWidth = Self.panelWidth(for: size)
+            .task(id: width) {
+                chat.historyPanelWidth = width
             }
             .onChange(of: chat.historyReveal) { _, value in
                 if value >= 1 { interceptClose = true }
