@@ -1791,8 +1791,9 @@ app.post("/v1/agent/chat", async (req, res) => {
     res.write(`data: ${JSON.stringify(payload)}\n\n`);
   };
 
+  let keyAttempts = 1;
   const fetchUpstream = async (convo, { tools = true } = {}) => {
-    const { response } = await fetchWithKeyCycle(keys, (useKey) =>
+    const { response, attempts } = await fetchWithKeyCycle(keys, (useKey) =>
       fetch(provider.url, {
         method: "POST",
         headers: upstreamHeaders(provider, useKey),
@@ -1802,6 +1803,7 @@ app.post("/v1/agent/chat", async (req, res) => {
         signal: AbortSignal.timeout(150_000),
       })
     );
+    if (attempts) keyAttempts = attempts;
     if (!response) {
       const err = new Error("Could not reach the model host.");
       err.name = "FetchError";
@@ -1987,7 +1989,12 @@ app.post("/v1/agent/chat", async (req, res) => {
           }
         }
         if (kinds.size) return finishMutations("Done");
-        const errExtras = { keyCount: keys.length, source, provider: provider.id };
+        const errExtras = {
+          keyCount: keys.length,
+          attempts: keyAttempts,
+          source,
+          provider: provider.id,
+        };
         const message = explainUpstreamError(upstream.status, text, errExtras);
         const code = upstreamErrorCode(upstream.status, text);
         if (res.headersSent) {

@@ -140,12 +140,14 @@ async function completeJson(req, student, system, user) {
 
   const started = Date.now();
   let upstream;
+  let keyAttempts = 1;
   try {
     if (typeof agent.fetchWithKeyCycle === "function") {
       const cycled = await agent.fetchWithKeyCycle(keys, (useKey) =>
         postJson(provider, useKey, system, user, extra)
       );
       upstream = cycled.response;
+      if (cycled.attempts) keyAttempts = cycled.attempts;
     } else {
       upstream = await postJson(provider, keys[0], system, user, extra);
     }
@@ -168,6 +170,7 @@ async function completeJson(req, student, system, user) {
       typeof explainUpstreamError === "function"
         ? explainUpstreamError(upstream.status, text, {
             keyCount: keys.length,
+            attempts: keyAttempts,
             source,
             provider: provider.id,
           })

@@ -102,18 +102,65 @@ function keyFingerprint(key) {
   return String(key || "").slice(-12);
 }
 
-export function parseRetryAfterMs(res) {
+export function parseRetryAfterHeaderMs(res) {
   const raw = res?.headers?.get?.("retry-after");
-  if (!raw) return KEY_COOLDOWN_MS;
+  if (!raw) return 0;
   const sec = Number(raw);
   if (Number.isFinite(sec) && sec >= 0) {
-    return Math.min(Math.max(sec * 1000, 5_000), KEY_COOLDOWN_MAX_MS);
+    return Math.min(Math.max(sec * 1000, 500), KEY_COOLDOWN_MAX_MS);
   }
   const when = Date.parse(raw);
   if (Number.isFinite(when)) {
-    return Math.min(Math.max(when - Date.now(), 5_000), KEY_COOLDOWN_MAX_MS);
+    return Math.min(Math.max(when - Date.now(), 500), KEY_COOLDOWN_MAX_MS);
   }
-  return KEY_COOLDOWN_MS;
+  return 0;
+}
+
+export function parseRetryAfterBody(text) {
+  const raw = groqBodyHint(text);
+  const sec = raw.match(/try again in\s+(\d+(?:\.\d+)?)\s*s/i);
+  if (sec) {
+    return Math.min(Math.max(Number(sec[1]) * 1000, 500), KEY_COOLDOWN_MAX_MS);
+  }
+  const min = raw.match(/try again in\s+(\d+)\s*m(?:in(?:ute)?s?)?(?:\s*(\d+(?:\.\d+)?)\s*s)?/i);
+  if (min) {
+    const ms = Number(min[1]) * 60_000 + (min[2] ? Number(min[2]) * 1000 : 0);
+    return Math.min(Math.max(ms, 500), KEY_COOLDOWN_MAX_MS);
+  }
+  return 0;
+}
+
+export function parseRetryAfterMs(res, text = "") {
+  return parseRetryAfterHeaderMs(res) || parseRetryAfterBody(text) || KEY_COOLDOWN_MS;
+}
+
+export function parseLimitWindow(text) {
+  const hint = groqBodyHint(text).toLowerCase();
+  if (/tokens per\s*(min|minute)|\btpm\b/.test(hint)) return "tpm";
+  if (/requests per\s*(min|minute)|\brpm\b/.test(hint)) return "rpm";
+  if (/requests per\s*day|\brpd\b/.test(hint)) return "rpd";
+  if (/tokens per\s*day|\btpd\b/.test(hint)) return "tpd";
+  return "";
+}
+
+export function isContextOverflow(status, text) {
+  if (Number(status) === 429) return false;
+  const hint = groqBodyHint(text).toLowerCase();
+  return /context length|context window|maximum context|prompt is too long|too many tokens|tokens per request/.test(
+    hint
+  );
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
+}
+
+function replayResponse(response, text) {
+  return new Response(text, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
 }
 
 export function markKeyLimited(key, ms) {
@@ -174,7 +221,7 @@ export function resolveApiKeys(req, providerId, student) {
   };
   add(bearer);
   stored.forEach(add);
-  if (providerId === "groq") demoGroqKeys().forEach(add);
+  if (providerId === "groq" && keys.length === 0) demoGroqKeys().forEach(add);
   let source = "none";
   if (bearer) source = "student";
   else if (stored.length) source = "account";
@@ -198,18 +245,50 @@ export async function fetchWithKeyCycle(keys, makeRequest) {
   while (tried.size < list.length) {
     const picked = pickApiKey(list, start);
     if (!picked.key || tried.has(picked.index)) break;
-    tried.add(picked.index);
     lastKey = picked.key;
-    const response = await makeRequest(picked.key);
-    last = response;
-    const limited =
-      response && (response.status === 429 || response.status === 401 || response.status === 403);
-    if (!response || response.ok || !limited || tried.size >= list.length) {
-      return { response, key: picked.key, attempts: tried.size };
+    let sameRetries = 0;
+    let moveOn = false;
+    while (!moveOn) {
+      const response = await makeRequest(picked.key);
+      if (!response) {
+        tried.add(picked.index);
+        return { response: null, key: picked.key, attempts: tried.size };
+      }
+      if (response.ok) {
+        tried.add(picked.index);
+        return { response, key: picked.key, attempts: tried.size };
+      }
+      const text = await response.text().catch(() => "");
+      last = replayResponse(response, text);
+      const status = response.status;
+      const window = parseLimitWindow(text);
+      const retryAfterMs =
+        parseRetryAfterHeaderMs(response) ||
+        parseRetryAfterBody(text) ||
+        (status === 429 ? (window === "rpd" || window === "tpd" ? KEY_COOLDOWN_MS : 8_000) : 0);
+      const shortWait =
+        status === 429 &&
+        retryAfterMs > 0 &&
+        retryAfterMs <= 25_000 &&
+        window !== "rpd" &&
+        window !== "tpd";
+      if (shortWait && sameRetries < 2) {
+        sameRetries += 1;
+        console.warn(`[agent] groq 429 ${window || "burst"} wait ${retryAfterMs}ms retry ${sameRetries}`);
+        await sleep(retryAfterMs);
+        continue;
+      }
+      const cycle = status === 429 || status === 401 || status === 403;
+      tried.add(picked.index);
+      if (!cycle || tried.size >= list.length) {
+        return { response: last, key: picked.key, attempts: tried.size };
+      }
+      if (status === 429) {
+        markKeyLimited(picked.key, retryAfterMs || KEY_COOLDOWN_MS);
+      }
+      start = picked.index + 1;
+      moveOn = true;
     }
-    await response.text().catch(() => {});
-    markKeyLimited(picked.key, parseRetryAfterMs(response));
-    start = picked.index + 1;
   }
   return { response: last, key: lastKey, attempts: tried.size };
 }
@@ -358,7 +437,17 @@ export function upstreamErrorCode(status, text) {
   ) {
     return "key_rejected";
   }
-  if (status === 429 || /rate limit|rate_limit|tokens per|too many requests/.test(hint)) {
+  if (isContextOverflow(status, text)) return "context";
+  if (
+    status === 429 ||
+    /rate limit|rate_limit|too many requests|tokens per\s*(min|minute|day)|requests per\s*(min|minute|day)|\btpm\b|\brpm\b|\brpd\b|\btpd\b/.test(
+      hint
+    )
+  ) {
+    const window = parseLimitWindow(text);
+    if (window === "tpm" || window === "rpm" || (status === 429 && window !== "rpd" && window !== "tpd")) {
+      return "key_paused";
+    }
     return "key_limited";
   }
   return "upstream";
@@ -375,10 +464,22 @@ function groqFixSteps() {
 }
 
 export function explainUpstreamError(status, text, extras = {}) {
-  const many = Number(extras.keyCount) > 1;
+  const tried = Number(extras.attempts || extras.keyCount || 1);
+  const many = tried > 1;
   const source = String(extras.source || "");
   const provider = String(extras.provider || "groq");
   const code = upstreamErrorCode(status, text);
+  if (code === "context") {
+    return "This chat is too long for the model. Start a new chat, or ask something shorter.";
+  }
+  if (code === "key_paused") {
+    return provider === "groq"
+      ? [
+          "Groq paused the key for a few seconds. The last reply used a burst of tokens, not the daily chat cap.",
+          "Ask again. If it keeps pausing, wait a minute.",
+        ].join("\n")
+      : "The model host paused this key for a few seconds. Ask again.";
+  }
   if (provider === "groq" && code === "key_rejected") {
     const head = many
       ? "Every saved Groq key was rejected."
@@ -403,7 +504,7 @@ export function explainUpstreamError(status, text, extras = {}) {
       ? "Every saved Groq key hit its free limit."
       : "This Groq account hit its free limit.";
     return [
-      `${head} This model is about 30 chats a minute and 1000 a day, or a token burst.`,
+      `${head} This model is about 30 chats a minute and 1000 a day.`,
       "Limits sit on the Groq login. A second key on the same Groq account does not reset a daily cap.",
       "Wait, add a key from a different Groq login, or switch Model to Gemini in Settings.",
       "If a new key on the same login fixed it, the old one was rejected, not limited. Save that new key.",
