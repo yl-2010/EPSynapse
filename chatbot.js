@@ -23,6 +23,22 @@
   const historyBtns = root.querySelectorAll("[data-edu-chat-history]");
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const LS_CHATS = "epsynapse.chat.threads";
+  const SETUP_GUIDE = [
+    "This box is only for questions. The Groq key goes in Settings, not here.",
+    "",
+    "1. Sign in with Google at the top of the page if you are not already.",
+    "2. Tap the gear in the bottom-left corner.",
+    "3. Tap **Chat key**.",
+    "4. Open [console.groq.com/keys](https://console.groq.com/keys). Sign up with Google. No credit card. Tap Create API Key and copy the value that starts with `gsk_`. Groq shows the full key only once.",
+    "5. Paste it in the API key field. Leave Model on Groq.",
+    "6. Tap **Save key**. Enter also saves. Do not use the School Save button for this.",
+    "7. You should land back on the settings list. Chat key must say Groq, not \"Add a Groq key\".",
+    "8. Close settings. Type a question here. Homework, a class, Canvas, the day. The chat uses the key saved on your Google account.",
+    "",
+    "If you skip Save key, chat will send you back to these steps.",
+  ].join("\n");
+  const READY_GUIDE =
+    "Your Groq key is saved on this account. Ask about a class, Canvas, or the day.";
 
   let messages = [];
   let sessionId = "";
@@ -270,6 +286,40 @@
 
   function signedIn() {
     return document.documentElement.dataset.auth === "in";
+  }
+
+  function hasChatKey() {
+    return (
+      Boolean(localStorage.getItem(LS_KEY)) ||
+      document.documentElement.dataset.modelKeySet === "1"
+    );
+  }
+
+  function syncPlaceholder() {
+    if (!input) return;
+    input.placeholder = hasChatKey()
+      ? "Ask your personal agent…"
+      : "Save a Groq key in Settings first…";
+  }
+
+  function clearGuide() {
+    messagesEl?.querySelector(".yan-chat-turn--guide")?.remove();
+  }
+
+  function paintGuide() {
+    if (!messagesEl || messages.length) return;
+    clearGuide();
+    const turn = document.createElement("div");
+    turn.className = "yan-chat-turn yan-chat-turn--assistant yan-chat-turn--guide";
+    const el = document.createElement("div");
+    el.className = "yan-chat-bubble yan-chat-bubble--assistant";
+    el.dataset.liquidGlass = "rounded";
+    el.dataset.filterId = "lg-edu-chat-guide";
+    writeBubble(el, "assistant", hasChatKey() ? READY_GUIDE : SETUP_GUIDE);
+    turn.appendChild(el);
+    messagesEl.appendChild(turn);
+    scrollChatToEnd(turn);
+    refreshGlass();
   }
 
   function newChatId() {
@@ -685,6 +735,11 @@
 
   function openChat() {
     if (!signedIn() || state() !== "closed") return;
+    if (!messages.length) {
+      paintGuide();
+      setState("panel");
+      return;
+    }
     setState(messages.length || preferPanel ? "panel" : "open");
   }
 
@@ -721,7 +776,8 @@
     writeLocalBag(bag);
     if (input) input.value = "";
     syncComposerSize();
-    setState("open");
+    paintGuide();
+    setState("panel");
   }
 
   async function sendMessage(raw) {
@@ -731,22 +787,15 @@
     }
     const text = String(raw || "").trim();
     if (!text || busy) return;
-    const hasKey =
-      Boolean(localStorage.getItem(LS_KEY)) ||
-      document.documentElement.dataset.modelKeySet === "1";
-    if (!hasKey) {
-      if (state() !== "panel") setState("panel");
-      messages.push({ role: "user", content: text });
-      appendTurn("user", text);
-      appendTurn(
-        "assistant",
-        "Do not paste a key in this chat. Bottom-left gear → Chat key, paste the Groq key, tap Save key, then ask again."
-      );
+    if (!hasChatKey()) {
       if (input) input.value = "";
       syncComposerSize();
+      paintGuide();
+      setState("panel");
       window.__epsynapseOpenChatKey?.();
       return;
     }
+    clearGuide();
     if (state() !== "panel") setState("panel");
     messages.push({ role: "user", content: text });
     appendTurn("user", text);
@@ -901,5 +950,12 @@
   sessionId = readLocalBag().currentId || "";
   if (messages.length && !sessionId) sessionId = newChatId();
   paintSavedChat();
+  syncPlaceholder();
+  window.__epsynapseRefreshChatGuide = () => {
+    syncPlaceholder();
+    if (!messages.length && (state() === "panel" || messagesEl?.querySelector(".yan-chat-turn--guide"))) {
+      paintGuide();
+    }
+  };
   setState("closed", { skipFocus: true });
 })();

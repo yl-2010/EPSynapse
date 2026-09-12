@@ -3327,6 +3327,26 @@ html[data-auth="in"] #stage-out {
   color: var(--muted);
 }
 
+.set-steps {
+  margin: 0 0 0.85rem;
+  padding-left: 1.2rem;
+  font-size: var(--text-footnote);
+  line-height: 1.45;
+  color: var(--fg);
+}
+
+.set-steps li {
+  margin: 0 0 0.42rem;
+}
+
+.set-steps a {
+  color: var(--accent);
+}
+
+.set-steps[hidden] {
+  display: none !important;
+}
+
 .set-hint,
 .edu-sheet--set .edu-empty {
   margin: 0;

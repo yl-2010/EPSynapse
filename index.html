@@ -18,7 +18,7 @@
     <title>EPSynapse</title>
     <meta name="description" content="EPSynapse student dashboard" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/styles.css?v=glass26" />
+    <link rel="stylesheet" href="/styles.css?v=glass27" />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
       .od-code {
@@ -397,6 +397,17 @@
             </button>
           </div>
           <div class="edu-sheet-body">
+            <ol class="set-steps" id="key-steps">
+              <li>Sign in with Google on this page if you have not already.</li>
+              <li>
+                Get a free Groq key at
+                <a href="https://console.groq.com/keys" rel="noopener noreferrer">console.groq.com/keys</a>.
+                Sign up with Google. No credit card. Create API Key, then copy the value that starts with gsk_. Groq shows it only once.
+              </li>
+              <li>Paste it in the API key field below. Leave Model on Groq.</li>
+              <li>Tap Save key. Enter also saves. Do not use the School Save button for this.</li>
+              <li>Chat key on the settings list must say Groq. Then close settings and ask in the chat pill. Do not paste the key in chat.</li>
+            </ol>
             <div id="key-ready" hidden>
               <div class="set-row">
                 <p class="set-ready" id="key-ready-label"></p>
@@ -513,8 +524,8 @@
 
     <script src="/liquid-glass.js?v=glass13"></script>
     <script src="/theme-orb.js?v=glass12"></script>
-    <script src="/app.js?v=glass25"></script>
+    <script src="/app.js?v=glass26"></script>
     <script src="/markdown.js?v=1"></script>
-    <script src="/chatbot.js?v=glass17"></script>
+    <script src="/chatbot.js?v=glass18"></script>
   </body>
 </html>

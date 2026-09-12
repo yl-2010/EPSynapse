@@ -73,7 +73,7 @@ export function publicAgentConfig() {
 }
 
 export const MISSING_KEY_ERROR =
-  "Do not paste a key in this chat. Open Settings (bottom-left gear) → Chat key, then paste a free Groq key from console.groq.com/keys and save.";
+  "Do not paste a key in this chat. Sign in with Google, tap the bottom-left gear, open Chat key, paste a free gsk_ key from console.groq.com/keys, tap Save key, wait until Chat key says Groq, then ask here.";
 
 export function resolveApiKey(req, providerId, student) {
   const header = req.get("authorization") || "";

@@ -228,6 +228,13 @@ struct SettingsSheet: View {
 
     private var agentSection: some View {
         settingsGroup("Agent") {
+            if session.profile?.modelKeySet != true, session.modelKey.isEmpty {
+                Text(SessionStore.setupGuide)
+                    .font(.footnote)
+                    .foregroundStyle(EPSTheme.fg)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.bottom, 6)
+            }
             fieldLabel("Model")
             glassField {
                 Picker("Model", selection: $session.provider) {

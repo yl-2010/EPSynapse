@@ -438,6 +438,7 @@
     document.documentElement.dataset.modelProvider = providerSel.value || id;
     document.documentElement.dataset.modelKeySet = accountHasKey() ? "1" : "";
     refreshKeyStatus();
+    window.__epsynapseRefreshChatGuide?.();
   }
 
   async function saveChatKey() {
@@ -1297,6 +1298,8 @@
       readyLabel.textContent = hasKey ? id : "";
     }
     paintKeysSummary();
+    const steps = document.getElementById("key-steps");
+    if (steps) steps.hidden = hasKey && !replacing;
     if (hasKey && !replacing) {
       setStatus(keyStatus, "");
       return;
@@ -1308,7 +1311,7 @@
     setStatus(
       keyStatus,
       signedInViaGoogle()
-        ? "Paste the Groq key here and tap Save key. Enter also saves. Then go back to chat."
+        ? "Paste the gsk_ key here, tap Save key, wait until Chat key says Groq, then ask in the pill."
         : ""
     );
   }
