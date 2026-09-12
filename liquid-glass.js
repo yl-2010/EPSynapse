@@ -343,11 +343,16 @@
   let glowRaf = 0;
 
   function isTextContentBox(el) {
+    const list = el.classList;
     return !!(
-      el.closest &&
-      el.closest(
-        ".edu-sheet, .edu-sheet-field, .edu-sheet-btn, .edu-sheet-close, .edu-sheet-head, .edu-panel, .edu-file-tile"
-      )
+      list &&
+      (list.contains("edu-sheet") ||
+        list.contains("edu-sheet-field") ||
+        list.contains("edu-sheet-btn") ||
+        list.contains("edu-sheet-close") ||
+        list.contains("edu-sheet-head") ||
+        list.contains("edu-panel") ||
+        list.contains("edu-file-tile"))
     );
   }
 
