@@ -223,6 +223,159 @@
     return { body: body.join("\n"), defs };
   }
 
+  const MATH_PH = "\uE000";
+  const MATH_END = "\uE001";
+
+  function katexApi() {
+    if (typeof window !== "undefined" && window.katex) return window.katex;
+    if (typeof katex !== "undefined") return katex;
+    return null;
+  }
+
+  function mathHtml(item) {
+    const tex = String(item.tex || "").trim();
+    const display = !!item.display;
+    const api = katexApi();
+    if (api && typeof api.renderToString === "function") {
+      try {
+        const inner = api.renderToString(tex, {
+          displayMode: display,
+          throwOnError: false,
+          output: "html",
+          trust: false,
+          strict: "ignore",
+        });
+        if (display) {
+          return `<div class="md-math md-math--display">${inner}</div>`;
+        }
+        return `<span class="md-math md-math--inline">${inner}</span>`;
+      } catch {
+        /* keep raw */
+      }
+    }
+    const cls = display
+      ? "md-math md-math--display md-math--pending"
+      : "md-math md-math--inline md-math--pending";
+    const tag = display ? "div" : "span";
+    return `<${tag} class="${cls}" data-md-tex="${escapeHtml(tex)}" data-md-display="${
+      display ? "1" : "0"
+    }">${escapeHtml(tex)}</${tag}>`;
+  }
+
+  function extractInlineDollars(s, hold) {
+    let out = "";
+    let i = 0;
+    const n = s.length;
+    while (i < n) {
+      if (s[i] !== "$") {
+        out += s[i];
+        i += 1;
+        continue;
+      }
+      const prev = i > 0 ? s[i - 1] : "";
+      const next = s[i + 1] || "";
+      if (/\d/.test(prev) || next === " " || next === "\n" || !next) {
+        out += "$";
+        i += 1;
+        continue;
+      }
+      let j = i + 1;
+      let found = -1;
+      while (j < n && s[j] !== "\n") {
+        if (s[j] === "$") {
+          const before = s[j - 1];
+          if (before !== " " && before !== "\t") {
+            found = j;
+          }
+          break;
+        }
+        j += 1;
+      }
+      if (found < 0) {
+        out += "$";
+        i += 1;
+        continue;
+      }
+      const tex = s.slice(i + 1, found);
+      if (!tex.trim()) {
+        out += "$";
+        i += 1;
+        continue;
+      }
+      out += hold(tex, false);
+      i = found + 1;
+    }
+    return out;
+  }
+
+  function extractMath(src) {
+    const stash = [];
+    const hold = (tex, display) => {
+      const key = `${MATH_PH}${stash.length}${MATH_END}`;
+      stash.push({ tex: String(tex), display: !!display });
+      return key;
+    };
+
+    const fences = [];
+    let s = String(src).replace(/(^|\n)(```[\s\S]*?```)/g, (_, lead, block) => {
+      fences.push(block);
+      return `${lead}\uE010${fences.length - 1}\uE011`;
+    });
+
+    const codes = [];
+    s = s.replace(/`([^`]+)`/g, (_, code) => {
+      codes.push(code);
+      return `\uE012${codes.length - 1}\uE013`;
+    });
+
+    s = s.replace(/\$\$([\s\S]+?)\$\$/g, (_, tex) => hold(tex, true));
+    s = s.replace(/\\\[([\s\S]+?)\\\]/g, (_, tex) => hold(tex, true));
+    s = s.replace(
+      /\\begin\{((?:equation|align|gather|multline|eqnarray)\*?)\}([\s\S]+?)\\end\{\1\}/g,
+      (full) => hold(full, true)
+    );
+    s = s.replace(/\\\(([\s\S]+?)\\\)/g, (_, tex) => hold(tex, false));
+    s = extractInlineDollars(s, hold);
+
+    s = s.replace(/\uE012(\d+)\uE013/g, (_, n) => `\`${codes[Number(n)]}\``);
+    s = s.replace(/\uE010(\d+)\uE011/g, (_, n) => fences[Number(n)] || "");
+    return { text: s, stash };
+  }
+
+  function restoreMath(html, stash) {
+    let out = String(html);
+    stash.forEach((item, i) => {
+      const ph = `${MATH_PH}${i}${MATH_END}`;
+      const rendered = mathHtml(item);
+      if (item.display) {
+        out = out.split(`<p>${ph}</p>`).join(rendered);
+      }
+      out = out.split(ph).join(rendered);
+    });
+    return out;
+  }
+
+  function typeset(root) {
+    const api = katexApi();
+    if (!api || !root || typeof root.querySelectorAll !== "function") return;
+    root.querySelectorAll(".md-math--pending").forEach((el) => {
+      const tex = el.getAttribute("data-md-tex") || el.textContent || "";
+      const display = el.getAttribute("data-md-display") === "1";
+      try {
+        el.innerHTML = api.renderToString(tex, {
+          displayMode: display,
+          throwOnError: false,
+          output: "html",
+          trust: false,
+          strict: "ignore",
+        });
+        el.classList.remove("md-math--pending");
+      } catch {
+        /* keep raw tex */
+      }
+    });
+  }
+
   function renderBlocks(src, ctx) {
     const lines = String(src).split("\n");
     const out = [];
@@ -335,7 +488,8 @@
   function render(source) {
     const src = String(source ?? "").replace(/\r\n/g, "\n");
     if (!src.trim()) return "";
-    const extracted = extractFootnotes(src);
+    const math = extractMath(src);
+    const extracted = extractFootnotes(math.text);
     const ctx = {
       footnoteOrder: [],
       footnoteIds: new Set(extracted.defs.keys()),
@@ -350,8 +504,8 @@
         .join("");
       html += `<ol class="md-footnotes">${items}</ol>`;
     }
-    return html;
+    return restoreMath(html, math.stash);
   }
 
-  return { render, escapeHtml };
+  return { render, escapeHtml, typeset };
 });

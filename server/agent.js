@@ -12,7 +12,7 @@ export const SYSTEM_PROMPT = [
   "If they want mail sent, tell them to use the Mail panel Send button. You cannot send from chat.",
   "If there is no snapshot, say you do not have live school data yet.",
   "If they ask you to remember something, work only with what is already in this conversation.",
-  "Write the bubble in markdown: headings, lists, bold, italics, code, tables. Never HTML tags or markdown images.",
+  "Write the bubble in markdown: headings, lists, bold, italics, code, tables. For math use LaTeX: $inline$ and $$display$$, or \\(inline\\) and \\[display\\]. Never HTML tags or markdown images.",
 ].join(" ");
 
 export const PROVIDERS = {

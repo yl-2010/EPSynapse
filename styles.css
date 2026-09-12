@@ -1518,6 +1518,43 @@ html[data-resolved-theme="light"] .edu-filter.is-on {
   height: auto;
   border-radius: 8px;
 }
+.md-body .katex {
+  color: inherit;
+  font-size: 1.18em;
+}
+.md-body .md-math--inline {
+  display: inline-block;
+  vertical-align: middle;
+  padding: 0 0.08em;
+}
+.md-body .md-math--display {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  margin: 0.85em 0;
+  padding: 0.95em 0.85em;
+  overflow-x: auto;
+  overflow-y: hidden;
+  text-align: center;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  border-radius: 14px;
+  line-height: 1.55;
+}
+.md-body .md-math--display .katex {
+  font-size: 1.42em;
+}
+.md-body .md-math--display .katex-display {
+  margin: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.md-body .md-math--pending {
+  font-family: ui-serif, "Times New Roman", Times, serif;
+  font-style: italic;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 
 .edu-briefing-status,
 .edu-capsule-panel {
