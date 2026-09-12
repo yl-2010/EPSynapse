@@ -29,22 +29,22 @@
 			<string>com.jype.epsynapse.google</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.googleusercontent.apps.REPLACE_ME</string>
+				<string>com.googleusercontent.apps.873841837124-ocu4kaka0t0j6fbsur11s4ajde8ha5u1</string>
 			</array>
 		</dict>
 	</array>
 	<key>EPSApiBaseURL</key>
 	<string>https://api.epsynapse.com</string>
 	<key>EPSGoogleiOSClientID</key>
-	<string></string>
+	<string>873841837124-ocu4kaka0t0j6fbsur11s4ajde8ha5u1.apps.googleusercontent.com</string>
 	<key>EPSGoogleReversedClientID</key>
-	<string>com.googleusercontent.apps.REPLACE_ME</string>
+	<string>com.googleusercontent.apps.873841837124-ocu4kaka0t0j6fbsur11s4ajde8ha5u1</string>
 	<key>EPSLocalApiBaseURL</key>
 	<string>http://127.0.0.1:3006</string>
 	<key>GIDClientID</key>
-	<string></string>
+	<string>873841837124-ocu4kaka0t0j6fbsur11s4ajde8ha5u1.apps.googleusercontent.com</string>
 	<key>GIDServerClientID</key>
-	<string></string>
+	<string>873841837124-i6id79rarolm7ii4aima4fojotghk2r5.apps.googleusercontent.com</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>LSApplicationQueriesSchemes</key>

@@ -70,17 +70,17 @@ targets:
         LSApplicationQueriesSchemes:
           - canvas-courses
           - google
-        GIDClientID: ""
-        GIDServerClientID: ""
-        EPSGoogleiOSClientID: ""
-        EPSGoogleReversedClientID: com.googleusercontent.apps.REPLACE_ME
+        GIDClientID: 873841837124-ocu4kaka0t0j6fbsur11s4ajde8ha5u1.apps.googleusercontent.com
+        GIDServerClientID: 873841837124-i6id79rarolm7ii4aima4fojotghk2r5.apps.googleusercontent.com
+        EPSGoogleiOSClientID: 873841837124-ocu4kaka0t0j6fbsur11s4ajde8ha5u1.apps.googleusercontent.com
+        EPSGoogleReversedClientID: com.googleusercontent.apps.873841837124-ocu4kaka0t0j6fbsur11s4ajde8ha5u1
         EPSApiBaseURL: https://api.epsynapse.com
         EPSLocalApiBaseURL: http://127.0.0.1:3006
         CFBundleURLTypes:
           - CFBundleTypeRole: Editor
             CFBundleURLName: com.jype.epsynapse.google
             CFBundleURLSchemes:
-              - com.googleusercontent.apps.REPLACE_ME
+              - com.googleusercontent.apps.873841837124-ocu4kaka0t0j6fbsur11s4ajde8ha5u1
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
