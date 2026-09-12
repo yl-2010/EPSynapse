@@ -181,6 +181,37 @@
     return (event ? "data: " + event + "\n" : "") + rest;
   }
 
+  function renderBubbleHtml(text) {
+    const raw = String(text ?? "");
+    if (window.EPSMarkdown && typeof window.EPSMarkdown.render === "function") {
+      return window.EPSMarkdown.render(raw);
+    }
+    if (window.EPSMarkdown && typeof window.EPSMarkdown.escapeHtml === "function") {
+      return window.EPSMarkdown.escapeHtml(raw);
+    }
+    return raw
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function writeBubble(el, role, text) {
+    const value = text || "";
+    if (role === "assistant") {
+      el.classList.add("md-body");
+      el.innerHTML = renderBubbleHtml(value);
+      return;
+    }
+    let inner = el.querySelector(".yan-chat-bubble-in");
+    if (!inner) {
+      inner = document.createElement("span");
+      inner.className = "yan-chat-bubble-in";
+      el.appendChild(inner);
+    }
+    inner.textContent = value;
+  }
+
   function appendTurn(role, text, thinking) {
     const turn = document.createElement("div");
     turn.className = "yan-chat-turn yan-chat-turn--" + role;
@@ -196,15 +227,14 @@
     el.className = "yan-chat-bubble yan-chat-bubble--" + role;
     el.dataset.liquidGlass = "rounded";
     el.dataset.filterId = "lg-edu-chat-b-" + ++bubbleSeq;
-    const inner = document.createElement("span");
-    inner.className = "yan-chat-bubble-in";
-    inner.textContent = text || "";
-    el.appendChild(inner);
+    writeBubble(el, role, text || "");
     turn.appendChild(el);
     messagesEl.appendChild(turn);
     el.scrollIntoView({ block: "end" });
     refreshGlass();
-    return { body: inner, think: thinking !== undefined ? turn.firstChild : null };
+    const body =
+      role === "assistant" ? el : el.querySelector(".yan-chat-bubble-in") || el;
+    return { body, think: thinking !== undefined ? turn.firstChild : null };
   }
 
   function signedIn() {
@@ -702,7 +732,7 @@
         } catch {
           /* empty */
         }
-        slot.body.textContent = errBody.error || "Chat failed.";
+        writeBubble(slot.body, "assistant", errBody.error || "Chat failed.");
         if (slot.think) slot.think.remove();
         messages.pop();
         return;
@@ -724,7 +754,7 @@
           }
           if (delta.content) {
             answer += delta.content;
-            slot.body.textContent = answer;
+            writeBubble(slot.body, "assistant", answer);
           }
         });
       }
@@ -735,21 +765,21 @@
         }
         if (delta.content) {
           answer += delta.content;
-          slot.body.textContent = answer;
+          writeBubble(slot.body, "assistant", answer);
         }
       });
       if (!answer && thought) {
         answer = thought;
         thought = "";
-        slot.body.textContent = answer;
+        writeBubble(slot.body, "assistant", answer);
       }
       if (!thought && slot.think) slot.think.remove();
-      if (!answer) slot.body.textContent = "The model returned an empty reply.";
+      if (!answer) writeBubble(slot.body, "assistant", "The model returned an empty reply.");
       messages.push({ role: "assistant", content: answer || "" });
       saveChat();
       await persistThread();
     } catch {
-      slot.body.textContent = "Could not reach api.epsynapse.com.";
+      writeBubble(slot.body, "assistant", "Could not reach api.epsynapse.com.");
       if (slot.think) slot.think.remove();
       messages.pop();
     } finally {
