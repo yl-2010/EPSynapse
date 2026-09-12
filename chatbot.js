@@ -254,23 +254,14 @@
 
   function writeBubble(el, role, text) {
     const value = text || "";
-    if (role === "assistant") {
-      el.hidden = !value;
-      el.classList.add("md-body");
-      el.innerHTML = renderBubbleHtml(value);
-      scrollChatToEnd(el.parentElement);
-      refreshGlassSoon();
-      return;
+    el.hidden = role === "assistant" ? !value : false;
+    el.classList.add("md-body");
+    el.innerHTML = renderBubbleHtml(value);
+    if (window.EPSMarkdown && typeof window.EPSMarkdown.typeset === "function") {
+      window.EPSMarkdown.typeset(el);
     }
-    el.hidden = false;
-    let inner = el.querySelector(".yan-chat-bubble-in");
-    if (!inner) {
-      inner = document.createElement("span");
-      inner.className = "yan-chat-bubble-in";
-      el.appendChild(inner);
-    }
-    inner.textContent = value;
     scrollChatToEnd(el.parentElement);
+    refreshGlassSoon();
   }
 
   function appendTurn(role, text, thinking) {
