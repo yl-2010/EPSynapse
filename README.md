@@ -1,24 +1,29 @@
-# JYPE
+# EPSynapse
 
-Jeffery Xu, Yan Levin, Prasham Dhruva, Everette Deng.
+School polling for Eastside Prep first. Students answer short surveys. Adults get counts, not a pile of raw comments.
 
-Frontier Cascadia, 12 September 2026, Founders Hall, UW.
+JYPE is Jeffery Xu, Yan Levin, Prasham Dhruva, and Everette Deng. Frontier Cascadia, 12 September 2026, Founders Hall, UW.
 
-Live site: [epsynapse.com](https://epsynapse.com). Mac API: [api.epsynapse.com](https://api.epsynapse.com/health).
+Live site: [epsynapse.com](https://epsynapse.com)
+API health: [api.epsynapse.com/health](https://api.epsynapse.com/health)
 
-[Ideas](ideas.md) is the planning file. EPSurvey / EPSynapse is the locked product. Agents read [AGENTS.md](AGENTS.md). Startup: [docs/STARTUP.md](docs/STARTUP.md).
+What we are building lives in [ideas.md](ideas.md). Agents follow [AGENTS.md](AGENTS.md). Mac API startup is [docs/STARTUP.md](docs/STARTUP.md).
 
-Until today this repo was text only. README names, a gitignore, ideas, and a setup chat so Jeffery could clone. The "was here" lines stay below.
+## Run locally
+
+```bash
+npm run server
+```
+
+Express listens on port 3006. Static preview of the site:
+
+```bash
+python3 -m http.server 8080
+```
+
+`git push` updates GitHub only. The live site ships with `npm run deploy:web`.
 
 Yan was here
 Prasham was here
 Everette was here
 Everette has officially contributed to this README on 2026-08-29
-
-Still Fresh Vote Mahesh
-
-
-
-test 
-
-Yan testing commit from Cursor 2026-09-11

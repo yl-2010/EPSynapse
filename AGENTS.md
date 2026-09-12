@@ -96,7 +96,7 @@ Do not open a PR to "get the work in". Push `main`.
 
 ## What we are building
 
-Locked product name is EPSynapse. Domain is `epsynapse.com`. School polling first (EPS / Eastside Prep), then the wider school-data idea. Planning still lives in [`ideas.md`](ideas.md). Older names in that file (EPSurvey and the other candidates) are history.
+Locked product name is EPSynapse. Domain is `epsynapse.com`. School polling first (EPS / Eastside Prep), then the wider school-data idea. Product notes live in [`ideas.md`](ideas.md).
 
 Until Sep 12 this repo was text only: a README for the four of us, a `.gitignore`, `ideas.md`, and a setup chat so Jeffery could clone. People left "was here" lines in the README. No app, no host, no tunnel. The site and Mac API started the morning of the hackathon.
 
@@ -115,7 +115,7 @@ Public API health: https://api.epsynapse.com/health
 | `docs/` | How to start, tunnel, local API. Not shipped to Vercel. |
 | `deploy/cloudflared/` | Tunnel notes and setup script. Credentials stay in `~/.cloudflared/`. |
 | `deploy/launchagents/` | `com.jype.server` and `com.jype.cloudflared` plists. |
-| `ideas.md` | Planning file. Product candidates and the locked EPSynapse / EPSurvey pitch. |
+| `ideas.md` | EPSynapse product notes. LPC, EBC, classes, teacher rankings. |
 | `.cursor/` | Local Cursor notes. Not the site. |
 
 ## Architecture
