@@ -35,6 +35,7 @@ import {
   uploadFile,
   WRITE_FOLDER,
 } from "./onedrive.js";
+import { publicGoogleConfig, verifyIdToken } from "./google.js";
 import {
   acceptPastedToken as acceptOutlookToken,
   ensureFreshToken as ensureOutlookToken,
@@ -47,17 +48,27 @@ import {
   startDeviceCode as startOutlookCode,
 } from "./outlook.js";
 import {
+  getSchool,
+  listSchools,
+  lookupRosterName,
+  publicSchool,
+  resolveSchool,
+  setRoster,
+} from "./schools.js";
+import {
   clearSessionCookie,
   createSession,
   destroySession,
+  googleFileId,
   mergeGraph,
   mergeOutlook,
   publicProfile,
-  safeFileId,
   saveStudent,
+  sessionIdFromRequest,
   setSessionCookie,
   studentFromRequest,
-  upsertStudent,
+  updateStudentProfile,
+  upsertGoogleStudent,
 } from "./students.js";
 
 const PORT = Number(process.env.PORT || 3006);
@@ -94,7 +105,7 @@ async function requireStudent(req, res) {
   const student = await studentFromRequest(req);
   if (!student) {
     res.status(401).json({
-      error: "Open settings and save your school and student ID first.",
+      error: "Sign in with Google first.",
     });
     return null;
   }
@@ -203,6 +214,65 @@ app.get("/health", (_req, res) => {
   });
 });
 
+app.get("/v1/auth/google/config", (_req, res) => {
+  res.json(publicGoogleConfig());
+});
+
+app.post("/v1/auth/google", async (req, res) => {
+  try {
+    const claims = await verifyIdToken(req.body?.idToken);
+    const student = await upsertGoogleStudent({
+      googleSub: claims.sub,
+      email: claims.email,
+      googleName: claims.name,
+      picture: claims.picture,
+    });
+    const sid = createSession(googleFileId(student.googleSub));
+    return sessionJson(req, res, student, sid);
+  } catch (err) {
+    return fail(res, err, err.status || 401);
+  }
+});
+
+app.get("/v1/schools", async (req, res) => {
+  try {
+    const schools = await listSchools(req.query.q);
+    return res.json({ schools });
+  } catch (err) {
+    return fail(res, err);
+  }
+});
+
+app.get("/v1/schools/:slug", async (req, res) => {
+  try {
+    const school = await getSchool(req.params.slug);
+    if (!school) return res.status(404).json({ error: "School not found." });
+    return res.json(publicSchool(school));
+  } catch (err) {
+    return fail(res, err, 404);
+  }
+});
+
+app.post("/v1/admin/schools/:slug/roster", async (req, res) => {
+  const key = String(process.env.ADMIN_KEY || "").trim();
+  if (!key) {
+    return res.status(503).json({ error: "Admin key is not configured." });
+  }
+  const header = String(req.get("authorization") || "");
+  const token = header.toLowerCase().startsWith("bearer ")
+    ? header.slice(7).trim()
+    : "";
+  if (!token || token !== key) {
+    return res.status(401).json({ error: "Bad admin key." });
+  }
+  try {
+    const school = await setRoster(req.params.slug, req.body?.students);
+    return res.json(publicSchool(school));
+  } catch (err) {
+    return fail(res, err, err.status || 400);
+  }
+});
+
 app.get("/v1/me", async (req, res) => {
   try {
     const student = await studentFromRequest(req);
@@ -217,29 +287,45 @@ app.get("/v1/me", async (req, res) => {
 
 app.post("/v1/me", async (req, res) => {
   try {
-    const school = String(req.body?.school || "Eastside Prep").trim();
-    const studentId = String(req.body?.studentId || "").trim();
-    const canvasHost = req.body?.canvasHost
-      ? normalizeHost(req.body.canvasHost)
-      : undefined;
-    const pasted = String(req.body?.canvasToken || "").trim();
-    const canvasToken = pasted || undefined;
-
-    let displayName;
-    if (canvasToken) {
-      const self = await validateToken(canvasHost || "", canvasToken);
-      displayName = self.displayName;
+    const student = await studentFromRequest(req);
+    if (!student) {
+      return res.status(401).json({ error: "Sign in with Google first." });
     }
 
-    const student = await upsertStudent({
-      school,
-      studentId,
-      canvasHost,
-      canvasToken,
-      displayName,
-    });
-    const sid = createSession(safeFileId(student.school, student.studentId));
-    return sessionJson(req, res, student, sid);
+    const patch = {};
+    if (req.body?.school !== undefined) patch.school = req.body.school;
+    if (req.body?.studentId !== undefined) patch.studentId = req.body.studentId;
+    if (req.body?.canvasHost) patch.canvasHost = normalizeHost(req.body.canvasHost);
+
+    const pasted = String(req.body?.canvasToken || "").trim();
+    if (pasted) {
+      const self = await validateToken(patch.canvasHost || student.canvasHost, pasted);
+      patch.canvasToken = pasted;
+      if (self.displayName) patch.displayName = self.displayName;
+    }
+
+    let updated = await updateStudentProfile(student, patch);
+    const schoolChanged =
+      req.body?.school !== undefined || req.body?.studentId !== undefined;
+
+    if (updated.school && updated.studentId) {
+      const school = await resolveSchool(updated.school);
+      const rosterName = school
+        ? await lookupRosterName(school.slug, updated.studentId)
+        : "";
+      updated = await updateStudentProfile(updated, {
+        rosterName,
+        rosterMatched: Boolean(rosterName),
+        displayName: rosterName || updated.displayName || updated.googleName,
+      });
+    } else if (schoolChanged) {
+      updated = await updateStudentProfile(updated, {
+        rosterName: "",
+        rosterMatched: false,
+      });
+    }
+
+    return sessionJson(req, res, updated, sessionIdFromRequest(req));
   } catch (err) {
     return fail(res, err, err.status || 400);
   }

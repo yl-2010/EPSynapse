@@ -1,6 +1,7 @@
 /**
- * Honor-system student profiles and session cookies.
- * School + student ID. Tokens stay on disk, never in publicProfile().
+ * Google-account student profiles and session cookies.
+ * File id is google__{sub}. School + student ID are optional settings.
+ * Tokens stay on disk, never in publicProfile().
  */
 
 import { randomBytes } from "node:crypto";
@@ -55,9 +56,9 @@ function emptyOutlook() {
   };
 }
 
-function normalizeSchool(raw) {
+export function normalizeSchool(raw) {
   const school = String(raw ?? "").trim().replace(/\s+/g, " ");
-  if (!school) throw new Error("School is required.");
+  if (!school) return "";
   if (school.length > MAX_LEN) throw new Error("School is too long.");
   if (/[/\\\0]/.test(school)) throw new Error("Invalid school.");
   return school;
@@ -65,7 +66,7 @@ function normalizeSchool(raw) {
 
 export function normalizeStudentId(raw) {
   const id = String(raw ?? "").trim().replace(/\s+/g, " ");
-  if (!id) throw new Error("Student id is required.");
+  if (!id) return "";
   if (id.length > MAX_LEN) throw new Error("Student id is too long.");
   if (!ID_CHARS.test(id)) throw new Error("Invalid student id.");
   return id;
@@ -82,6 +83,10 @@ function slugPart(value) {
 
 export function safeFileId(school, studentId) {
   return `${slugPart(normalizeSchool(school))}__${slugPart(normalizeStudentId(studentId))}`;
+}
+
+export function googleFileId(googleSub) {
+  return `google__${slugPart(String(googleSub || "").trim())}`;
 }
 
 function assertFileId(fileId) {
@@ -112,6 +117,12 @@ function hydrate(raw) {
   const graph = src.graph && typeof src.graph === "object" ? src.graph : {};
   const outlook = src.outlook && typeof src.outlook === "object" ? src.outlook : {};
   return {
+    googleSub: String(src.googleSub || ""),
+    email: String(src.email || ""),
+    googleName: String(src.googleName || ""),
+    picture: String(src.picture || ""),
+    rosterName: String(src.rosterName || ""),
+    rosterMatched: Boolean(src.rosterMatched),
     school: String(src.school || ""),
     studentId: String(src.studentId || ""),
     canvasHost: String(src.canvasHost || DEFAULT_CANVAS_HOST),
@@ -156,8 +167,13 @@ function publicPending(pending) {
 export function publicProfile(student) {
   const s = hydrate(student);
   return {
+    email: s.email,
+    googleName: s.googleName,
+    picture: s.picture,
     school: s.school,
     studentId: s.studentId,
+    rosterName: s.rosterName,
+    rosterMatched: s.rosterMatched,
     canvasHost: s.canvasHost,
     displayName: s.displayName,
     canvasConnected: Boolean(s.canvasToken),
@@ -206,28 +222,37 @@ export async function loadStudent(school, studentId) {
 
 export async function saveStudent(student) {
   const s = hydrate(student);
+  if (!s.googleSub) throw new Error("Google account is required.");
   s.school = normalizeSchool(s.school);
   s.studentId = normalizeStudentId(s.studentId);
   if (!s.createdAt) s.createdAt = new Date().toISOString();
   if (!s.updatedAt) s.updatedAt = s.createdAt;
-  await writeJsonAtomic(studentPath(safeFileId(s.school, s.studentId)), s);
+  await writeJsonAtomic(studentPath(googleFileId(s.googleSub)), s);
   return s;
 }
 
-export async function upsertStudent({
-  school,
-  studentId,
-  canvasHost,
-  canvasToken,
-  displayName,
-}) {
-  const sch = normalizeSchool(school);
-  const sid = normalizeStudentId(studentId);
+export async function loadStudentByGoogleSub(sub) {
+  try {
+    return await loadStudentByFileId(googleFileId(sub));
+  } catch {
+    return null;
+  }
+}
+
+export async function upsertGoogleStudent({ googleSub, email, googleName, picture }) {
+  const sub = String(googleSub ?? "").trim();
+  if (!sub) throw new Error("Google account is missing.");
   const now = new Date().toISOString();
-  const existing = await loadStudent(sch, sid);
+  const existing = await loadStudentByGoogleSub(sub);
   const student = existing ?? {
-    school: sch,
-    studentId: sid,
+    googleSub: sub,
+    email: "",
+    googleName: "",
+    picture: "",
+    rosterName: "",
+    rosterMatched: false,
+    school: "",
+    studentId: "",
     canvasHost: DEFAULT_CANVAS_HOST,
     canvasToken: "",
     displayName: "",
@@ -236,18 +261,41 @@ export async function upsertStudent({
     createdAt: now,
     updatedAt: now,
   };
-  student.school = sch;
-  student.studentId = sid;
-  if (canvasHost !== undefined) {
-    const host = String(canvasHost).trim();
-    student.canvasHost = host || DEFAULT_CANVAS_HOST;
+  student.googleSub = sub;
+  student.email = String(email || "").trim();
+  student.googleName = String(googleName || "").trim();
+  student.picture = String(picture || "").trim();
+  if (student.rosterMatched && student.rosterName) {
+    student.displayName = student.rosterName;
+  } else if (!student.displayName) {
+    student.displayName = student.googleName;
   }
-  if (canvasToken !== undefined) student.canvasToken = String(canvasToken);
-  if (displayName !== undefined) student.displayName = String(displayName).trim();
   student.updatedAt = now;
   if (!student.graph) student.graph = emptyGraph();
   if (!student.outlook) student.outlook = emptyOutlook();
   return saveStudent(student);
+}
+
+export async function updateStudentProfile(student, patch) {
+  const s = hydrate(student);
+  const src = patch && typeof patch === "object" ? patch : {};
+  if (src.school !== undefined) s.school = normalizeSchool(src.school);
+  if (src.studentId !== undefined) s.studentId = normalizeStudentId(src.studentId);
+  if (src.canvasHost !== undefined) {
+    const host = String(src.canvasHost).trim();
+    s.canvasHost = host || DEFAULT_CANVAS_HOST;
+  }
+  if (src.canvasToken !== undefined) s.canvasToken = String(src.canvasToken);
+  if (src.displayName !== undefined) {
+    const name = String(src.displayName).trim();
+    if (name) s.displayName = name;
+  }
+  if (src.rosterName !== undefined) s.rosterName = String(src.rosterName).trim();
+  if (src.rosterMatched !== undefined) s.rosterMatched = Boolean(src.rosterMatched);
+  if (s.rosterMatched && s.rosterName) s.displayName = s.rosterName;
+  else if (!s.displayName) s.displayName = s.googleName;
+  s.updatedAt = new Date().toISOString();
+  return saveStudent(s);
 }
 
 async function loadSessions() {
@@ -310,7 +358,7 @@ function cookieMap(req) {
   return map;
 }
 
-function sessionIdFromRequest(req) {
+export function sessionIdFromRequest(req) {
   const fromCookie = cookieMap(req).get(COOKIE);
   if (fromCookie) return String(fromCookie).trim();
   const fromHeader =
