@@ -1,10 +1,14 @@
 # JYPE
 
-Shared repo for Jeffery Xu, Yan Levin, Prasham Dhruva, and Everette Deng.
+Jeffery Xu, Yan Levin, Prasham Dhruva, Everette Deng.
 
-[Ideas](ideas.md) — Frontier Cascadia project concepts.
+Frontier Cascadia, 12 September 2026, Founders Hall, UW.
 
-Nothing else lives here yet.
+Live site: [epsynapse.com](https://epsynapse.com). Mac API: [api.epsynapse.com](https://api.epsynapse.com/health).
+
+[Ideas](ideas.md) is the planning file. EPSurvey / EPSynapse is the locked product. Agents read [AGENTS.md](AGENTS.md). Startup: [docs/STARTUP.md](docs/STARTUP.md).
+
+Until today this repo was text only. README names, a gitignore, ideas, and a setup chat so Jeffery could clone. The "was here" lines stay below.
 
 Yan was here
 Prasham was here

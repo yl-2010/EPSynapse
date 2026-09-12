@@ -26,3 +26,13 @@ ehthumbs_vista.db
 [Dd]esktop.ini
 $RECYCLE.BIN/
 *.lnk
+
+# Node / Vercel / local secrets
+node_modules/
+server/node_modules/
+.vercel
+.env
+.env.local
+.env.*.local
+server/.env
+*.log

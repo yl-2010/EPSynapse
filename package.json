@@ -1,0 +1,15 @@
+{
+  "name": "jype",
+  "private": true,
+  "version": "0.1.0",
+  "description": "JYPE / EPSynapse — Frontier Cascadia 2026",
+  "scripts": {
+    "server": "npm run start --prefix server",
+    "server:dev": "npm run dev --prefix server",
+    "verify:public-api": "curl -sS -f https://api.epsynapse.com/health",
+    "deploy:web": "npx vercel deploy --prod --yes --scope jype1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
