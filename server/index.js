@@ -772,7 +772,7 @@ app.get("/v1/me/onedrive/file", async (req, res) => {
       file = await readVault(googleFileId(student.googleSub), id.slice("vault:".length));
     } else {
       if (!student.graph?.accessToken) {
-        return res.status(400).json({ error: "Connect OneDrive in settings first." });
+        return res.status(400).json({ error: "Open that file in OneDrive." });
       }
       const token = await graphToken(student);
       file = await downloadFile(token, id);
@@ -892,7 +892,7 @@ app.get("/v1/me/outlook/messages", async (req, res) => {
     const student = await requireStudent(req, res);
     if (!student) return;
     if (!student.outlook?.accessToken) {
-      return res.json({ messages: [], error: "Connect Outlook in settings first." });
+      return res.json({ messages: [], error: "" });
     }
     try {
       const token = await outlookToken(student);
@@ -913,7 +913,7 @@ app.get("/v1/me/outlook/events", async (req, res) => {
     const student = await requireStudent(req, res);
     if (!student) return;
     if (!student.outlook?.accessToken) {
-      return res.json({ events: [], error: "Connect Outlook in settings first." });
+      return res.json({ events: [], error: "" });
     }
     try {
       const token = await outlookToken(student);
@@ -933,7 +933,7 @@ app.get("/v1/me/outlook/message", async (req, res) => {
     const student = await requireStudent(req, res);
     if (!student) return;
     if (!student.outlook?.accessToken) {
-      return res.status(400).json({ error: "Connect Outlook in settings first." });
+      return res.status(400).json({ error: "Open that message in Outlook." });
     }
     const token = await outlookToken(student);
     const message = await readMessage(token, req.query.id);
@@ -948,7 +948,7 @@ app.post("/v1/me/outlook/send", async (req, res) => {
     const student = await requireStudent(req, res);
     if (!student) return;
     if (!student.outlook?.accessToken) {
-      return res.status(400).json({ error: "Connect Outlook in settings first." });
+      return res.status(400).json({ error: "Send uses your mail app." });
     }
     const token = await outlookToken(student);
     const sent = await sendMessage(token, {

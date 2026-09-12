@@ -98,7 +98,7 @@ function oauthError(data, fallback) {
 function pasteFallback(error) {
   return {
     ok: false,
-    error: String(error || "Microsoft blocked this sign-in. Tap Connect OneDrive again."),
+    error: String(error || "Microsoft blocked this sign-in."),
     pasteToken: false,
   };
 }
