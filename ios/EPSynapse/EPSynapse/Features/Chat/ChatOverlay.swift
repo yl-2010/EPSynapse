@@ -73,14 +73,11 @@ struct ChatOverlay: View {
                 .epsSizedGlassCircle(side: 36)
                 .accessibilityLabel("Hide chat")
 
-                TextField("Ask your personal agent…", text: $draft, axis: .vertical)
-                    .lineLimit(1 ... 4)
-                    .font(.body)
-                    .foregroundStyle(EPSTheme.fg)
-                    .textInputAutocapitalization(.sentences)
-                    .submitLabel(.send)
-                    .focused($composerFocused)
-                    .onSubmit { send() }
+                AgentComposerField(
+                    text: $draft,
+                    isFocused: $composerFocused,
+                    onSubmit: send
+                )
 
                 Button {
                     send()
@@ -296,6 +293,133 @@ struct ChatOverlay: View {
             }
         }
         busy = false
+    }
+}
+
+/// Lives on the composer as `inputAccessoryView` so we can walk up into the
+/// real keyboard host and drag the keys with the bar.
+final class KeyboardAnchorView: UIView {
+    static let shared = KeyboardAnchorView(frame: CGRect(x: 0, y: 0, width: 1, height: 1))
+
+    override var intrinsicContentSize: CGSize {
+        CGSize(width: UIView.noIntrinsicMetric, height: 1)
+    }
+
+    var keyboardHost: UIView? {
+        var view: UIView? = superview ?? window
+        while let current = view {
+            let name = NSStringFromClass(type(of: current))
+            if name.contains("InputSetHost")
+                || name.contains("InputSetContainer")
+                || name.contains("UIKeyboard")
+                || (name.contains("Keyboard") && current is UIWindow) {
+                return current
+            }
+            view = current.superview
+        }
+        return window
+    }
+}
+
+private struct AgentComposerField: UIViewRepresentable {
+    @Binding var text: String
+    var isFocused: FocusState<Bool>.Binding
+    var onSubmit: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text, isFocused: isFocused, onSubmit: onSubmit)
+    }
+
+    func makeUIView(context: Context) -> UITextView {
+        let view = UITextView()
+        view.delegate = context.coordinator
+        view.backgroundColor = .clear
+        view.textColor = UIColor(EPSTheme.fg)
+        view.font = .preferredFont(forTextStyle: .body)
+        view.isScrollEnabled = false
+        view.textContainerInset = UIEdgeInsets(top: 8, left: 0, bottom: 8, right: 0)
+        view.textContainer.lineFragmentPadding = 0
+        view.textContainer.maximumNumberOfLines = 4
+        view.returnKeyType = .send
+        view.keyboardDismissMode = .none
+        view.textContainer.lineBreakMode = .byWordWrapping
+        view.inputAccessoryView = KeyboardAnchorView.shared
+        view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        applyPlaceholder(view, text: text)
+        return view
+    }
+
+    func updateUIView(_ view: UITextView, context: Context) {
+        context.coordinator.text = $text
+        context.coordinator.isFocused = isFocused
+        context.coordinator.onSubmit = onSubmit
+        if view.text != text, !context.coordinator.isEditingPlaceholder {
+            applyPlaceholder(view, text: text)
+        }
+        if isFocused.wrappedValue, !view.isFirstResponder {
+            view.becomeFirstResponder()
+        } else if !isFocused.wrappedValue, view.isFirstResponder {
+            view.resignFirstResponder()
+        }
+    }
+
+    private func applyPlaceholder(_ view: UITextView, text: String) {
+        if text.isEmpty {
+            view.text = "Ask your personal agent…"
+            view.textColor = UIColor(EPSTheme.muted)
+            view.tag = 1
+        } else {
+            view.text = text
+            view.textColor = UIColor(EPSTheme.fg)
+            view.tag = 0
+        }
+    }
+
+    final class Coordinator: NSObject, UITextViewDelegate {
+        var text: Binding<String>
+        var isFocused: FocusState<Bool>.Binding
+        var onSubmit: () -> Void
+        var isEditingPlaceholder = false
+
+        init(text: Binding<String>, isFocused: FocusState<Bool>.Binding, onSubmit: @escaping () -> Void) {
+            self.text = text
+            self.isFocused = isFocused
+            self.onSubmit = onSubmit
+        }
+
+        func textViewDidBeginEditing(_ textView: UITextView) {
+            isFocused.wrappedValue = true
+            if textView.tag == 1 {
+                isEditingPlaceholder = true
+                textView.text = ""
+                textView.textColor = UIColor(EPSTheme.fg)
+                textView.tag = 0
+                isEditingPlaceholder = false
+            }
+        }
+
+        func textViewDidEndEditing(_ textView: UITextView) {
+            isFocused.wrappedValue = false
+            if textView.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                textView.text = "Ask your personal agent…"
+                textView.textColor = UIColor(EPSTheme.muted)
+                textView.tag = 1
+                text.wrappedValue = ""
+            }
+        }
+
+        func textViewDidChange(_ textView: UITextView) {
+            guard textView.tag != 1 else { return }
+            text.wrappedValue = textView.text
+        }
+
+        func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText replacement: String) -> Bool {
+            if replacement == "\n" {
+                onSubmit()
+                return false
+            }
+            return true
+        }
     }
 }
 
@@ -637,8 +761,10 @@ enum AgentKeyboardScrub {
     }
 
     private static func resolveHosts() {
-        // One view only. Transforming a parent and child stacks the offset.
-        let host = firstSubview(named: "UIInputSetHostView")
+        // Walk from the composer accessory first. That view lives in the
+        // keyboard window even when the app's window list hides it.
+        let host = KeyboardAnchorView.shared.keyboardHost
+            ?? firstSubview(named: "UIInputSetHostView")
             ?? firstSubview(named: "UIInputSetContainerView")
             ?? firstSubview(named: "UIKeyboard")
             ?? frameMatchedHost()
@@ -721,12 +847,42 @@ enum AgentKeyboardScrub {
     }
 
     private static func allWindows() -> [UIWindow] {
+        var seen = Set<ObjectIdentifier>()
         var windows: [UIWindow] = []
+        func add(_ window: UIWindow?) {
+            guard let window else { return }
+            let id = ObjectIdentifier(window)
+            guard !seen.contains(id) else { return }
+            seen.insert(id)
+            windows.append(window)
+        }
+        for session in UIApplication.shared.openSessions {
+            addWindows(from: session.scene as? UIWindowScene, into: &windows, seen: &seen)
+        }
         for scene in UIApplication.shared.connectedScenes {
-            guard let windowScene = scene as? UIWindowScene else { continue }
-            windows.append(contentsOf: windowScene.windows)
+            addWindows(from: scene as? UIWindowScene, into: &windows, seen: &seen)
+        }
+        for window in UIApplication.shared.windows {
+            add(window)
+        }
+        if let anchorWindow = KeyboardAnchorView.shared.window {
+            add(anchorWindow)
         }
         return windows
+    }
+
+    private static func addWindows(
+        from scene: UIWindowScene?,
+        into windows: inout [UIWindow],
+        seen: inout Set<ObjectIdentifier>
+    ) {
+        guard let scene else { return }
+        for window in scene.windows {
+            let id = ObjectIdentifier(window)
+            guard !seen.contains(id) else { continue }
+            seen.insert(id)
+            windows.append(window)
+        }
     }
 
     private static func keyWindow() -> UIWindow? {
