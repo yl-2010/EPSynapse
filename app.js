@@ -64,8 +64,15 @@
     todoFilesError: "",
   };
   let lastOdError = "";
+  let lastOnError = "";
   let lastOlError = "";
   let lastTmError = "";
+  let onPollTimer = 0;
+  let onPollInFlight = false;
+  const MS_POPUP_NAME = "epsynapse-ms";
+  const MS_POPUP_MAX_MS = 10 * 60 * 1000;
+  const msPopups = {};
+  const msConsent = {};
   let classFilesInFlight = "";
   let todoFilesInFlight = "";
   let openMail = null;
@@ -671,8 +678,18 @@
     applyAgentFromMe();
   }
 
-  function msNavLabel(connected, studio, email, fallback) {
+  function msDeniedFor(prefix) {
+    const d = me && me.msDenied;
+    return d && typeof d === "object" ? String(d[prefix] || "") : "";
+  }
+
+  function msNeedsApproval(prefix) {
+    return Boolean(me && me.msNeedsAdminApproval) || /approv|consent|admin/i.test(msDeniedFor(prefix));
+  }
+
+  function msNavLabel(connected, studio, email, fallback, denied, needsApproval) {
     if (connected || studio) return email || "Connected";
+    if (denied) return needsApproval ? "Needs IT approval" : "Not connected";
     return fallback;
   }
 
@@ -692,16 +709,20 @@
         me && me.onedriveConnected,
         me && me.studioOnedrive,
         me && me.onedriveEmail,
-        "School files"
+        "School files",
+        msDeniedFor("onedrive"),
+        msNeedsApproval("onedrive")
       );
     }
     const onSum = document.getElementById("onenote-summary");
     if (onSum) {
       onSum.textContent = msNavLabel(
-        me && (me.onenoteConnected || me.onedriveConnected),
+        me && me.onenoteConnected,
         me && me.studioOnenote,
-        me && (me.onenoteEmail || me.onedriveEmail),
-        "School notebooks"
+        me && (me.onenoteEmail || me.msSignedInEmail),
+        "School notebooks",
+        msDeniedFor("onenote"),
+        msNeedsApproval("onenote")
       );
     }
     const olSum = document.getElementById("outlook-summary");
@@ -710,7 +731,9 @@
         me && me.outlookConnected,
         me && me.studioOutlook,
         me && me.outlookEmail,
-        "School mail"
+        "School mail",
+        msDeniedFor("outlook"),
+        msNeedsApproval("outlook")
       );
     }
     const tmSum = document.getElementById("teams-summary");
@@ -719,7 +742,9 @@
         me && me.teamsConnected,
         me && me.studioTeams,
         me && me.teamsEmail,
-        "School chat"
+        "School chat",
+        msDeniedFor("teams"),
+        msNeedsApproval("teams")
       );
     }
     document.querySelectorAll(".set-nav[data-pane]").forEach((btn) => {
@@ -2401,8 +2426,13 @@
     }
   }
 
+  function msPopupOpen(prefix) {
+    const p = msPopups[prefix];
+    return Boolean(p && p.win && !p.win.closed);
+  }
+
   function paintMsService(opts) {
-    const { prefix, statusEl, connected, studio, email, pending, lastError } = opts;
+    const { prefix, statusEl, connected, studio, email, pending, lastError, denied, needsAdminApproval } = opts;
     const entry = document.getElementById(`${prefix}-entry`);
     const ready = document.getElementById(`${prefix}-ready`);
     const pendingEl = document.getElementById(`${prefix}-pending`);
@@ -2412,15 +2442,29 @@
     const adminEl = document.getElementById(`${prefix}-admin`);
     const emailEl = document.getElementById(`${prefix}-email`);
     const steps = document.getElementById(`${prefix}-steps`);
+    const approvalEl = document.getElementById(`${prefix}-approval`);
+    const connectBtn = document.getElementById(`${prefix}-connect`);
+    const disconnectBtn = document.getElementById(`${prefix}-disconnect`);
+    const bodyEl = document.getElementById(`${prefix}-request-body`);
 
     const isConnected = Boolean(connected || studio);
     const hasPending = pending && (pending.user_code || pending.verification_uri);
+    const deniedText = !isConnected && !hasPending ? String(denied || "") : "";
+    const showApproval = !isConnected && !hasPending && Boolean(deniedText || needsAdminApproval);
 
     if (entry) entry.hidden = isConnected || Boolean(hasPending);
     if (ready) ready.hidden = !isConnected;
     if (pendingEl) pendingEl.hidden = !hasPending;
-    if (steps) steps.hidden = isConnected || Boolean(hasPending);
+    if (steps) steps.hidden = isConnected || Boolean(hasPending) || showApproval;
     if (studioEl) studioEl.hidden = !studio;
+    if (approvalEl) approvalEl.hidden = !showApproval;
+    if (bodyEl && !showApproval) bodyEl.hidden = true;
+    if (disconnectBtn) disconnectBtn.hidden = !connected || Boolean(studio);
+
+    if (connectBtn) {
+      if (!connectBtn.dataset.label) connectBtn.dataset.label = connectBtn.textContent.trim();
+      connectBtn.textContent = deniedText ? "Try again" : connectBtn.dataset.label;
+    }
 
     if (emailEl) emailEl.textContent = isConnected && email ? email : "";
 
@@ -2454,8 +2498,14 @@
       setStatus(statusEl, email || "Connected");
     } else if (hasPending) {
       setStatus(statusEl, "Finish the Microsoft sign-in. School IT may need to Accept once.");
+    } else if (deniedText) {
+      setStatus(statusEl, deniedText);
+    } else if (msPopupOpen(prefix)) {
+      setStatus(statusEl, "A Microsoft window is open. Finish signing in there.");
+    } else if (needsAdminApproval) {
+      setStatus(statusEl, "School IT has not approved EPSynapse yet.");
     } else {
-      setStatus(statusEl, "Connect with your school Microsoft account. IT Accepts the app once.");
+      setStatus(statusEl, "Connect with your @eastsideprep.org Microsoft account.");
     }
   }
 
@@ -2463,11 +2513,13 @@
     paintMsService({
       prefix: "onenote",
       statusEl: onStatus,
-      connected: Boolean(me && (me.onenoteConnected || me.onedriveConnected)),
+      connected: Boolean(me && me.onenoteConnected),
       studio: Boolean(me && me.studioOnenote),
-      email: (me && (me.onenoteEmail || me.onedriveEmail)) || "",
-      pending: me && me.onedrivePending,
-      lastError: lastOdError,
+      email: (me && (me.onenoteEmail || me.msSignedInEmail)) || "",
+      pending: me && (me.onenotePending || me.onedrivePending),
+      lastError: lastOnError,
+      denied: msDeniedFor("onenote"),
+      needsAdminApproval: msNeedsApproval("onenote"),
     });
   }
 
@@ -2480,6 +2532,8 @@
       email: (me && me.onedriveEmail) || "",
       pending: me && me.onedrivePending,
       lastError: lastOdError,
+      denied: msDeniedFor("onedrive"),
+      needsAdminApproval: msNeedsApproval("onedrive"),
     });
     paintOnenote();
     paintNavSummaries();
@@ -2494,6 +2548,8 @@
       email: (me && me.outlookEmail) || "",
       pending: me && me.outlookPending,
       lastError: lastOlError,
+      denied: msDeniedFor("outlook"),
+      needsAdminApproval: msNeedsApproval("outlook"),
     });
     paintNavSummaries();
   }
@@ -2507,8 +2563,16 @@
       email: (me && me.teamsEmail) || "",
       pending: me && me.teamsPending,
       lastError: lastTmError,
+      denied: msDeniedFor("teams"),
+      needsAdminApproval: msNeedsApproval("teams"),
     });
     paintNavSummaries();
+  }
+
+  function paintAllMs() {
+    paintOnedrive();
+    paintOutlook();
+    paintTeams();
   }
 
   function paintCanvasToken() {
@@ -2635,6 +2699,7 @@
     }
     refreshKeyStatus();
 
+    const msReturn = takeMsReturn();
     const fromHash = await consumeGoogleHash();
     if (!fromHash) {
       try {
@@ -2655,6 +2720,7 @@
     paintTeams();
     resumeMsPolls();
     await initGoogle();
+    await applyMsReturn(msReturn);
   }
 
   window.addEventListener("popstate", () => {
@@ -2890,15 +2956,77 @@
     tmPollTimer = 0;
   }
 
+  function stopOnPoll() {
+    clearInterval(onPollTimer);
+    onPollTimer = 0;
+  }
+
   function msPendingLive(pending) {
     return pending && (pending.user_code || pending.verification_uri);
+  }
+
+  // Merge the honest per-service fields from a status reply into `me`.
+  // Missing fields (older server) leave the current values alone.
+  function absorbMsStatus(prefix, st) {
+    if (!st || typeof st !== "object") return;
+    const next = {};
+    if ("denied" in st) {
+      next.msDenied = Object.assign({}, (me && me.msDenied) || {}, { [prefix]: String(st.denied || "") });
+    }
+    if ("needsAdminApproval" in st) next.msNeedsAdminApproval = Boolean(st.needsAdminApproval);
+    if (st.adminConsentUrl) next.adminConsentUrl = st.adminConsentUrl;
+    if (st.consentRequest && typeof st.consentRequest === "object") next.consentRequest = st.consentRequest;
+    if (st.msSignedInEmail) next.msSignedInEmail = st.msSignedInEmail;
+    if (st.mode) next.msClientMode = st.mode;
+    me = Object.assign({}, me, next);
   }
 
   function resumeMsPolls() {
     if (!signedInViaGoogle()) return;
     if (msPendingLive(me && me.onedrivePending)) watchOnedrive();
+    if (msPendingLive(me && me.onenotePending)) watchOnenote();
     if (msPendingLive(me && me.outlookPending)) watchOutlook();
     if (msPendingLive(me && me.teamsPending)) watchTeams();
+  }
+
+  async function tickOnenote() {
+    if (onPollInFlight) return;
+    onPollInFlight = true;
+    try {
+      const st = await api("/v1/me/onenote/status", { timeoutMs: 15000 });
+      lastOnError = st.error || "";
+      setMsAdminLink("onenote", st.adminConsentUrl || "");
+      absorbMsStatus("onenote", st);
+      if (st.connected || st.studio) {
+        stopOnPoll();
+        me = Object.assign({}, me, {
+          onenoteConnected: Boolean(st.connected),
+          studioOnenote: Boolean(st.studio),
+          onenoteEmail: st.email || "",
+          onenotePending: null,
+        });
+        paintOnenote();
+        paintNavSummaries();
+        await loadDashboard();
+        return;
+      }
+      if (st.pending && msPendingLive(st.pending)) {
+        me = Object.assign({}, me, { onenotePending: st.pending });
+        paintOnenote();
+        paintNavSummaries();
+        if (st.error) setStatus(onStatus, st.error);
+        return;
+      }
+      stopOnPoll();
+      me = Object.assign({}, me, { onenoteConnected: false, onenotePending: null });
+      paintOnenote();
+      paintNavSummaries();
+      if (st.error) setStatus(onStatus, st.error);
+    } catch {
+      /* keep polling */
+    } finally {
+      onPollInFlight = false;
+    }
   }
 
   async function tickOnedrive() {
@@ -2908,6 +3036,7 @@
       const st = await api("/v1/me/onedrive/status", { timeoutMs: 15000 });
       lastOdError = st.error || "";
       setMsAdminLink("onedrive", st.adminConsentUrl || "");
+      absorbMsStatus("onedrive", st);
       if (st.connected || st.studio) {
         stopOdPoll();
         me = Object.assign({}, me, {
@@ -2953,6 +3082,7 @@
       const st = await api("/v1/me/outlook/status", { timeoutMs: 15000 });
       lastOlError = st.error || "";
       setMsAdminLink("outlook", st.adminConsentUrl || "");
+      absorbMsStatus("outlook", st);
       if (st.connected || st.studio) {
         stopOlPoll();
         me = Object.assign({}, me, {
@@ -2998,6 +3128,7 @@
       const st = await api("/v1/me/teams/status", { timeoutMs: 15000 });
       lastTmError = st.error || "";
       setMsAdminLink("teams", st.adminConsentUrl || "");
+      absorbMsStatus("teams", st);
       if (st.connected || st.studio) {
         stopTeamsPoll();
         me = Object.assign({}, me, {
@@ -3045,6 +3176,452 @@
     tmPollTimer = setInterval(tickTeams, 4000);
   }
 
+  function watchOnenote() {
+    stopOnPoll();
+    tickOnenote();
+    onPollTimer = setInterval(tickOnenote, 4000);
+  }
+
+  // One row per Microsoft service. Everything below dispatches through this table.
+  const MS_SERVICES = {
+    onedrive: {
+      label: "OneDrive",
+      pendingKey: "onedrivePending",
+      connectedKey: "onedriveConnected",
+      studioKey: "studioOnedrive",
+      legacyStart: "/v1/me/onedrive/start",
+      statusEl: () => odStatus,
+      paint: () => paintOnedrive(),
+      tick: () => tickOnedrive(),
+      watch: () => watchOnedrive(),
+      stop: () => stopOdPoll(),
+      setError: (msg) => {
+        lastOdError = msg;
+      },
+    },
+    onenote: {
+      label: "OneNote",
+      pendingKey: "onenotePending",
+      connectedKey: "onenoteConnected",
+      studioKey: "studioOnenote",
+      legacyStart: "/v1/me/onedrive/start",
+      statusEl: () => onStatus,
+      paint: () => {
+        paintOnenote();
+        paintNavSummaries();
+      },
+      tick: () => tickOnenote(),
+      watch: () => watchOnenote(),
+      stop: () => stopOnPoll(),
+      setError: (msg) => {
+        lastOnError = msg;
+      },
+    },
+    outlook: {
+      label: "Outlook",
+      pendingKey: "outlookPending",
+      connectedKey: "outlookConnected",
+      studioKey: "studioOutlook",
+      legacyStart: "/v1/me/outlook/start",
+      statusEl: () => olStatus,
+      paint: () => paintOutlook(),
+      tick: () => tickOutlook(),
+      watch: () => watchOutlook(),
+      stop: () => stopOlPoll(),
+      setError: (msg) => {
+        lastOlError = msg;
+      },
+    },
+    teams: {
+      label: "Teams",
+      pendingKey: "teamsPending",
+      connectedKey: "teamsConnected",
+      studioKey: "studioTeams",
+      legacyStart: "/v1/me/teams/start",
+      statusEl: () => tmStatus,
+      paint: () => paintTeams(),
+      tick: () => tickTeams(),
+      watch: () => watchTeams(),
+      stop: () => stopTeamsPoll(),
+      setError: (msg) => {
+        lastTmError = msg;
+      },
+    },
+  };
+
+  function msService(prefix) {
+    return MS_SERVICES[prefix] || null;
+  }
+
+  function msServiceConnected(prefix) {
+    const svc = msService(prefix);
+    return Boolean(svc && me && (me[svc.connectedKey] || me[svc.studioKey]));
+  }
+
+  async function refreshMe() {
+    try {
+      const fresh = await api("/v1/me");
+      if (fresh && (fresh.email || fresh.googleName)) me = fresh;
+    } catch {
+      /* keep what we have */
+    }
+  }
+
+  function stopMsPopupPoll(prefix) {
+    const p = msPopups[prefix];
+    if (!p) return;
+    clearInterval(p.timer);
+    p.timer = 0;
+  }
+
+  function closeMsPopup(prefix) {
+    const p = msPopups[prefix];
+    stopMsPopupPoll(prefix);
+    if (p && p.win && !p.win.closed) {
+      try {
+        p.win.close();
+      } catch {
+        /* cross-origin close can throw */
+      }
+    }
+    delete msPopups[prefix];
+  }
+
+  // Browser OAuth popup: poll the service status every 4 s while it is open.
+  function watchMsPopup(prefix, win) {
+    const svc = msService(prefix);
+    if (!svc) return;
+    closeMsPopup(prefix);
+    const rec = { win, timer: 0, startedAt: Date.now() };
+    msPopups[prefix] = rec;
+    const step = async () => {
+      const closed = !win || win.closed;
+      const tooLong = Date.now() - rec.startedAt > MS_POPUP_MAX_MS;
+      await svc.tick();
+      if (msServiceConnected(prefix) || closed || tooLong) {
+        stopMsPopupPoll(prefix);
+        if (closed || tooLong) {
+          delete msPopups[prefix];
+          svc.paint();
+        }
+      }
+    };
+    rec.timer = setInterval(step, 4000);
+    svc.paint();
+  }
+
+  function openMsPopupShell() {
+    try {
+      return window.open("", MS_POPUP_NAME, "popup,width=520,height=720");
+    } catch {
+      return null;
+    }
+  }
+
+  async function startMsConnect(prefix, popup) {
+    const svc = msService(prefix);
+    if (!svc) return;
+    const statusEl = svc.statusEl();
+    if (!signedInViaGoogle()) {
+      if (popup && !popup.closed) popup.close();
+      setStatus(statusEl, NEED_GOOGLE);
+      return;
+    }
+    setStatus(statusEl, "Starting Microsoft sign-in…");
+    let started;
+    try {
+      started = await api("/v1/me/ms/start", {
+        method: "POST",
+        body: JSON.stringify({ service: prefix, returnTo: location.origin }),
+      });
+    } catch (err) {
+      if (err.status === 404 && svc.legacyStart) {
+        try {
+          started = await api(svc.legacyStart, { method: "POST", body: "{}" });
+        } catch (err2) {
+          if (popup && !popup.closed) popup.close();
+          setStatus(statusEl, err2.message || "Could not start sign-in.");
+          return;
+        }
+      } else {
+        if (popup && !popup.closed) popup.close();
+        setStatus(statusEl, err.message || "Could not start sign-in.");
+        return;
+      }
+    }
+
+    svc.setError("");
+    me = Object.assign({}, me, {
+      msDenied: Object.assign({}, (me && me.msDenied) || {}, { [prefix]: "" }),
+    });
+    if (started.mode) me = Object.assign({}, me, { msClientMode: started.mode });
+    setMsAdminLink(prefix, started.adminConsentUrl || "");
+    if (started.adminConsentUrl) me = Object.assign({}, me, { adminConsentUrl: started.adminConsentUrl });
+
+    const mode = started.mode || (started.authorizeUrl ? "app" : "office");
+
+    if (mode === "app" && started.authorizeUrl) {
+      me = Object.assign({}, me, { [svc.pendingKey]: null });
+      let win = popup && !popup.closed ? popup : null;
+      if (win) {
+        try {
+          win.location.href = started.authorizeUrl;
+        } catch {
+          win = null;
+        }
+      }
+      if (!win) win = window.open(started.authorizeUrl, MS_POPUP_NAME, "popup,width=520,height=720");
+      if (!win) {
+        location.assign(started.authorizeUrl);
+        return;
+      }
+      watchMsPopup(prefix, win);
+      return;
+    }
+
+    // Device code (office mode): show the code and the Microsoft link, poll status.
+    const pending = msPendingLive(started) ? started : null;
+    me = Object.assign({}, me, { [svc.pendingKey]: pending });
+    svc.paint();
+    if (pending) svc.watch();
+    const openUrl = started.verification_uri_complete || started.verification_uri || "";
+    if (popup && !popup.closed) {
+      if (openUrl) {
+        try {
+          popup.location.href = openUrl;
+        } catch {
+          popup.close();
+        }
+      } else {
+        popup.close();
+      }
+    } else if (openUrl) {
+      window.open(openUrl, "_blank", "noopener,noreferrer");
+    }
+  }
+
+  async function disconnectMs(prefix) {
+    const svc = msService(prefix);
+    if (!svc || !signedInViaGoogle()) return;
+    const statusEl = svc.statusEl();
+    setStatus(statusEl, "Disconnecting…");
+    closeMsPopup(prefix);
+    svc.stop();
+    try {
+      const res = await api("/v1/me/ms/disconnect", {
+        method: "POST",
+        body: JSON.stringify({ service: prefix }),
+      });
+      if (res && (res.email || res.googleName)) me = res;
+      else await refreshMe();
+      svc.setError("");
+      me = Object.assign({}, me, { [svc.connectedKey]: false, [svc.pendingKey]: null });
+      paintAllMs();
+      await loadDashboard();
+    } catch (err) {
+      setStatus(statusEl, err.message || "Could not disconnect.");
+    }
+  }
+
+  function fallbackConsentRequest(prefix) {
+    const svc = msService(prefix);
+    const label = svc ? svc.label : "Microsoft 365";
+    const adminUrl =
+      (me && me.adminConsentUrl) || document.getElementById(`${prefix}-admin`)?.href || "";
+    const who = (me && (me.googleName || me.email)) || "an EPS student";
+    const subject = `Please approve EPSynapse for ${label}`;
+    const body = [
+      "Hi EPS IT,",
+      "",
+      `I am ${who}. I use EPSynapse (https://epsynapse.com), a student dashboard for Eastside Prep. It needs one-time admin approval in Microsoft Entra before it can read my ${label}.`,
+      "",
+      "Approval link (opens the Microsoft admin consent page):",
+      adminUrl,
+      "",
+      "After you approve, every EPS student can connect. Thank you.",
+    ].join("\n");
+    const mailto = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    return { to: "", subject, body, mailto, adminConsentUrl: adminUrl };
+  }
+
+  function currentConsentRequest(prefix) {
+    return msConsent[prefix] || (me && me.consentRequest) || fallbackConsentRequest(prefix);
+  }
+
+  function showConsentBody(prefix, text) {
+    const bodyEl = document.getElementById(`${prefix}-request-body`);
+    if (!bodyEl) return;
+    bodyEl.textContent = text || "";
+    bodyEl.hidden = !text;
+  }
+
+  async function requestMsConsent(prefix) {
+    const svc = msService(prefix);
+    if (!svc || !signedInViaGoogle()) return;
+    const statusEl = svc.statusEl();
+    setStatus(statusEl, "Preparing the request to school IT…");
+    let req = null;
+    try {
+      req = await api("/v1/me/ms/consent-request", {
+        method: "POST",
+        body: JSON.stringify({ service: prefix }),
+        timeoutMs: 20000,
+      });
+    } catch (err) {
+      if (err.status !== 404) {
+        setStatus(statusEl, err.message || "Could not build the request.");
+      }
+    }
+    if (req && typeof req === "object" && (req.body || req.mailto)) {
+      msConsent[prefix] = req;
+      if (req.adminConsentUrl) {
+        setMsAdminLink(prefix, req.adminConsentUrl);
+        me = Object.assign({}, me, { adminConsentUrl: req.adminConsentUrl });
+      }
+    }
+    const cr = currentConsentRequest(prefix);
+    if (req && req.sent) {
+      setStatus(statusEl, `Request sent to ${req.to || "school IT"}. Tap Connect again once they approve.`);
+      showConsentBody(prefix, "");
+      return;
+    }
+    showConsentBody(prefix, cr.body || "");
+    setStatus(
+      statusEl,
+      cr.to
+        ? `Your mail app should open with a note to ${cr.to}. The text is below if it did not.`
+        : "Your mail app should open with the request. The text is below if it did not."
+    );
+    if (cr.mailto) {
+      try {
+        location.href = cr.mailto;
+      } catch {
+        /* nothing else to do */
+      }
+    }
+  }
+
+  async function copyMsConsent(prefix) {
+    const svc = msService(prefix);
+    if (!svc) return;
+    const statusEl = svc.statusEl();
+    const cr = currentConsentRequest(prefix);
+    const text = cr.body || cr.adminConsentUrl || "";
+    if (!text) {
+      setStatus(statusEl, "Nothing to copy yet.");
+      return;
+    }
+    showConsentBody(prefix, text);
+    try {
+      await navigator.clipboard.writeText(text);
+      setStatus(statusEl, "Request copied. Paste it into an email to school IT.");
+    } catch {
+      setStatus(statusEl, "Copy failed. Select the text below and copy it.");
+    }
+  }
+
+  // Result from the popup (or the redirected popup) after Microsoft sign-in.
+  async function onMsResult(service, result, reason, email) {
+    const prefix = String(service || "").toLowerCase();
+    const svc = msService(prefix);
+    if (svc) closeMsPopup(prefix);
+    await refreshMe();
+    if (!signedInViaGoogle()) return;
+    if (prefix && result === "denied" && reason) {
+      me = Object.assign({}, me, {
+        msDenied: Object.assign({}, (me && me.msDenied) || {}, {
+          [prefix]: msDeniedFor(prefix) || String(reason).slice(0, 300),
+        }),
+      });
+    }
+    if (email && !(me && me.msSignedInEmail)) me = Object.assign({}, me, { msSignedInEmail: email });
+    paintAllMs();
+    if (!svc) return;
+    const statusEl = svc.statusEl();
+    if (result === "connected") {
+      if (msServiceConnected(prefix)) {
+        await loadDashboard();
+      } else {
+        setStatus(statusEl, "Microsoft sign-in finished. Checking access…");
+        await svc.tick();
+      }
+    } else if (result === "error" && reason) {
+      setStatus(statusEl, String(reason).slice(0, 300));
+    } else if (result === "denied" && !msDeniedFor(prefix) && reason) {
+      setStatus(statusEl, String(reason).slice(0, 300));
+    }
+  }
+
+  window.addEventListener("message", (ev) => {
+    const d = ev && ev.data;
+    if (!d || typeof d !== "object" || d.type !== "epsynapse-ms") return;
+    onMsResult(d.service, d.result, d.reason, d.email);
+  });
+
+  // Redirect return: /?ms=connected|denied|error&service=onenote&reason=... or /?ms=admin-consent
+  function takeMsReturn() {
+    const params = new URLSearchParams(location.search);
+    const ms = params.get("ms") || "";
+    const adminConsent = params.get("admin_consent") || "";
+    if (!ms && !adminConsent) return null;
+    const out = {
+      ms: ms || (String(adminConsent).toLowerCase() === "true" ? "admin-consent" : "admin-error"),
+      service: (params.get("service") || "").toLowerCase(),
+      reason: params.get("reason") || params.get("error_description") || params.get("error") || "",
+      email: params.get("email") || "",
+    };
+    ["ms", "service", "reason", "email", "admin_consent", "tenant", "state", "error", "error_description"].forEach(
+      (k) => params.delete(k)
+    );
+    const q = params.toString();
+    history.replaceState(null, "", `${location.pathname}${q ? `?${q}` : ""}${location.hash}`);
+    return out;
+  }
+
+  async function applyMsReturn(ret) {
+    if (!ret) return;
+    // The popup itself landed here: hand the result to the opener and close.
+    if (window.opener && window.name === MS_POPUP_NAME && ret.ms !== "admin-consent") {
+      try {
+        window.opener.postMessage(
+          { type: "epsynapse-ms", service: ret.service, result: ret.ms, reason: ret.reason, email: ret.email },
+          "*"
+        );
+      } catch {
+        /* opener gone */
+      }
+      window.close();
+      return;
+    }
+    if (!signedInViaGoogle()) return;
+    const prefix = msService(ret.service) ? ret.service : "onenote";
+    const svc = msService(prefix);
+    openSheet();
+    openPane(prefix);
+    if (ret.ms === "admin-consent") {
+      me = Object.assign({}, me, { msNeedsAdminApproval: false });
+      paintAllMs();
+      setStatus(svc.statusEl(), "School IT approved EPSynapse. Tap Connect again.");
+      return;
+    }
+    if (ret.ms === "admin-error") {
+      setStatus(svc.statusEl(), ret.reason || "Microsoft did not finish the admin approval.");
+      return;
+    }
+    await onMsResult(prefix, ret.ms, ret.reason, ret.email);
+  }
+
+  Object.keys(MS_SERVICES).forEach((prefix) => {
+    document.getElementById(`${prefix}-connect`)?.addEventListener("click", () => {
+      if (!signedInViaGoogle()) return;
+      const shell = openMsPopupShell();
+      startMsConnect(prefix, shell);
+    });
+    document.getElementById(`${prefix}-disconnect`)?.addEventListener("click", () => disconnectMs(prefix));
+    document.getElementById(`${prefix}-request`)?.addEventListener("click", () => requestMsConsent(prefix));
+    document.getElementById(`${prefix}-copy`)?.addEventListener("click", () => copyMsConsent(prefix));
+  });
+
   function setMsAdminLink(prefix, url) {
     const admin = document.getElementById(`${prefix}-admin`);
     if (!admin) return;
@@ -3053,41 +3630,6 @@
       admin.hidden = false;
     }
   }
-
-  async function startMsConnect(prefix, path, pendingKey, watchFn, statusEl) {
-    if (!signedInViaGoogle()) return;
-    setStatus(statusEl, "Starting Microsoft sign-in…");
-    try {
-      const started = await api(path, { method: "POST", body: "{}" });
-      if (prefix === "onedrive") lastOdError = "";
-      else if (prefix === "outlook") lastOlError = "";
-      else lastTmError = "";
-      const pending = msPendingLive(started) ? started : null;
-      me = Object.assign({}, me, { [pendingKey]: pending });
-      setMsAdminLink(prefix, started.adminConsentUrl || "");
-      if (prefix === "onedrive") paintOnedrive();
-      else if (prefix === "outlook") paintOutlook();
-      else paintTeams();
-      if (pending) watchFn();
-      const openUrl = started.verification_uri_complete || started.verification_uri || "";
-      if (openUrl) window.open(openUrl, "_blank", "noopener,noreferrer");
-    } catch (err) {
-      setStatus(statusEl, err.message || "Could not start sign-in.");
-    }
-  }
-
-  document.getElementById("onedrive-connect")?.addEventListener("click", () => {
-    startMsConnect("onedrive", "/v1/me/onedrive/start", "onedrivePending", watchOnedrive, odStatus);
-  });
-  document.getElementById("onenote-connect")?.addEventListener("click", () => {
-    startMsConnect("onedrive", "/v1/me/onedrive/start", "onedrivePending", watchOnedrive, onStatus || odStatus);
-  });
-  document.getElementById("outlook-connect")?.addEventListener("click", () => {
-    startMsConnect("outlook", "/v1/me/outlook/start", "outlookPending", watchOutlook, olStatus);
-  });
-  document.getElementById("teams-connect")?.addEventListener("click", () => {
-    startMsConnect("teams", "/v1/me/teams/start", "teamsPending", watchTeams, tmStatus);
-  });
 
   function linkNameFromUrl(url) {
     try {

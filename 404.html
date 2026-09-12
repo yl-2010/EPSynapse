@@ -20,7 +20,7 @@
     <link rel="icon" href="/favicon.svg?v=logo4" type="image/svg+xml" />
     <link rel="icon" href="/favicon-32.png?v=logo4" type="image/png" sizes="32x32" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="stylesheet" href="/styles.css?v=logo2" />
+    <link rel="stylesheet" href="/styles.css?v=msfix2" />
     <link
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css"
@@ -571,14 +571,14 @@
           </div>
           <div class="edu-sheet-body">
             <ol class="set-steps" id="onedrive-steps">
-              <li>Sign in with Google on this page if you have not already.</li>
-              <li>Tap Connect OneDrive. Microsoft opens a school sign-in.</li>
-              <li>Use your @eastsideprep.org account. If Microsoft says the app needs admin approval, that is expected. School IT Accepts once, then every student can connect.</li>
-              <li>OneDrive on the settings list must say Connected.</li>
+              <li>Tap Connect. A Microsoft window opens. Sign in with your @eastsideprep.org account.</li>
+              <li>If Microsoft says "Approval required" or "Need admin approval", that is expected. Come back here and tap Send request to school IT.</li>
+              <li>Once IT approves, tap Connect again. The pane says Connected only after EPSynapse can actually read your OneDrive files.</li>
             </ol>
             <div id="onedrive-ready" hidden>
               <p class="set-ready">OneDrive connected</p>
               <p class="set-hint" id="onedrive-email"></p>
+              <button type="button" id="onedrive-disconnect" class="set-textbtn ms-disconnect">Disconnect</button>
             </div>
             <div id="onedrive-entry">
               <div class="edu-sheet-actions">
@@ -590,8 +590,18 @@
               <a id="onedrive-open" class="set-link" href="#">Open Microsoft sign-in</a>
             </div>
             <p class="set-hint" id="onedrive-studio" hidden>On this Mac the agent can already use the school OneDrive folder in Finder for today's demo.</p>
-            <p class="set-hint" id="onedrive-status"></p>
-            <a class="set-link" id="onedrive-admin" href="https://login.microsoftonline.com/b2681e8b-dd20-46cf-b163-371a2d7c6014/v2.0/adminconsent?client_id=d3590ed6-52b3-4102-aeff-aad2292ab01c&amp;scope=https://graph.microsoft.com/.default&amp;redirect_uri=https://epsynapse.com/" rel="noopener noreferrer">Ask school IT to approve</a>
+            <p class="set-hint ms-status" id="onedrive-status"></p>
+            <div class="ms-approval" id="onedrive-approval" hidden>
+              <p class="set-hint">Microsoft needs school IT to approve EPSynapse once. After that every student at EPS can connect.</p>
+              <div class="edu-sheet-actions">
+                <button type="button" id="onedrive-request" class="edu-sheet-btn edu-sheet-btn--gold">Send request to school IT</button>
+              </div>
+              <div class="ms-approval-links">
+                <a class="set-link" id="onedrive-admin" href="https://login.microsoftonline.com/b2681e8b-dd20-46cf-b163-371a2d7c6014/v2.0/adminconsent?client_id=d3590ed6-52b3-4102-aeff-aad2292ab01c&amp;scope=https://graph.microsoft.com/.default&amp;redirect_uri=https://epsynapse.com/" target="_blank" rel="noopener noreferrer">Admin approval link for IT</a>
+                <button type="button" id="onedrive-copy" class="set-textbtn">Copy request</button>
+              </div>
+              <pre class="ms-request-body" id="onedrive-request-body" hidden></pre>
+            </div>
           </div>
         </div>
 
@@ -606,14 +616,14 @@
           </div>
           <div class="edu-sheet-body">
             <ol class="set-steps" id="onenote-steps">
-              <li>Sign in with Google on this page if you have not already.</li>
-              <li>Tap Connect OneNote. That starts the same school Microsoft sign-in as OneDrive.</li>
-              <li>Use your @eastsideprep.org account. If Microsoft says the app needs admin approval, that is expected. School IT Accepts once, then every student can connect.</li>
-              <li>OneNote on the settings list must say Connected. The agent can then read and create class notebooks.</li>
+              <li>Tap Connect. A Microsoft window opens. Sign in with your @eastsideprep.org account.</li>
+              <li>If Microsoft says "Approval required" or "Need admin approval", that is expected. Come back here and tap Send request to school IT.</li>
+              <li>Once IT approves, tap Connect again. The pane says Connected only after EPSynapse can actually read your OneNote notebooks.</li>
             </ol>
             <div id="onenote-ready" hidden>
               <p class="set-ready">OneNote connected</p>
               <p class="set-hint" id="onenote-email"></p>
+              <button type="button" id="onenote-disconnect" class="set-textbtn ms-disconnect">Disconnect</button>
             </div>
             <div id="onenote-entry">
               <div class="edu-sheet-actions">
@@ -625,8 +635,18 @@
               <a id="onenote-open" class="set-link" href="#">Open Microsoft sign-in</a>
             </div>
             <p class="set-hint" id="onenote-studio" hidden>On this Mac the agent can already use the school Microsoft sign-in for today's demo.</p>
-            <p class="set-hint" id="onenote-status"></p>
-            <a class="set-link" id="onenote-admin" href="https://login.microsoftonline.com/b2681e8b-dd20-46cf-b163-371a2d7c6014/v2.0/adminconsent?client_id=d3590ed6-52b3-4102-aeff-aad2292ab01c&amp;scope=https://graph.microsoft.com/.default&amp;redirect_uri=https://epsynapse.com/" rel="noopener noreferrer">Ask school IT to approve</a>
+            <p class="set-hint ms-status" id="onenote-status"></p>
+            <div class="ms-approval" id="onenote-approval" hidden>
+              <p class="set-hint">Microsoft needs school IT to approve EPSynapse once. After that every student at EPS can connect.</p>
+              <div class="edu-sheet-actions">
+                <button type="button" id="onenote-request" class="edu-sheet-btn edu-sheet-btn--gold">Send request to school IT</button>
+              </div>
+              <div class="ms-approval-links">
+                <a class="set-link" id="onenote-admin" href="https://login.microsoftonline.com/b2681e8b-dd20-46cf-b163-371a2d7c6014/v2.0/adminconsent?client_id=d3590ed6-52b3-4102-aeff-aad2292ab01c&amp;scope=https://graph.microsoft.com/.default&amp;redirect_uri=https://epsynapse.com/" target="_blank" rel="noopener noreferrer">Admin approval link for IT</a>
+                <button type="button" id="onenote-copy" class="set-textbtn">Copy request</button>
+              </div>
+              <pre class="ms-request-body" id="onenote-request-body" hidden></pre>
+            </div>
           </div>
         </div>
 
@@ -641,14 +661,14 @@
           </div>
           <div class="edu-sheet-body">
             <ol class="set-steps" id="outlook-steps">
-              <li>Sign in with Google on this page if you have not already.</li>
-              <li>Tap Connect Outlook. Microsoft opens a school sign-in.</li>
-              <li>Use your @eastsideprep.org account. If Microsoft says the app needs admin approval, that is expected. School IT Accepts once, then every student can connect.</li>
-              <li>Outlook on the settings list must say Connected.</li>
+              <li>Tap Connect. A Microsoft window opens. Sign in with your @eastsideprep.org account.</li>
+              <li>If Microsoft says "Approval required" or "Need admin approval", that is expected. Come back here and tap Send request to school IT.</li>
+              <li>Once IT approves, tap Connect again. The pane says Connected only after EPSynapse can actually read your Outlook mail.</li>
             </ol>
             <div id="outlook-ready" hidden>
               <p class="set-ready">Outlook connected</p>
               <p class="set-hint" id="outlook-email"></p>
+              <button type="button" id="outlook-disconnect" class="set-textbtn ms-disconnect">Disconnect</button>
             </div>
             <div id="outlook-entry">
               <div class="edu-sheet-actions">
@@ -660,8 +680,18 @@
               <a id="outlook-open" class="set-link" href="#">Open Microsoft sign-in</a>
             </div>
             <p class="set-hint" id="outlook-studio" hidden>On this Mac the agent can already read and send school Outlook for today's demo.</p>
-            <p class="set-hint" id="outlook-status"></p>
-            <a class="set-link" id="outlook-admin" href="https://login.microsoftonline.com/b2681e8b-dd20-46cf-b163-371a2d7c6014/v2.0/adminconsent?client_id=d3590ed6-52b3-4102-aeff-aad2292ab01c&amp;scope=https://graph.microsoft.com/.default&amp;redirect_uri=https://epsynapse.com/" rel="noopener noreferrer">Ask school IT to approve</a>
+            <p class="set-hint ms-status" id="outlook-status"></p>
+            <div class="ms-approval" id="outlook-approval" hidden>
+              <p class="set-hint">Microsoft needs school IT to approve EPSynapse once. After that every student at EPS can connect.</p>
+              <div class="edu-sheet-actions">
+                <button type="button" id="outlook-request" class="edu-sheet-btn edu-sheet-btn--gold">Send request to school IT</button>
+              </div>
+              <div class="ms-approval-links">
+                <a class="set-link" id="outlook-admin" href="https://login.microsoftonline.com/b2681e8b-dd20-46cf-b163-371a2d7c6014/v2.0/adminconsent?client_id=d3590ed6-52b3-4102-aeff-aad2292ab01c&amp;scope=https://graph.microsoft.com/.default&amp;redirect_uri=https://epsynapse.com/" target="_blank" rel="noopener noreferrer">Admin approval link for IT</a>
+                <button type="button" id="outlook-copy" class="set-textbtn">Copy request</button>
+              </div>
+              <pre class="ms-request-body" id="outlook-request-body" hidden></pre>
+            </div>
           </div>
         </div>
 
@@ -676,14 +706,14 @@
           </div>
           <div class="edu-sheet-body">
             <ol class="set-steps" id="teams-steps">
-              <li>Sign in with Google on this page if you have not already.</li>
-              <li>Tap Connect Teams. Microsoft opens a school sign-in.</li>
-              <li>Use your @eastsideprep.org account. If Microsoft says the app needs admin approval, that is expected. School IT Accepts once, then every student can connect.</li>
-              <li>Teams on the settings list must say Connected.</li>
+              <li>Tap Connect. A Microsoft window opens. Sign in with your @eastsideprep.org account.</li>
+              <li>If Microsoft says "Approval required" or "Need admin approval", that is expected. Come back here and tap Send request to school IT.</li>
+              <li>Once IT approves, tap Connect again. The pane says Connected only after EPSynapse can actually read your Teams chats.</li>
             </ol>
             <div id="teams-ready" hidden>
               <p class="set-ready">Teams connected</p>
               <p class="set-hint" id="teams-email"></p>
+              <button type="button" id="teams-disconnect" class="set-textbtn ms-disconnect">Disconnect</button>
             </div>
             <div id="teams-entry">
               <div class="edu-sheet-actions">
@@ -695,8 +725,18 @@
               <a id="teams-open" class="set-link" href="#">Open Microsoft sign-in</a>
             </div>
             <p class="set-hint" id="teams-studio" hidden>On this Mac the agent can already read and send school Teams for today's demo.</p>
-            <p class="set-hint" id="teams-status"></p>
-            <a class="set-link" id="teams-admin" href="https://login.microsoftonline.com/b2681e8b-dd20-46cf-b163-371a2d7c6014/v2.0/adminconsent?client_id=d3590ed6-52b3-4102-aeff-aad2292ab01c&amp;scope=https://graph.microsoft.com/.default&amp;redirect_uri=https://epsynapse.com/" rel="noopener noreferrer">Ask school IT to approve</a>
+            <p class="set-hint ms-status" id="teams-status"></p>
+            <div class="ms-approval" id="teams-approval" hidden>
+              <p class="set-hint">Microsoft needs school IT to approve EPSynapse once. After that every student at EPS can connect.</p>
+              <div class="edu-sheet-actions">
+                <button type="button" id="teams-request" class="edu-sheet-btn edu-sheet-btn--gold">Send request to school IT</button>
+              </div>
+              <div class="ms-approval-links">
+                <a class="set-link" id="teams-admin" href="https://login.microsoftonline.com/b2681e8b-dd20-46cf-b163-371a2d7c6014/v2.0/adminconsent?client_id=d3590ed6-52b3-4102-aeff-aad2292ab01c&amp;scope=https://graph.microsoft.com/.default&amp;redirect_uri=https://epsynapse.com/" target="_blank" rel="noopener noreferrer">Admin approval link for IT</a>
+                <button type="button" id="teams-copy" class="set-textbtn">Copy request</button>
+              </div>
+              <pre class="ms-request-body" id="teams-request-body" hidden></pre>
+            </div>
           </div>
         </div>
       </div>
@@ -718,7 +758,7 @@
 
     <script src="/liquid-glass.js?v=glass14"></script>
     <script src="/theme-orb.js?v=moon6"></script>
-    <script src="/app.js?v=logo2"></script>
+    <script src="/app.js?v=msfix2"></script>
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js" crossorigin="anonymous"></script>
     <script src="/markdown.js?v=2"></script>
     <script src="/chatbot.js?v=groqfix1"></script>

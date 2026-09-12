@@ -3886,6 +3886,88 @@ html[data-auth="in"] #stage-out {
   display: none !important;
 }
 
+/* Microsoft panes: denied / needs IT approval block */
+.ms-status,
+.od-code {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.ms-disconnect {
+  display: inline-block;
+  margin-top: 0.35rem;
+}
+
+.ms-disconnect[hidden] {
+  display: none !important;
+}
+
+.ms-approval {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0.75rem 0 0.25rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid color-mix(in srgb, #eba700 55%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, #eba700 10%, transparent);
+}
+
+.ms-approval[hidden] {
+  display: none !important;
+}
+
+.ms-approval .edu-sheet-actions {
+  margin: 0;
+}
+
+.edu-sheet--set .ms-approval .edu-sheet-actions .edu-sheet-btn {
+  flex: 1 1 100%;
+}
+
+@media (max-width: 560px) {
+  .edu-sheet--set[data-pane="onedrive"] .edu-sheet-actions .edu-sheet-btn,
+  .edu-sheet--set[data-pane="onenote"] .edu-sheet-actions .edu-sheet-btn,
+  .edu-sheet--set[data-pane="outlook"] .edu-sheet-actions .edu-sheet-btn,
+  .edu-sheet--set[data-pane="teams"] .edu-sheet-actions .edu-sheet-btn {
+    flex: 1 1 100%;
+  }
+}
+
+.ms-approval-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 1rem;
+}
+
+.ms-approval-links .set-link,
+.ms-approval-links .set-textbtn {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ms-request-body {
+  margin: 0;
+  padding: 0.6rem 0.7rem;
+  max-height: 14rem;
+  overflow: auto;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
+  font: inherit;
+  font-size: var(--text-footnote);
+  line-height: 1.4;
+  color: var(--fg);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: all;
+  -webkit-user-select: all;
+}
+
+.ms-request-body[hidden] {
+  display: none !important;
+}
+
 .edu-app:not(.is-settled) .edu-col--main .edu-panel:nth-child(3) { animation-delay: 0.16s; }
 
 .edu-home-research {
