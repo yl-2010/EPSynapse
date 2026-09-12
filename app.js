@@ -1651,19 +1651,23 @@
 
   document.getElementById("home-open").addEventListener("click", goHome);
 
-  document.getElementById("schedule-upload")?.addEventListener("click", async () => {
+  function setScheduleStatus(msg) {
     const status = document.getElementById("schedule-status");
+    if (status) status.textContent = msg || "";
+  }
+
+  async function uploadSchedulePdf() {
     if (!signedInViaGoogle()) {
-      if (status) status.textContent = NEED_GOOGLE;
+      setScheduleStatus(NEED_GOOGLE);
       return;
     }
     const input = document.getElementById("schedulePdf");
     const file = input && input.files && input.files[0];
     if (!file) {
-      if (status) status.textContent = "Choose a term schedule PDF first.";
+      setScheduleStatus("Choose a term schedule PDF first.");
       return;
     }
-    if (status) status.textContent = "Uploading…";
+    setScheduleStatus(`Uploading ${file.name}…`);
     const body = new FormData();
     body.append("pdf", file, file.name);
     try {
@@ -1671,7 +1675,7 @@
       const session = sid();
       if (session) headers["X-EPSynapse-Session"] = session;
       const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 30000);
+      const timer = setTimeout(() => ctrl.abort(), 90000);
       let res;
       try {
         res = await fetch(`${apiBase}/v1/me/schedule/pdf`, {
@@ -1694,12 +1698,28 @@
       if (!res.ok) throw new Error(payload.error || "Upload failed.");
       lastHome.classes = payload.classes || [];
       lastHome.meetings = payload.meetings || [];
-      if (status) status.textContent = `Saved ${(payload.classes || []).filter((c) => !c.freePeriod).length} classes.`;
+      const count = (payload.classes || []).filter((c) => !c.freePeriod).length;
+      setScheduleStatus(count === 1 ? "Saved 1 class." : `Saved ${count} classes.`);
       if (input) input.value = "";
       await loadDashboard();
     } catch (err) {
-      if (status) status.textContent = err.message || "Could not read that PDF.";
+      const aborted = err && (err.name === "AbortError" || /aborted/i.test(String(err.message || "")));
+      setScheduleStatus(aborted ? "Upload timed out. Try again." : err.message || "Could not read that PDF.");
     }
+  }
+
+  document.getElementById("schedule-pick")?.addEventListener("click", () => {
+    const input = document.getElementById("schedulePdf");
+    if (!input) return;
+    if (!signedInViaGoogle()) {
+      setScheduleStatus(NEED_GOOGLE);
+      return;
+    }
+    input.value = "";
+    input.click();
+  });
+  document.getElementById("schedulePdf")?.addEventListener("change", () => {
+    if (document.getElementById("schedulePdf")?.files?.[0]) uploadSchedulePdf();
   });
   document.getElementById("settings-open").addEventListener("click", openSheet);
   document.getElementById("settings-close").addEventListener("click", () => {

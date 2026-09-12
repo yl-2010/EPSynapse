@@ -67,6 +67,14 @@ struct SettingsSheet: View {
                 if pickedPDF != nil, dashboard.scheduleStatus.hasPrefix("Choose an EPS") {
                     dashboard.scheduleStatus = ""
                 }
+                if let url = pickedPDF {
+                    Task {
+                        await dashboard.uploadSchedule(fileURL: url, session: session)
+                        if dashboard.scheduleStatus.hasPrefix("Schedule uploaded") {
+                            await dashboard.load(from: session)
+                        }
+                    }
+                }
             case .failure:
                 dashboard.scheduleStatus = "Could not open that PDF."
             }

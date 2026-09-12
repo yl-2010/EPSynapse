@@ -18,7 +18,7 @@
     <title>EPSynapse</title>
     <meta name="description" content="EPSynapse student dashboard" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/styles.css?v=glass30" />
+    <link rel="stylesheet" href="/styles.css?v=glass31" />
     <link
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css"
@@ -64,6 +64,14 @@
     </style>
   </head>
   <body>
+    <input
+      id="schedulePdf"
+      class="edu-sr-file"
+      type="file"
+      accept="application/pdf,.pdf"
+      tabindex="-1"
+      aria-hidden="true"
+    />
     <button
       type="button"
       class="corner c-tl squircle"
@@ -378,14 +386,14 @@
             <div class="edu-sheet-field">
               <input id="studentId" name="studentId" maxlength="80" placeholder="Optional" />
             </div>
-            <label for="schedulePdf">Term schedule PDF</label>
-            <div class="edu-sheet-field">
-              <input id="schedulePdf" name="schedulePdf" type="file" accept="application/pdf,.pdf" />
-            </div>
+            <label id="schedule-pdf-label">Term schedule PDF</label>
+            <p class="set-hint">Printed Fall, Winter, or Spring card with periods A-H.</p>
             <div class="edu-sheet-actions">
-              <button type="button" id="schedule-upload" class="edu-sheet-btn">Upload schedule PDF</button>
+              <button type="button" id="schedule-pick" class="edu-sheet-btn edu-sheet-btn--gold">
+                Upload schedule PDF
+              </button>
             </div>
-            <p class="edu-empty" id="schedule-status"></p>
+            <p class="set-hint" id="schedule-status" role="status"></p>
             <div class="edu-sheet-actions">
               <button type="submit" id="settings-save" class="edu-sheet-btn edu-sheet-btn--gold">Save</button>
             </div>
@@ -545,7 +553,7 @@
 
     <script src="/liquid-glass.js?v=glass14"></script>
     <script src="/theme-orb.js?v=glass12"></script>
-    <script src="/app.js?v=filter1"></script>
+    <script src="/app.js?v=sched1"></script>
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js" crossorigin="anonymous"></script>
     <script src="/markdown.js?v=2"></script>
     <script src="/chatbot.js?v=math1"></script>
