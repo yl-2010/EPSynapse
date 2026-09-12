@@ -11,8 +11,8 @@ struct CornerChrome: View {
     @EnvironmentObject private var session: SessionStore
     @EnvironmentObject private var chat: ChatStore
 
-    private var orbSide: CGFloat { AdaptiveLayout.isPad ? 60 : 52 }
-    private var cornerPad: CGFloat { AdaptiveLayout.isPad ? 20 : 16 }
+    private var orbSide: CGFloat { AdaptiveLayout.cornerOrbSide }
+    private var cornerPad: CGFloat { AdaptiveLayout.cornerPad }
 
     var body: some View {
         ZStack {

@@ -8,8 +8,13 @@ struct ChatHistoryOverlay: View {
 
     var body: some View {
         GeometryReader { geo in
+            let safe = AdaptiveLayout.windowSafeArea
+            let leading = Self.panelLeading(safeLeading: safe.left)
+            let top = Self.panelTop(safeTop: safe.top)
+            let bottom = Self.panelBottom(safeBottom: safe.bottom)
             let width = Self.panelWidth(for: geo.size)
-            let travel = width + 8
+            let height = Self.panelHeight(for: geo.size, top: top, bottom: bottom)
+            let travel = width + leading
 
             ZStack(alignment: .topLeading) {
                 Color.black
@@ -21,14 +26,14 @@ struct ChatHistoryOverlay: View {
 
                 ChatHistoryPanel()
                     .frame(width: width)
-                    .frame(height: Self.panelHeight(for: geo.size))
+                    .frame(height: height)
                     .epsGlassRounded(cornerRadius: 22, interactive: true, clear: true)
-                    .padding(.top, geo.safeAreaInsets.top + 8)
-                    .padding(.leading, 8)
+                    .padding(.top, top)
+                    .padding(.leading, leading)
                     .offset(x: (chat.historyReveal - 1) * travel)
             }
-            .task(id: width) {
-                chat.historyPanelWidth = width
+            .task(id: travel) {
+                chat.historyPanelWidth = travel
             }
             .onChange(of: chat.historyReveal) { _, value in
                 if value >= 1 { interceptClose = true }
@@ -50,14 +55,29 @@ struct ChatHistoryOverlay: View {
         return size.width * 0.69
     }
 
-    static func panelHeight(for size: CGSize) -> CGFloat {
+    static func panelLeading(safeLeading: CGFloat) -> CGFloat {
+        safeLeading + 8
+    }
+
+    static func panelTop(safeTop: CGFloat) -> CGFloat {
+        safeTop + AdaptiveLayout.cornerPad + AdaptiveLayout.cornerOrbSide + 8
+    }
+
+    static func panelBottom(safeBottom: CGFloat) -> CGFloat {
+        safeBottom + AdaptiveLayout.cornerPad + AdaptiveLayout.chatPillSide + 8
+    }
+
+    static func panelHeight(for size: CGSize, top: CGFloat, bottom: CGFloat) -> CGFloat {
+        let available = max(160, size.height - top - bottom)
+        let preferred: CGFloat
         if AdaptiveLayout.isPad {
-            return min(520, size.height * 0.55)
+            preferred = min(520, size.height * 0.55)
+        } else if size.width > size.height {
+            preferred = size.height * 0.78
+        } else {
+            preferred = size.height * 0.58
         }
-        if size.width > size.height {
-            return min(size.height * 0.78, size.height - 36)
-        }
-        return min(size.height * 0.58, size.height - 160)
+        return min(preferred, available)
     }
 
     private func closeDrag(travel: CGFloat) -> some Gesture {
@@ -138,7 +158,7 @@ struct ChatHistoryOpenModifier: ViewModifier {
                     EPSHaptics.swipeBegin()
                     Task { await chat.loadList() }
                 }
-                let travel = max(chat.historyPanelWidth + 8, 1)
+                let travel = max(chat.historyPanelWidth, 1)
                 let raw = startReveal + dx / travel
                 var transaction = Transaction()
                 transaction.disablesAnimations = true

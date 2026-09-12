@@ -14,6 +14,19 @@ enum AdaptiveLayout {
         UIDevice.current.userInterfaceIdiom == .phone
     }
 
+    static var cornerOrbSide: CGFloat { isPad ? 60 : 52 }
+    static var cornerPad: CGFloat { isPad ? 20 : 16 }
+    static var chatPillSide: CGFloat { 56 }
+
+    static var windowSafeArea: UIEdgeInsets {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let scene = scenes.first { $0.activationState == .foregroundActive } ?? scenes.first
+        if let window = scene?.keyWindow ?? scene?.windows.first {
+            return window.safeAreaInsets
+        }
+        return UIEdgeInsets(top: 59, left: 0, bottom: 34, right: 0)
+    }
+
     static func isWideLayout(
         horizontal: UserInterfaceSizeClass?,
         vertical: UserInterfaceSizeClass?
