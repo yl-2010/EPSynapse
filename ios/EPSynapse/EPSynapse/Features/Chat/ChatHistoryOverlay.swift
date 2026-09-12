@@ -243,7 +243,7 @@ final class ChatHistoryPanInstaller: UIView, UIGestureRecognizerDelegate {
         guard let nav = findHomeNavigation() else { return }
         nav.interactivePopGestureRecognizer?.isEnabled = blocksOpen
         if #available(iOS 26, *) {
-            nav.interactiveContentPopGestureRecognizer.isEnabled = blocksOpen
+            nav.interactiveContentPopGestureRecognizer?.isEnabled = blocksOpen
         }
     }
 
@@ -256,7 +256,7 @@ final class ChatHistoryPanInstaller: UIView, UIGestureRecognizerDelegate {
 
         switch gesture.state {
         case .began, .changed:
-            applyDrag(dx: translation.width)
+            applyDrag(dx: translation.x)
         case .ended, .cancelled, .failed:
             finishDrag(velocityX: velocity.x)
         default:
