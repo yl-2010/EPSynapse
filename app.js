@@ -635,6 +635,7 @@
           ? "Saved. Chat will switch to the next key if one hits its limit."
           : "Saved on this account. Chat can use it now."
       );
+      window.__epsynapseClearChatKeyError?.();
       closePane();
       return true;
     } catch (err) {
@@ -2078,20 +2079,6 @@
     refreshTodoFiles(t);
   }
 
-  function classifierVoteHtml(label, vote, correct) {
-    if (!vote || !vote.subject) {
-      return `<p class="edu-empty">${escapeHtml(label)}: no vote</p>`;
-    }
-    const pct =
-      typeof vote.confidence === "number" && Number.isFinite(vote.confidence)
-        ? ` · ${Math.round(vote.confidence * 100)}%`
-        : "";
-    let judged = "";
-    if (correct === true) judged = " · correct";
-    if (correct === false) judged = " · wrong";
-    return `<p>${escapeHtml(label)}: ${escapeHtml(vote.subject)}${escapeHtml(pct)}${escapeHtml(judged)}</p>`;
-  }
-
   function subjectOptions(selected) {
     const names = homeClasses()
       .map((c) => String(c.name || "").trim())
@@ -2134,8 +2121,6 @@
       return;
     }
     const gold = note.userGoldSubject || note.subject || "";
-    const votes = note.votes || {};
-    const orch = note.orchestrator || {};
     appEl.classList.add("is-settled");
     appEl.innerHTML = `
       <p class="edu-home-mark"><a class="edu-home-research" data-route href="/">Back</a></p>
@@ -2150,18 +2135,6 @@
           ${panelHtml("Note", `<pre class="edu-note-body">${escapeHtml(note.text || "")}</pre>`, "lg-edu-note-text")}
         </div>
         <div class="edu-col edu-col--side">
-          ${panelHtml(
-            "Classifiers",
-            `${classifierVoteHtml("BERT", votes.baseBert || votes.zeroShot, orch.baseBertCorrect)}
-             ${classifierVoteHtml("Fine-tuned BERT", votes.fineTunedBert || votes.fineTuned, orch.fineTunedBertCorrect)}`,
-            "lg-edu-note-votes"
-          )}
-          ${panelHtml(
-            "Orchestrator",
-            `<p>${escapeHtml(orch.subject || note.subject || "Other")}</p>
-             ${orch.rationale ? `<p class="edu-empty">${escapeHtml(orch.rationale)}</p>` : ""}`,
-            "lg-edu-note-orch"
-          )}
           ${panelHtml(
             "Class",
             `<form class="edu-notes-form" id="note-gold">
@@ -3436,6 +3409,102 @@
     }
   });
 
+  let confirmDialog = null;
+  let confirmAnimTimer = 0;
+
+  function ensureConfirmDialog() {
+    if (confirmDialog) return confirmDialog;
+    const root = document.createElement("div");
+    root.id = "edu-confirm";
+    root.className = "edu-confirm-backdrop";
+    root.hidden = true;
+    root.innerHTML = `
+      <div class="edu-confirm" role="alertdialog" aria-modal="true" aria-labelledby="edu-confirm-title" aria-describedby="edu-confirm-copy">
+        <h2 class="edu-confirm-title" id="edu-confirm-title"></h2>
+        <p class="edu-confirm-copy" id="edu-confirm-copy"></p>
+        <div class="edu-confirm-actions">
+          <button type="button" class="edu-sheet-btn edu-sheet-btn--quiet" data-confirm-cancel>Cancel</button>
+          <button type="button" class="edu-sheet-btn edu-sheet-btn--gold" data-confirm-ok>Delete</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(root);
+    confirmDialog = root;
+    return root;
+  }
+
+  function hideConfirmDialog() {
+    const root = confirmDialog;
+    if (!root) return;
+    const finish = () => {
+      root.hidden = true;
+      root.classList.remove("is-open", "is-leaving");
+    };
+    if (root.hidden) return;
+    if (prefersReducedMotion() || !root.classList.contains("is-open")) {
+      finish();
+      return;
+    }
+    root.classList.add("is-leaving");
+    window.clearTimeout(confirmAnimTimer);
+    confirmAnimTimer = window.setTimeout(finish, 220);
+  }
+
+  function confirmInApp({ title, copy, okLabel = "Delete", cancelLabel = "Cancel" }) {
+    return new Promise((resolve) => {
+      const root = ensureConfirmDialog();
+      const titleEl = root.querySelector("#edu-confirm-title");
+      const copyEl = root.querySelector("#edu-confirm-copy");
+      const okBtn = root.querySelector("[data-confirm-ok]");
+      const cancelBtn = root.querySelector("[data-confirm-cancel]");
+      titleEl.textContent = title;
+      copyEl.textContent = copy || "";
+      copyEl.hidden = !copy;
+      okBtn.textContent = okLabel;
+      cancelBtn.textContent = cancelLabel;
+
+      let settled = false;
+      const finish = (ok) => {
+        if (settled) return;
+        settled = true;
+        document.removeEventListener("keydown", onKey);
+        root.removeEventListener("click", onBackdrop);
+        okBtn.removeEventListener("click", onOk);
+        cancelBtn.removeEventListener("click", onCancel);
+        hideConfirmDialog();
+        resolve(ok);
+      };
+      const onOk = () => finish(true);
+      const onCancel = () => finish(false);
+      const onKey = (ev) => {
+        if (ev.key === "Escape") {
+          ev.preventDefault();
+          finish(false);
+        }
+      };
+      const onBackdrop = (ev) => {
+        if (ev.target === root) finish(false);
+      };
+
+      document.addEventListener("keydown", onKey);
+      root.addEventListener("click", onBackdrop);
+      okBtn.addEventListener("click", onOk);
+      cancelBtn.addEventListener("click", onCancel);
+
+      window.clearTimeout(confirmAnimTimer);
+      root.classList.remove("is-leaving");
+      root.hidden = false;
+      if (prefersReducedMotion()) {
+        root.classList.add("is-open");
+      } else {
+        root.classList.remove("is-open");
+        void root.offsetWidth;
+        root.classList.add("is-open");
+      }
+      cancelBtn.focus();
+    });
+  }
+
   appEl.addEventListener("click", async (ev) => {
     const del = ev.target.closest("[data-delete-note]");
     if (!del) return;
@@ -3443,7 +3512,13 @@
     const id = del.getAttribute("data-delete-note");
     const status = document.getElementById("note-delete-status");
     if (!id) return;
-    if (!window.confirm("Delete this note?")) return;
+    const ok = await confirmInApp({
+      title: "Delete this note?",
+      copy: "It will be gone from your notes. This cannot be undone.",
+      okLabel: "Delete",
+      cancelLabel: "Keep it",
+    });
+    if (!ok) return;
     if (status) status.textContent = "Deleting…";
     try {
       await api(`/v1/me/notes/${encodeURIComponent(id)}`, { method: "DELETE" });

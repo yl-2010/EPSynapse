@@ -2909,7 +2909,10 @@ html[data-resolved-theme="dark"] .edu-sheet-backdrop {
   #settings-open svg,
   .edu-sheet-backdrop.is-open,
   .edu-sheet-backdrop.is-open.is-leaving,
-  .edu-sheet-backdrop.is-open:not(.is-leaving) .set-stage > #settings-main {
+  .edu-sheet-backdrop.is-open:not(.is-leaving) .set-stage > #settings-main,
+  .edu-confirm-backdrop.is-open,
+  .edu-confirm-backdrop.is-open.is-leaving,
+  .edu-confirm-backdrop.is-open:not(.is-leaving) .edu-confirm {
     transition: none;
     animation: none !important;
   }
@@ -3834,6 +3837,132 @@ html[data-auth="in"] #stage-out {
   color: var(--muted);
   max-height: 28rem;
   overflow: auto;
+}
+
+.edu-confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 140;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem 1rem;
+  background: rgba(11, 31, 58, 0.42);
+}
+
+.edu-confirm-backdrop::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  backdrop-filter: blur(20px) saturate(1.25);
+  -webkit-backdrop-filter: blur(20px) saturate(1.25);
+}
+
+html[data-resolved-theme="dark"] .edu-confirm-backdrop {
+  background: rgba(4, 12, 24, 0.62);
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-resolved-theme="light"]) .edu-confirm-backdrop {
+    background: rgba(4, 12, 24, 0.62);
+  }
+}
+
+.edu-confirm-backdrop[hidden] {
+  display: none !important;
+}
+
+.edu-confirm-backdrop.is-open {
+  animation: settings-backdrop-in 0.32s var(--ease) both;
+}
+
+.edu-confirm-backdrop.is-open.is-leaving {
+  animation: settings-backdrop-out 0.2s ease both;
+}
+
+.edu-confirm-backdrop.is-open:not(.is-leaving) .edu-confirm {
+  animation: settings-sheet-in 0.42s var(--ease) both;
+}
+
+.edu-confirm {
+  position: relative;
+  z-index: 1;
+  width: min(22rem, calc(100vw - 2rem));
+  padding: 1.35rem 1.3rem 1.2rem;
+  border: 1px solid color-mix(in srgb, #fff 70%, var(--panel-brd));
+  border-radius: 22px;
+  background: #f4f7fb;
+  box-shadow:
+    0 18px 48px rgba(11, 31, 58, 0.22),
+    0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--fg);
+}
+
+html[data-resolved-theme="dark"] .edu-confirm {
+  background: #0b1f3a;
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.48),
+    0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-resolved-theme="light"]) .edu-confirm {
+    background: #0b1f3a;
+    border-color: rgba(255, 255, 255, 0.12);
+    box-shadow:
+      0 18px 48px rgba(0, 0, 0, 0.48),
+      0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+  }
+}
+
+.edu-confirm-title {
+  margin: 0;
+  font-size: var(--text-title3);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.edu-confirm-copy {
+  margin: 0.45rem 0 0;
+  font-size: var(--text-footnote);
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.edu-confirm-copy[hidden] {
+  display: none !important;
+}
+
+.edu-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 1.15rem;
+}
+
+.edu-confirm-actions .edu-sheet-btn {
+  flex: 1 1 7rem;
+  min-width: 0;
+}
+
+.edu-sheet-btn--quiet,
+html[data-resolved-theme="dark"] .edu-sheet-btn--quiet {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--fg) 7%, transparent);
+  border-color: color-mix(in srgb, var(--fg) 16%, transparent);
+  box-shadow: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-resolved-theme="light"]) .edu-sheet-btn--quiet {
+    color: var(--fg);
+    background: color-mix(in srgb, #fff 8%, transparent);
+    border-color: rgba(255, 255, 255, 0.16);
+  }
 }
 
 .research-page {
