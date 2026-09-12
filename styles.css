@@ -1259,7 +1259,7 @@ html[data-resolved-theme="light"] .edu-filter.is-on {
 }
 
 .edu-row.edu-todo {
-  transform-origin: 50% 0;
+  transform-origin: 50% 40%;
 }
 
 .edu-row.edu-todo:hover {
@@ -1271,11 +1271,24 @@ html[data-resolved-theme="light"] .edu-filter.is-on {
   background: color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
+.edu-row.edu-todo.is-falling,
 .edu-row.edu-todo.is-leaving,
 .edu-row.edu-todo.is-entering {
   content-visibility: visible;
   pointer-events: none;
+}
+
+.edu-row.edu-todo.is-leaving,
+.edu-row.edu-todo.is-entering {
   overflow: hidden;
+}
+
+.edu-row.edu-todo.is-falling {
+  opacity: 0;
+  transform: translateY(20px);
+  transition:
+    opacity 0.64s ease,
+    transform 0.64s cubic-bezier(0.28, 0.55, 0.32, 1);
 }
 
 .edu-row.edu-todo.is-leaving,
@@ -1286,31 +1299,35 @@ html[data-resolved-theme="light"] .edu-filter.is-on {
   padding-top: 0;
   padding-bottom: 0;
   margin-bottom: 0;
-  transform: translateY(-6px);
+}
+
+.edu-row.edu-todo.is-leaving,
+.edu-row[data-tag].edu-todo.is-leaving {
+  transform: translateY(20px);
 }
 
 .edu-row.edu-todo.is-enter-from,
 .edu-row[data-tag].edu-todo.is-enter-from {
-  transform: translateY(8px);
+  transform: translateY(10px);
 }
 
 .edu-row.edu-todo.is-leaving {
   transition:
-    opacity 0.48s ease,
-    max-height 0.52s var(--ease),
-    padding 0.52s var(--ease),
-    margin 0.52s var(--ease),
-    transform 0.48s ease,
+    opacity 0.2s ease,
+    max-height 0.38s var(--ease),
+    padding 0.38s var(--ease),
+    margin 0.38s var(--ease),
+    transform 0.2s ease,
     background 0.2s var(--ease);
 }
 
 .edu-row.edu-todo.is-entering {
   transition:
-    opacity 0.42s var(--ease),
-    max-height 0.46s var(--ease),
-    padding 0.46s var(--ease),
-    margin 0.46s var(--ease),
-    transform 0.42s var(--ease),
+    opacity 0.48s var(--ease),
+    max-height 0.48s var(--ease),
+    padding 0.48s var(--ease),
+    margin 0.48s var(--ease),
+    transform 0.48s var(--ease),
     background 0.2s var(--ease);
 }
 
@@ -1426,6 +1443,11 @@ html[data-resolved-theme="light"] .edu-filter.is-on {
   box-shadow: 0 3px var(--lg-outer-shadow-blur) var(--lg-outer-shadow);
   appearance: none;
   -webkit-appearance: none;
+  transition: transform 0.16s ease;
+}
+
+.edu-check.is-press {
+  transform: scale(0.82);
 }
 
 .edu-check::before {
@@ -1448,7 +1470,7 @@ html[data-resolved-theme="light"] .edu-filter.is-on {
   opacity: 0;
   transform: scale(0.6);
   pointer-events: none;
-  transition: opacity 0.22s var(--ease), transform 0.22s var(--ease);
+  transition: opacity 0.3s ease, transform 0.36s cubic-bezier(0.22, 1.45, 0.36, 1);
 }
 
 .edu-check.is-checked .edu-check-dot {
@@ -1463,6 +1485,9 @@ html[data-resolved-theme="light"] .edu-filter.is-on {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .edu-check,
+  .edu-check-dot,
+  .edu-row.edu-todo.is-falling,
   .edu-row.edu-todo.is-leaving,
   .edu-row.edu-todo.is-entering {
     transition: none;

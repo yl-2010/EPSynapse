@@ -175,7 +175,7 @@ struct TodoPanel: View {
                     TodoRow(item: item)
                         .transition(.asymmetric(
                             insertion: .opacity.combined(with: .move(edge: .top)),
-                            removal: .opacity.combined(with: .scale(scale: 0.97, anchor: .top))
+                            removal: .opacity.combined(with: .move(edge: .bottom))
                         ))
                 }
             }
@@ -203,7 +203,7 @@ struct CompletedPanel: View {
                     TodoRow(item: item)
                         .transition(.asymmetric(
                             insertion: .opacity.combined(with: .move(edge: .top)),
-                            removal: .opacity.combined(with: .scale(scale: 0.97, anchor: .top))
+                            removal: .opacity.combined(with: .move(edge: .bottom))
                         ))
                 }
             }
@@ -248,6 +248,9 @@ struct TodoRow: View {
     @EnvironmentObject private var session: SessionStore
     @EnvironmentObject private var dashboard: DashboardStore
     @State private var hovering = false
+    @State private var pendingDone: Bool?
+
+    private var shownDone: Bool { pendingDone ?? item.done }
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
@@ -263,7 +266,7 @@ struct TodoRow: View {
                         Text(item.title)
                             .font(.body.weight(.semibold))
                             .foregroundStyle(EPSTheme.fg)
-                            .strikethrough(item.done, color: EPSTheme.fg.opacity(0.55))
+                            .strikethrough(shownDone, color: EPSTheme.fg.opacity(0.55))
                             .multilineTextAlignment(.leading)
                     }
                     HStack(spacing: 8) {
@@ -287,25 +290,31 @@ struct TodoRow: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(EPSTheme.accent.opacity(hovering ? 0.14 : 0))
         }
-        .opacity(item.done ? (hovering ? 0.9 : 0.55) : 1)
+        .opacity(shownDone ? (hovering ? 0.9 : 0.55) : 1)
         .animation(.easeOut(duration: 0.2), value: hovering)
         .onHover { hovering = $0 }
     }
 
     private var checkbox: some View {
         Button {
+            guard pendingDone == nil else { return }
             Task {
                 if item.done {
+                    pendingDone = false
+                    try? await Task.sleep(for: .milliseconds(420))
                     await dashboard.markUndone(item, session: session)
                 } else {
+                    pendingDone = true
+                    try? await Task.sleep(for: .milliseconds(420))
                     await dashboard.markDone(item, session: session)
                 }
+                pendingDone = nil
             }
         } label: {
             Color.clear
                 .epsSizedGlassCircle(side: 20, interactive: false)
                 .overlay {
-                    if item.done {
+                    if shownDone {
                         Circle()
                             .fill(EPSTheme.accent)
                             .frame(width: 8, height: 8)
@@ -314,7 +323,8 @@ struct TodoRow: View {
                 }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(item.done ? "Mark incomplete" : "Mark complete")
+        .animation(.spring(duration: 0.34, bounce: 0.26), value: shownDone)
+        .accessibilityLabel(shownDone ? "Mark incomplete" : "Mark complete")
         .epsHapticOnTap()
     }
 }

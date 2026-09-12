@@ -156,7 +156,7 @@ struct ClassView: View {
                     TodoRow(item: item)
                         .transition(.asymmetric(
                             insertion: .opacity.combined(with: .move(edge: .top)),
-                            removal: .opacity.combined(with: .scale(scale: 0.97, anchor: .top))
+                            removal: .opacity.combined(with: .move(edge: .bottom))
                         ))
                 }
             }
@@ -172,7 +172,7 @@ struct ClassView: View {
                     TodoRow(item: item)
                         .transition(.asymmetric(
                             insertion: .opacity.combined(with: .move(edge: .top)),
-                            removal: .opacity.combined(with: .scale(scale: 0.97, anchor: .top))
+                            removal: .opacity.combined(with: .move(edge: .bottom))
                         ))
                 }
             }

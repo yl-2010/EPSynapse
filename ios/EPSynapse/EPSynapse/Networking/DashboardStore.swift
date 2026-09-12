@@ -277,7 +277,7 @@ final class DashboardStore: ObservableObject {
     guard !item.done else { return }
     let id = item.id
     guard let index = assignments.firstIndex(where: { $0.id == id }) else { return }
-    withAnimation(.easeInOut(duration: 0.55)) {
+    withAnimation(.easeInOut(duration: 0.7)) {
       assignments[index].done = true
     }
     let canvasId = item.canvasId.isEmpty ? id : item.canvasId
@@ -305,7 +305,7 @@ final class DashboardStore: ObservableObject {
     guard item.done else { return }
     let id = item.id
     guard let index = assignments.firstIndex(where: { $0.id == id }) else { return }
-    withAnimation(.easeInOut(duration: 0.55)) {
+    withAnimation(.easeInOut(duration: 0.7)) {
       assignments[index].done = false
     }
     let canvasId = item.canvasId.isEmpty ? id : item.canvasId

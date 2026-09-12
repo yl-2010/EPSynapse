@@ -1039,15 +1039,18 @@
     empty.hidden = visible;
   }
 
-  const TODO_LEAVE_MS = 520;
-  const TODO_ENTER_MS = 460;
+  const TODO_PRESS_MS = 90;
+  const TODO_HOLD_MS = 380;
+  const TODO_FALL_MS = 640;
+  const TODO_COLLAPSE_MS = 380;
+  const TODO_ENTER_MS = 480;
 
   function prefersReducedMotion() {
     return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   }
 
   function clearTodoMotion(row) {
-    row.classList.remove("is-leaving", "is-entering", "is-enter-from", "is-flying");
+    row.classList.remove("is-leaving", "is-entering", "is-enter-from", "is-flying", "is-falling");
     row.style.maxHeight = "";
     row.style.overflow = "";
     row.style.opacity = "";
@@ -1082,30 +1085,41 @@
     }
 
     const height = Math.max(1, Math.ceil(row.getBoundingClientRect().height));
-    row.style.overflow = "hidden";
-    row.style.maxHeight = `${height}px`;
-    row.classList.add("is-leaving");
-    requestAnimationFrame(() => {
-      row.style.maxHeight = "0px";
-    });
+    row.classList.add("is-falling");
 
     window.setTimeout(() => {
-      put();
-      row.classList.remove("is-leaving");
-      row.classList.add("is-entering", "is-enter-from");
-      row.style.transition = "none";
-      row.style.maxHeight = "0px";
-      refreshTodoEmptyState();
-      refreshCompletedEmptyState();
+      row.style.overflow = "hidden";
+      row.style.maxHeight = `${height}px`;
+      row.classList.add("is-leaving");
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          row.style.transition = "";
-          row.classList.remove("is-enter-from");
-          row.style.maxHeight = `${height}px`;
-        });
+        row.style.maxHeight = "0px";
       });
-      window.setTimeout(() => finishTodoMove(row), TODO_ENTER_MS + 40);
-    }, TODO_LEAVE_MS);
+      window.setTimeout(() => {
+        put();
+        row.classList.remove("is-falling", "is-leaving");
+        row.classList.add("is-entering", "is-enter-from");
+        row.style.transition = "none";
+        row.style.maxHeight = "0px";
+        refreshTodoEmptyState();
+        refreshCompletedEmptyState();
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            row.style.transition = "";
+            row.classList.remove("is-enter-from");
+            row.style.maxHeight = `${height}px`;
+          });
+        });
+        window.setTimeout(() => finishTodoMove(row), TODO_ENTER_MS + 40);
+      }, TODO_COLLAPSE_MS);
+    }, TODO_FALL_MS);
+  }
+
+  function armTodoCheck(check, checked) {
+    check.classList.add("is-press");
+    window.setTimeout(() => {
+      check.classList.remove("is-press");
+      check.classList.toggle("is-checked", checked);
+    }, TODO_PRESS_MS);
   }
 
   function writeTodoComplete(id, item, done) {
@@ -1133,11 +1147,13 @@
     if (!row || !id || check.classList.contains("is-checked") || row.dataset.busy === "1") return;
     const item = assignmentById(id);
     row.dataset.busy = "1";
-    check.classList.add("is-checked");
     check.setAttribute("aria-label", "Mark incomplete");
     check.disabled = false;
-    row.classList.add("is-done");
     if (item) item.done = true;
+    armTodoCheck(check, true);
+    window.setTimeout(() => {
+      row.classList.add("is-done");
+    }, TODO_PRESS_MS);
 
     const dest = ensureCompletedList();
     if (!dest) {
@@ -1145,8 +1161,10 @@
       return;
     }
 
-    animateTodoMove(row, dest, insertTodoRowSorted);
     writeTodoComplete(id, item, true);
+    window.setTimeout(() => {
+      animateTodoMove(row, dest, insertTodoRowSorted);
+    }, TODO_PRESS_MS + TODO_HOLD_MS);
   }
 
   function uncompleteTodoRow(check) {
@@ -1155,11 +1173,13 @@
     if (!row || !id || !check.classList.contains("is-checked") || row.dataset.busy === "1") return;
     const item = assignmentById(id);
     row.dataset.busy = "1";
-    check.classList.remove("is-checked");
     check.setAttribute("aria-label", "Mark complete");
     check.disabled = false;
-    row.classList.remove("is-done");
     if (item) item.done = false;
+    armTodoCheck(check, false);
+    window.setTimeout(() => {
+      row.classList.remove("is-done");
+    }, TODO_PRESS_MS);
 
     const dest = ensureTodoList();
     if (!dest) {
@@ -1167,8 +1187,10 @@
       return;
     }
 
-    animateTodoMove(row, dest, insertTodoRowSorted);
     writeTodoComplete(id, item, false);
+    window.setTimeout(() => {
+      animateTodoMove(row, dest, insertTodoRowSorted);
+    }, TODO_PRESS_MS + TODO_HOLD_MS);
   }
 
   function trimNum(n) {
