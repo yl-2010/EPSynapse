@@ -1599,7 +1599,7 @@
     if (!klass) {
       appEl.classList.add("is-settled");
       appEl.innerHTML = `
-        <p class="edu-home-mark"><a class="edu-home-research" data-route href="/">Home</a></p>
+        <p class="edu-home-mark"><a class="edu-home-research" data-route href="/">Back</a></p>
         <p class="edu-empty">No class with that id. Upload a term schedule PDF or connect Canvas.</p>
       `;
       return;
@@ -1637,7 +1637,7 @@
       .join(" · ");
     appEl.classList.add("is-settled");
     appEl.innerHTML = `
-      <p class="edu-home-mark"><a class="edu-home-research" data-route href="/">Home</a></p>
+      <p class="edu-home-mark"><a class="edu-home-research" data-route href="/">Back</a></p>
       <header class="edu-hero edu-hero--detail edu-hero--detail-canvas edu-hero--class ${cardClass(classTone(klass))}">
         <div class="edu-hero-lead">
           <h1 class="edu-hero-title edu-hero-title--class">${period}<span class="edu-hero-class-name">${escapeHtml(fullerClassName(klass.name, courseGrade?.name))}</span></h1>
@@ -1680,7 +1680,7 @@
     if (!note) {
       appEl.classList.add("is-settled");
       appEl.innerHTML = `
-        <p class="edu-home-mark"><a class="edu-home-research" data-route href="/">Home</a></p>
+        <p class="edu-home-mark"><a class="edu-home-research" data-route href="/">Back</a></p>
         <p class="edu-empty">That note is not on this account.</p>
       `;
       return;
@@ -1688,7 +1688,7 @@
     const gold = note.userGoldSubject || note.subject || "";
     appEl.classList.add("is-settled");
     appEl.innerHTML = `
-      <p class="edu-home-mark"><a class="edu-home-research" data-route href="/">Home</a></p>
+      <p class="edu-home-mark"><a class="edu-home-research" data-route href="/">Back</a></p>
       <header class="edu-hero edu-hero--detail">
         <div class="edu-hero-lead">
           <h1 class="edu-hero-title">${escapeHtml(note.title || "Note")}</h1>
@@ -1794,7 +1794,7 @@
       .join("");
     appEl.classList.add("is-settled");
     appEl.innerHTML = `
-      <p class="edu-home-mark"><a class="edu-home-research" data-route href="/">Home</a></p>
+      <p class="edu-home-mark"><a class="edu-home-research" data-route href="/">Back</a></p>
       <div class="edu-grid edu-grid--grades">
         <div class="edu-col edu-col--main">
           ${panels || `<p class="edu-empty">${escapeHtml(empty)}</p>`}
