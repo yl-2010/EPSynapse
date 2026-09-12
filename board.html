@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <script>
+      (function () {
+        try {
+          var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var r = document.documentElement;
+          r.dataset.theme = "system";
+          r.dataset.resolvedTheme = dark ? "dark" : "light";
+          r.style.colorScheme = dark ? "dark" : "light";
+        } catch (e) {}
+      })();
+    </script>
+    <title>LPC counts · EPSynapse</title>
+    <meta
+      name="description"
+      content="Counts for whoever decides LPC menus. This week's pulse at Eastside Prep."
+    />
+    <meta property="og:title" content="LPC counts · EPSynapse" />
+    <meta
+      property="og:description"
+      content="Counts for whoever decides LPC menus."
+    />
+    <meta property="og:url" content="https://epsynapse.com/board" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="EPSynapse" />
+    <link rel="canonical" href="https://epsynapse.com/board" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css?v=glass9" />
+    <link rel="stylesheet" href="/board.css" />
+  </head>
+  <body class="board-body">
+    <a
+      href="/"
+      class="corner c-tl squircle"
+      data-liquid-glass="squircle"
+      data-filter-id="lg-tl"
+      aria-label="Home"
+    >
+      <span class="corner-mark" aria-hidden="true">E</span>
+    </a>
+
+    <button
+      type="button"
+      class="corner c-tr circle"
+      data-liquid-glass="circle"
+      data-filter-id="lg-tr"
+      aria-label="Toggle theme"
+      draggable="false"
+    ></button>
+
+    <main class="board" id="board">
+      <header class="board-hero">
+        <p class="board-kicker">Eastside Prep</p>
+        <h1 class="board-title" id="board-title">This week's LPC</h1>
+        <p class="board-lede">Counts for whoever decides LPC menus.</p>
+        <p class="board-n" id="board-n" aria-live="polite">0 answers</p>
+        <div class="board-meta">
+          <p class="board-live" id="board-live" data-state="down">
+            <span class="board-live-dot" aria-hidden="true"></span>
+            <span class="board-live-label">offline</span>
+          </p>
+          <p class="board-status" id="board-status" aria-live="polite"></p>
+        </div>
+        <div class="board-tools">
+          <div class="board-views" role="group" aria-label="Count view">
+            <button type="button" class="board-view" data-view="all" aria-pressed="true">
+              All
+            </button>
+            <button type="button" class="board-view" data-view="grade" aria-pressed="false">
+              By grade
+            </button>
+          </div>
+          <button type="button" class="board-csv" id="board-csv">Download CSV</button>
+        </div>
+      </header>
+
+      <div class="board-questions" id="board-questions"></div>
+
+      <p class="board-skip" id="board-skip" hidden></p>
+
+      <footer class="board-foot">
+        <a href="/pulse">Answer this week's pulse</a>
+        <a href="/privacy.html">Privacy</a>
+      </footer>
+    </main>
+
+    <svg
+      class="liquid-glass-svg"
+      xmlns="http://www.w3.org/2000/svg"
+      width="0"
+      height="0"
+      aria-hidden="true"
+      focusable="false"
+      color-interpolation-filters="sRGB"
+      style="position: absolute; width: 0; height: 0; overflow: hidden; pointer-events: none"
+    >
+      <defs id="liquid-glass-defs"></defs>
+    </svg>
+
+    <script src="/liquid-glass.js?v=glass8"></script>
+    <script src="/theme-orb.js?v=glass6"></script>
+    <script src="/board.js"></script>
+  </body>
+</html>
