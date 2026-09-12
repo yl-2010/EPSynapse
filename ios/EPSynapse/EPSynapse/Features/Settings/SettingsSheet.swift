@@ -201,7 +201,10 @@ struct SettingsSheet: View {
             fieldLabel("OneDrive")
             actionRow {
                 glassAction(session.profile?.onedriveConnected == true ? "Reconnect OneDrive" : "Connect OneDrive") {
-                    Task { await session.startOnedrive() }
+                    Task {
+                        await session.startOnedrive()
+                        openDeviceURI(session.odURI)
+                    }
                 }
             }
             Text(session.onedriveStatus)
@@ -228,6 +231,13 @@ struct SettingsSheet: View {
 
     private var agentSection: some View {
         settingsGroup("Agent") {
+            if session.profile?.modelKeySet != true, session.modelKey.isEmpty {
+                Text(SessionStore.setupGuide)
+                    .font(.footnote)
+                    .foregroundStyle(EPSTheme.fg)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.bottom, 6)
+            }
             fieldLabel("Model")
             glassField {
                 Picker("Model", selection: $session.provider) {

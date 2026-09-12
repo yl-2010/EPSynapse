@@ -1,22 +1,43 @@
 /**
  * School OneDrive via Microsoft Graph.
- * Students sign in with @eastsideprep.org. No token fishing.
- * Default public client is Graph Explorer, which Graph already preauthorizes
- * for Files. Outlook on the web is not, and returns AADSTS65002.
+ * Microsoft Office is already on the school tenant. Graph Explorer asks for
+ * new Files/Mail consent and Eastside Prep blocks that behind admin approval.
  * Override with MICROSOFT_CLIENT_ID if we later register EPSynapse itself.
  */
 
-export const GRAPH_EXPLORER_CLIENT_ID = "de8bc8b5-d9f9-48b1-a8ad-b748da725064";
+export const OFFICE_CLIENT_ID = "d3590ed6-52b3-4102-aeff-aad2292ab01c";
 export const EPS_TENANT_ID = "b2681e8b-dd20-46cf-b163-371a2d7c6014";
 export const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
 export const WRITE_FOLDER = "EPSynapse";
 
 const LOGIN = `https://login.microsoftonline.com/${EPS_TENANT_ID}/oauth2/v2.0`;
 const DEVICE_SCOPE =
-  "https://graph.microsoft.com/Files.ReadWrite offline_access openid profile";
+  "https://graph.microsoft.com/.default offline_access openid profile";
 
 export function graphClientId() {
-  return String(process.env.MICROSOFT_CLIENT_ID || "").trim() || GRAPH_EXPLORER_CLIENT_ID;
+  return String(process.env.MICROSOFT_CLIENT_ID || "").trim() || OFFICE_CLIENT_ID;
+}
+
+export function completeDeviceUrl(userCode, uri) {
+  const code = String(userCode || "").trim();
+  if (code) return `https://login.microsoft.com/device?otc=${encodeURIComponent(code)}`;
+  return String(uri || "https://login.microsoft.com/device").trim();
+}
+
+export function tokenScopes(token) {
+  return String(jwtClaims(token).scp || "").toLowerCase();
+}
+
+export function tokenHasFiles(token) {
+  const s = tokenScopes(token);
+  if (!s) return true;
+  return /files\.read|sites\.read/.test(s);
+}
+
+export function tokenHasMail(token) {
+  const s = tokenScopes(token);
+  if (!s) return true;
+  return /mail\.read|mail\.send/.test(s);
 }
 const TOKEN_SKEW_S = 90;
 const GRAPH_APP_ID = "00000003-0000-0000-c000-000000000000";
@@ -156,7 +177,9 @@ export async function startDeviceCode() {
       ok: true,
       user_code: String(data.user_code),
       verification_uri: String(data.verification_uri || ""),
-      verification_uri_complete: String(data.verification_uri_complete || ""),
+      verification_uri_complete:
+        String(data.verification_uri_complete || "").trim() ||
+        completeDeviceUrl(data.user_code, data.verification_uri),
       device_code: String(data.device_code),
       clientId,
       interval: Number(data.interval) || 5,
@@ -372,6 +395,8 @@ export function publicPending(graph) {
   return {
     user_code: code,
     verification_uri: uri,
+    verification_uri_complete:
+      String(src.verification_uri_complete || "").trim() || completeDeviceUrl(code, uri),
     message: String(src.message || "").trim(),
   };
 }

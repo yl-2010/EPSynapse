@@ -14,6 +14,9 @@ struct ChatOverlay: View {
 
     private var showPanel: Bool { isOpen }
     private var pillSide: CGFloat { 56 }
+    private var hasChatKey: Bool {
+        session.profile?.modelKeySet == true || !session.modelKey.isEmpty
+    }
 
     private var openWidth: CGFloat {
         AdaptiveLayout.isPad ? min(420, AdaptiveLayout.chatMaxWidth) : .infinity
@@ -184,11 +187,18 @@ struct ChatOverlay: View {
             .padding(.bottom, 8)
 
             if chat.turns.isEmpty {
-                Text("Ask about classes, Canvas, or your day.")
-                    .font(.body)
-                    .foregroundStyle(EPSTheme.muted)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 8)
+                ScrollView {
+                    if hasChatKey {
+                        Text(SessionStore.readyGuide)
+                            .font(.body)
+                            .foregroundStyle(EPSTheme.muted)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        EPSMarkdownText(source: SessionStore.setupGuide, scheme: colorScheme)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                .padding(.vertical, 8)
             } else {
                 ScrollViewReader { proxy in
                     ScrollView {
@@ -320,6 +330,11 @@ struct ChatOverlay: View {
         guard session.isSignedIn else { return }
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !chat.busy else { return }
+        if !hasChatKey {
+            draft = ""
+            isOpen = true
+            return
+        }
         draft = ""
         isOpen = true
         let user = ChatTurn(role: "user", content: text)

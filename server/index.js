@@ -23,11 +23,13 @@ import {
   dashboardPayload,
   listAssignments,
   listCourses,
+  listGrades,
   normalizeHost,
   validateToken,
 } from "./canvas.js";
 import {
   acceptPastedToken,
+  completeDeviceUrl,
   downloadFile,
   ensureFreshToken,
   isConnected,
@@ -35,6 +37,8 @@ import {
   pollDeviceCode,
   publicPending,
   startDeviceCode,
+  tokenHasFiles,
+  tokenHasMail,
   uploadFile,
   WRITE_FOLDER,
 } from "./onedrive.js";
@@ -189,7 +193,10 @@ function terminalDeviceError(error) {
     e === "authorization_declined" ||
     e === "access_denied" ||
     e === "bad_verification_code" ||
+    e === "invalid_grant" ||
     e.includes("aadsts70016") ||
+    e.includes("aadsts65001") ||
+    e.includes("aadsts65002") ||
     e.includes("expired") ||
     e.includes("declined")
   );
@@ -206,13 +213,36 @@ function livePending(pending) {
 }
 
 function pendingStartPayload(pending) {
+  const user_code = pending.user_code || "";
+  const verification_uri = pending.verification_uri || "https://login.microsoft.com/device";
   return {
-    user_code: pending.user_code,
-    verification_uri: pending.verification_uri || "",
-    verification_uri_complete: pending.verification_uri_complete || "",
+    user_code,
+    verification_uri,
+    verification_uri_complete:
+      pending.verification_uri_complete || completeDeviceUrl(user_code, verification_uri),
     message: pending.message || "",
     interval: pending.interval || 5,
   };
+}
+
+async function applyMicrosoftToken(current, poll, pending) {
+  const bag = {
+    accessToken: poll.accessToken,
+    refreshToken: poll.refreshToken,
+    exp: poll.exp,
+    email: poll.email,
+    clientId: poll.clientId || pending?.clientId || "",
+    scope: poll.scope || pending?.scope || "",
+    pending: null,
+  };
+  const files = tokenHasFiles(poll.accessToken);
+  const mail = tokenHasMail(poll.accessToken);
+  if (files) await persistGraph(current, bag);
+  if (mail) await persistOutlook(current, bag);
+  if (!files && !mail) await persistGraph(current, bag);
+  console.log(
+    `[ms-oauth] token for ${bag.email || "unknown"} files=${files} mail=${mail}`
+  );
 }
 
 async function graphToken(student) {
@@ -249,8 +279,16 @@ async function liveSnapshot(student) {
           const due = a.due ? a.due.slice(0, 10) : "no due";
           return `${a.tag} ${a.title} (${a.courseName || "class"}) ${due}`;
         });
+      const grades = (dash.courses || [])
+        .filter((c) => c.currentGrade || c.currentScore != null)
+        .slice(0, 12)
+        .map((c) => {
+          const pct = c.currentScore != null ? `${c.currentScore}%` : "";
+          return [c.name, c.currentGrade, pct].filter(Boolean).join(" ");
+        });
       bits.push(`Courses: ${courses.join("; ") || "none listed"}`);
       bits.push(`Open work: ${open.join("; ") || "none"}`);
+      if (grades.length) bits.push(`Grades: ${grades.join("; ")}`);
     } catch {
       bits.push("Canvas: could not load this turn.");
     }
@@ -517,12 +555,25 @@ app.get("/v1/me/canvas/assignments", async (req, res) => {
   }
 });
 
+app.get("/v1/me/canvas/grades", async (req, res) => {
+  try {
+    const student = await requireStudent(req, res);
+    if (!student) return;
+    if (!student.canvasToken) {
+      return res.status(400).json({ error: "Connect Canvas in settings first." });
+    }
+    const work = /^(1|true|yes)$/i.test(String(req.query.work || ""));
+    const grades = await listGrades(student.canvasHost, student.canvasToken, { work });
+    return res.json({ grades });
+  } catch (err) {
+    return fail(res, err, err.status || 502);
+  }
+});
+
 app.post("/v1/me/onedrive/start", async (req, res) => {
   try {
     const student = await requireStudent(req, res);
     if (!student) return;
-    const existing = livePending(student.graph?.pending);
-    if (existing) return res.json(pendingStartPayload(existing));
     const started = await startDeviceCode();
     if (!started.ok) {
       return res.json({
@@ -543,13 +594,7 @@ app.post("/v1/me/onedrive/start", async (req, res) => {
         message: started.message,
       },
     });
-    return res.json({
-      user_code: started.user_code,
-      verification_uri: started.verification_uri,
-      verification_uri_complete: started.verification_uri_complete || "",
-      message: started.message,
-      interval: started.interval,
-    });
+    return res.json(pendingStartPayload(started));
   } catch (err) {
     return fail(res, err);
   }
@@ -570,18 +615,13 @@ app.get("/v1/me/onedrive/status", async (req, res) => {
       }
       const poll = await pollDeviceCode(pending.device_code, pending.clientId);
       if (poll.ok) {
-        await persistGraph(current, {
-          accessToken: poll.accessToken,
-          refreshToken: poll.refreshToken,
-          exp: poll.exp,
-          email: poll.email,
-          pending: null,
-        });
+        await applyMicrosoftToken(current, poll, pending);
         return { current, pollError: "" };
       }
       if (poll.pending || waitingDeviceError(poll.error)) {
         return { current, pollError: "" };
       }
+      console.warn("[ms-oauth] onedrive poll", poll.error);
       if (terminalDeviceError(poll.error)) {
         await persistGraph(current, { pending: null });
         return { current, pollError: poll.error };
@@ -593,6 +633,8 @@ app.get("/v1/me/onedrive/status", async (req, res) => {
       pending: publicPending(current.graph),
       email: current.graph?.email || "",
       error: pollError || "",
+      outlookConnected: outlookConnected(current.outlook),
+      outlookEmail: current.outlook?.email || "",
     });
   } catch (err) {
     return fail(res, err);
@@ -664,8 +706,6 @@ app.post("/v1/me/outlook/start", async (req, res) => {
   try {
     const student = await requireStudent(req, res);
     if (!student) return;
-    const existing = livePending(student.outlook?.pending);
-    if (existing) return res.json(pendingStartPayload(existing));
     const started = await startOutlookCode();
     if (!started.ok) {
       return res.json({
@@ -687,13 +727,7 @@ app.post("/v1/me/outlook/start", async (req, res) => {
         message: started.message,
       },
     });
-    return res.json({
-      user_code: started.user_code,
-      verification_uri: started.verification_uri,
-      verification_uri_complete: started.verification_uri_complete || "",
-      message: started.message,
-      interval: started.interval,
-    });
+    return res.json(pendingStartPayload(started));
   } catch (err) {
     return fail(res, err);
   }
@@ -714,20 +748,13 @@ app.get("/v1/me/outlook/status", async (req, res) => {
       }
       const poll = await pollOutlookCode(pending.device_code, pending.clientId);
       if (poll.ok) {
-        await persistOutlook(current, {
-          accessToken: poll.accessToken,
-          refreshToken: poll.refreshToken,
-          exp: poll.exp,
-          email: poll.email,
-          clientId: poll.clientId || pending.clientId || "",
-          scope: poll.scope || pending.scope || "",
-          pending: null,
-        });
+        await applyMicrosoftToken(current, poll, pending);
         return { current, pollError: "" };
       }
       if (poll.pending || waitingDeviceError(poll.error)) {
         return { current, pollError: "" };
       }
+      console.warn("[ms-oauth] outlook poll", poll.error);
       if (terminalDeviceError(poll.error)) {
         await persistOutlook(current, { pending: null });
         return { current, pollError: poll.error };
@@ -739,6 +766,8 @@ app.get("/v1/me/outlook/status", async (req, res) => {
       pending: outlookPending(current.outlook),
       email: current.outlook?.email || "",
       error: pollError || "",
+      onedriveConnected: isConnected(current.graph),
+      onedriveEmail: current.graph?.email || "",
     });
   } catch (err) {
     return fail(res, err);

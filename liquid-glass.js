@@ -554,6 +554,12 @@
       return;
     }
 
+    if (!isGlassPainted(el)) {
+      el.classList.add("lg-paused");
+      el.style.removeProperty("--lg-radius");
+      return;
+    }
+
     const shape = el.getAttribute("data-liquid-glass") || "circle";
     const w = Math.max(2, Math.round(el.offsetWidth));
     const h = Math.max(2, Math.round(el.offsetHeight));
@@ -570,11 +576,6 @@
       el.style.removeProperty("--lg-spec");
       el.style.removeProperty("--lg-spec-opacity");
       ensureLucasFallbackFilter(defs);
-      return;
-    }
-
-    if (!isGlassPainted(el)) {
-      el.classList.add("lg-paused");
       return;
     }
 
@@ -1347,6 +1348,10 @@ void main() {
         applyTextBoxFrost(el);
         return;
       }
+      if (!isGlassPainted(el)) {
+        el.style.removeProperty("--lg-radius");
+        return;
+      }
       const w = Math.max(2, Math.round(el.offsetWidth));
       const h = Math.max(2, Math.round(el.offsetHeight));
       const shape = el.getAttribute("data-liquid-glass") || "circle";
@@ -1472,6 +1477,12 @@ void main() {
     );
 
     orbs.forEach((el) => {
+      if (!isGlassPainted(el)) {
+        el.style.removeProperty("--lg-radius");
+        el.style.removeProperty("--lg-filter");
+        el.classList.add("lg-paused");
+        return;
+      }
       const w = Math.max(2, Math.round(el.offsetWidth));
       const h = Math.max(2, Math.round(el.offsetHeight));
       const shape = el.getAttribute("data-liquid-glass") || "circle";

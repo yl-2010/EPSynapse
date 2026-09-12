@@ -23,6 +23,10 @@
   let olPollInFlight = false;
   const TAGS = ["CW", "HW", "QA", "MA"];
   const typeFilter = new Set(TAGS);
+  const DATES_COLLAPSED_LIMIT = 6;
+  const TODOS_COLLAPSED_LIMIT = 6;
+  let datesExpanded = false;
+  let todoExpanded = true;
   let lastHome = {
     courses: [],
     assignments: [],
@@ -31,6 +35,7 @@
     classes: [],
     meetings: [],
     notes: [],
+    grades: [],
   };
   let openMail = null;
   let mailBusy = false;
@@ -40,6 +45,12 @@
   let schoolTimer = 0;
   const DEFAULT_SCHOOL = "Eastside Prep";
   const NEED_GOOGLE = "Sign in with Google first.";
+
+  function microsoftDeviceUrl(code, uri) {
+    const c = String(code || "").trim();
+    if (c) return `https://login.microsoft.com/device?otc=${encodeURIComponent(c)}`;
+    return uri || "https://login.microsoft.com/device";
+  }
 
   function escapeHtml(s) {
     return String(s || "")
@@ -99,7 +110,10 @@
 
   function applyAuthGate() {
     const on = signedInViaGoogle();
-    document.documentElement.dataset.auth = on ? "in" : "out";
+    const next = on ? "in" : "out";
+    const authChanged = document.documentElement.dataset.auth !== next;
+    document.documentElement.dataset.auth = next;
+    if (authChanged) queueMicrotask(() => window.reinitLiquidGlass?.());
     const out = document.getElementById("stage-out");
     if (on) {
       if (out) out.hidden = true;
@@ -435,6 +449,7 @@
     document.documentElement.dataset.modelProvider = providerSel.value || id;
     document.documentElement.dataset.modelKeySet = accountHasKey() ? "1" : "";
     refreshKeyStatus();
+    window.__epsynapseRefreshChatGuide?.();
   }
 
   async function saveChatKey() {
@@ -661,6 +676,7 @@
     if (classMatch) return { page: "class", id: decodeURIComponent(classMatch[1]) };
     const noteMatch = path.match(/^\/note\/([^/]+)$/);
     if (noteMatch) return { page: "note", id: decodeURIComponent(noteMatch[1]) };
+    if (path === "/grades") return { page: "grades" };
     return { page: "home" };
   }
 
@@ -680,11 +696,25 @@
     goTo("/");
   }
 
-  function panelHtml(title, body, filterId, extraClass, filtersHtml) {
+  function panelHtml(title, body, filterId, extraClass, filtersHtml, titleInner) {
     return `<section class="edu-panel${extraClass ? " " + extraClass : ""}" data-filter-id="${escapeHtml(filterId)}">
-      <div class="edu-panel-head"><h2 class="edu-panel-title">${escapeHtml(title)}</h2>${filtersHtml || ""}</div>
+      <div class="edu-panel-head"><h2 class="edu-panel-title">${titleInner || escapeHtml(title)}</h2>${filtersHtml || ""}</div>
       ${body}
     </section>`;
+  }
+
+  function collapseTitle(title, kind, expanded) {
+    const isDates = kind === "dates";
+    const cls = isDates ? "edu-dates-toggle" : "edu-todos-toggle";
+    const attr = isDates ? "data-dates-expand" : "data-todos-expand";
+    const noun = isDates ? "dates" : "todos";
+    return `<button type="button" class="${cls}" ${attr} aria-expanded="${
+      expanded ? "true" : "false"
+    }" aria-label="${expanded ? "Collapse" : "Expand"} ${noun}">${escapeHtml(title)}</button>`;
+  }
+
+  function collapsedSlice(items, expanded, limit) {
+    return expanded ? items : items.slice(0, limit);
   }
 
   function filterBarHtml(kind) {
@@ -718,6 +748,70 @@
   function listOrEmpty(itemsHtml, empty) {
     if (!itemsHtml) return `<p class="edu-empty">${escapeHtml(empty || "Nothing here")}</p>`;
     return `<ul class="edu-list">${itemsHtml}</ul>`;
+  }
+
+  function trimNum(n) {
+    if (typeof n !== "number" || !Number.isFinite(n)) return "";
+    return String(Math.round(n * 10) / 10);
+  }
+
+  function formatCourseGrade(row) {
+    const letter = String(row?.currentGrade || "").trim();
+    const pct = typeof row?.currentScore === "number" ? `${trimNum(row.currentScore)}%` : "";
+    if (letter && pct) return `${letter} ${pct}`;
+    return letter || pct || "—";
+  }
+
+  function formatWorkScore(w) {
+    if (w?.excused) return "Excused";
+    if (w?.missing && w.score == null) return "Missing";
+    if (w?.score == null && w?.submitted) return "Submitted";
+    if (w?.score == null) return "—";
+    const pts = typeof w.pointsPossible === "number" ? `/${trimNum(w.pointsPossible)}` : "";
+    const letter = w.grade && String(w.grade) !== String(w.score) ? ` ${w.grade}` : "";
+    return `${trimNum(w.score)}${pts}${letter}`;
+  }
+
+  function gradeForClass(klass) {
+    const ids = [
+      klass?.canvasCourseId,
+      klass?.courseId,
+      klass?.id,
+    ].map((v) => String(v || "")).filter(Boolean);
+    const rows = [...(lastHome.grades || []), ...(lastHome.courses || [])];
+    return (
+      rows.find((c) => ids.includes(String(c.id || ""))) ||
+      rows.find((c) => {
+        const a = String(klass?.name || "").toLowerCase();
+        const b = String(c.name || "").toLowerCase();
+        return a && b && (a === b || a.includes(b) || b.includes(a));
+      }) ||
+      null
+    );
+  }
+
+  function gradeRow(c) {
+    const period = c.period
+      ? `<span class="edu-tag edu-period">${escapeHtml(c.period)}</span>`
+      : "";
+    return `<li class="edu-row edu-class-row">
+      <a class="edu-row-link" data-route href="/grades">
+        <span class="edu-name">${period}<span class="edu-hero-class-name">${escapeHtml(c.name)}</span></span>
+        <span class="edu-meta edu-grade">${escapeHtml(formatCourseGrade(c))}</span>
+      </a>
+    </li>`;
+  }
+
+  function workRow(w) {
+    const tag = w.tag || "HW";
+    const href = w.canvasLink || "#";
+    const late = w.late ? " is-late" : "";
+    return `<li class="edu-row${late}">
+      <a class="edu-row-link" href="${escapeHtml(href)}" target="_blank" rel="noopener">
+        <span class="edu-name"><span class="edu-tag edu-tag-${escapeHtml(tag)}">${escapeHtml(tag)}</span> ${escapeHtml(w.title)}</span>
+        <span class="edu-meta edu-grade">${escapeHtml(formatWorkScore(w))}</span>
+      </a>
+    </li>`;
   }
 
   function formatDue(iso) {
@@ -864,7 +958,7 @@
       </form>`;
   }
 
-  function renderHome({ courses, assignments, files, messages, classes, meetings, notes } = lastHome) {
+  function renderHome({ courses, assignments, files, messages, classes, meetings, notes, grades } = lastHome) {
     lastHome = {
       courses: courses || lastHome.courses || [],
       assignments: assignments || lastHome.assignments || [],
@@ -873,13 +967,15 @@
       classes: classes || lastHome.classes || [],
       meetings: meetings || lastHome.meetings || [],
       notes: notes || lastHome.notes || [],
+      grades: grades || lastHome.grades || [],
     };
-    const open = (lastHome.assignments || []).filter((t) => !t.done && matchesTag(t));
+    const openAll = (lastHome.assignments || []).filter((t) => !t.done && matchesTag(t));
+    const open = collapsedSlice(openAll, todoExpanded, TODOS_COLLAPSED_LIMIT);
     const done = (lastHome.assignments || []).filter((t) => t.done && matchesTag(t));
-    const dates = (lastHome.assignments || [])
+    const datesAll = (lastHome.assignments || [])
       .filter((t) => t.due && matchesTag(t))
-      .sort((a, b) => String(a.due).localeCompare(String(b.due)))
-      .slice(0, 12);
+      .sort((a, b) => String(a.due).localeCompare(String(b.due)));
+    const dates = collapsedSlice(datesAll, datesExpanded, DATES_COLLAPSED_LIMIT);
     const fileTiles = (lastHome.files || []).map(fileTile).join("");
     const classItems = homeClasses();
 
@@ -892,19 +988,26 @@
     const fileEmpty = me?.onedriveConnected
       ? "No files in /EPSynapse yet"
       : "Connect OneDrive in settings";
+    const gradeItems = (lastHome.grades || []).length
+      ? lastHome.grades
+      : lastHome.courses || [];
+    const gradeEmpty = me?.canvasConnected
+      ? "No course grades yet"
+      : "Connect Canvas in settings";
 
     appEl.classList.add("is-settled");
     appEl.innerHTML = `
-      <p class="edu-home-mark">EPSynapse <a class="edu-home-research" href="/research">Research</a></p>
+      <p class="edu-home-mark">EPSynapse <a class="edu-home-research" data-route href="/grades">Grades</a> <a class="edu-home-research" href="/research">Research</a></p>
       <div class="edu-grid edu-grid--home">
         <div class="edu-col edu-col--main">
-          ${panelHtml("TODO", listOrEmpty(open.map(todoRow).join(""), todoEmpty), "lg-edu-todo", "", filterBarHtml("todo"))}
+          ${panelHtml("TODO", listOrEmpty(open.map(todoRow).join(""), todoEmpty), "lg-edu-todo", "", todoExpanded ? filterBarHtml("todo") : "", collapseTitle("TODO", "todos", todoExpanded))}
           ${panelHtml("Completed", listOrEmpty(done.map(todoRow).join(""), "Nothing completed yet"), "lg-edu-completed", "edu-panel--completed")}
           ${panelHtml("Notes", notesPanelHtml(), "lg-edu-notes", "edu-panel--notes")}
         </div>
         <div class="edu-col edu-col--side">
           ${panelHtml("Classes", listOrEmpty(classItems.map(classRow).join(""), classEmpty), "lg-edu-classes")}
-          ${panelHtml("Dates", listOrEmpty(dates.map(dateRow).join(""), "No upcoming dates"), "lg-edu-dates", "", filterBarHtml("dates"))}
+          ${panelHtml("Grades", listOrEmpty(gradeItems.map(gradeRow).join(""), gradeEmpty), "lg-edu-grades")}
+          ${panelHtml("Dates", listOrEmpty(dates.map(dateRow).join(""), "No upcoming dates"), "lg-edu-dates", "", filterBarHtml("dates"), collapseTitle("Dates", "dates", datesExpanded))}
           ${panelHtml("Files", fileTiles ? `<div class="edu-files">${fileTiles}</div>` : `<p class="edu-empty">${escapeHtml(fileEmpty)}</p>`, "lg-edu-files")}
           ${panelHtml("Mail", mailPanelHtml(lastHome.messages), "lg-edu-mail")}
         </div>
@@ -957,12 +1060,13 @@
       return;
     }
     const work = (lastHome.assignments || []).filter((t) => classMatchesWork(klass, t));
-    const open = work.filter((t) => !t.done && matchesTag(t));
+    const openAll = work.filter((t) => !t.done && matchesTag(t));
+    const open = collapsedSlice(openAll, todoExpanded, TODOS_COLLAPSED_LIMIT);
     const done = work.filter((t) => t.done && matchesTag(t));
-    const dates = work
+    const datesAll = work
       .filter((t) => t.due && matchesTag(t))
-      .sort((a, b) => String(a.due).localeCompare(String(b.due)))
-      .slice(0, 12);
+      .sort((a, b) => String(a.due).localeCompare(String(b.due)));
+    const dates = collapsedSlice(datesAll, datesExpanded, DATES_COLLAPSED_LIMIT);
     const nameHint = String(klass.name || "").toLowerCase();
     const files = (lastHome.files || []).filter((f) => {
       if (!nameHint) return false;
@@ -991,7 +1095,11 @@
       ? `<span class="edu-tag edu-period edu-period--hero">${escapeHtml(klass.period)}</span>`
       : "";
     const next = nextMeetingLine(klass);
-    const sub = [klass.term, klass.subject, klass.courseCode, next].filter(Boolean).join(" · ");
+    const courseGrade = gradeForClass(klass);
+    const gradeText = courseGrade ? formatCourseGrade(courseGrade) : "";
+    const sub = [klass.term, klass.subject, klass.courseCode, gradeText && gradeText !== "—" ? gradeText : "", next]
+      .filter(Boolean)
+      .join(" · ");
     appEl.classList.add("is-settled");
     appEl.innerHTML = `
       <p class="edu-home-mark"><a class="edu-home-research" data-route href="/">Home</a></p>
@@ -1003,11 +1111,11 @@
       </header>
       <div class="edu-grid edu-grid--home">
         <div class="edu-col edu-col--main">
-          ${panelHtml("TODO", listOrEmpty(open.map(todoRow).join(""), "No open work for this class"), "lg-edu-todo", "", filterBarHtml("todo"))}
+          ${panelHtml("TODO", listOrEmpty(open.map(todoRow).join(""), "No open work for this class"), "lg-edu-todo", "", todoExpanded ? filterBarHtml("todo") : "", collapseTitle("TODO", "todos", todoExpanded))}
           ${panelHtml("Completed", listOrEmpty(done.map(todoRow).join(""), "Nothing completed yet"), "lg-edu-completed", "edu-panel--completed")}
         </div>
         <div class="edu-col edu-col--side">
-          ${panelHtml("Dates", listOrEmpty(dates.map(dateRow).join(""), "No upcoming dates"), "lg-edu-dates", "", filterBarHtml("dates"))}
+          ${panelHtml("Dates", listOrEmpty(dates.map(dateRow).join(""), "No upcoming dates"), "lg-edu-dates", "", filterBarHtml("dates"), collapseTitle("Dates", "dates", datesExpanded))}
           ${panelHtml("Files", fileTiles ? `<div class="edu-files">${fileTiles}</div>` : `<p class="edu-empty">No files for this class</p>`, "lg-edu-files")}
           ${panelHtml("Notes", listOrEmpty(noteRows, "No notes for this class yet"), "lg-edu-class-notes")}
         </div>
@@ -1109,6 +1217,64 @@
     }
   }
 
+  async function ensureGrades(detail) {
+    if (!me?.canvasConnected) return [];
+    if (detail) {
+      const haveWork = (lastHome.grades || []).some((g) => Array.isArray(g.work));
+      if (haveWork) return lastHome.grades;
+      try {
+        const data = await api("/v1/me/canvas/grades?work=1", { timeoutMs: 25000 });
+        lastHome.grades = data.grades || [];
+        return lastHome.grades;
+      } catch {
+        return lastHome.grades || lastHome.courses || [];
+      }
+    }
+    if ((lastHome.grades || []).length) return lastHome.grades;
+    if ((lastHome.courses || []).length) return lastHome.courses;
+    try {
+      const data = await api("/v1/me/canvas/grades");
+      lastHome.grades = data.grades || [];
+      return lastHome.grades;
+    } catch {
+      return lastHome.courses || [];
+    }
+  }
+
+  function renderGradesView(grades) {
+    const rows = grades || [];
+    const empty = me?.canvasConnected
+      ? "Canvas has not posted grades for these classes yet."
+      : "Connect Canvas in settings";
+    const panels = rows
+      .map((g) => {
+        const title = [g.period, g.name].filter(Boolean).join(" · ");
+        const mark = `<span class="edu-grade-mark">${escapeHtml(formatCourseGrade(g))}</span>`;
+        const body = g.work === undefined
+          ? `<p class="edu-empty">Loading graded work…</p>`
+          : listOrEmpty((g.work || []).map(workRow).join(""), "No graded work yet");
+        return panelHtml(title, body, `lg-grade-${g.id}`, "", mark);
+      })
+      .join("");
+    appEl.classList.add("is-settled");
+    appEl.innerHTML = `
+      <p class="edu-home-mark"><a class="edu-home-research" data-route href="/">Home</a> Grades</p>
+      <div class="edu-grid edu-grid--grades">
+        <div class="edu-col edu-col--main">
+          ${panels || `<p class="edu-empty">${escapeHtml(empty)}</p>`}
+        </div>
+      </div>
+    `;
+    if (typeof window.reinitLiquidGlass === "function") window.reinitLiquidGlass();
+  }
+
+  async function renderGrades() {
+    const cached = lastHome.grades || lastHome.courses || [];
+    if (cached.length) renderGradesView(cached);
+    const grades = await ensureGrades(true);
+    renderGradesView(grades);
+  }
+
   async function routeAndRender() {
     if (!signedInViaGoogle()) {
       applyAuthGate();
@@ -1124,6 +1290,10 @@
     if (route.page === "note") {
       await ensureNote(route.id);
       renderNote(route.id);
+      return;
+    }
+    if (route.page === "grades") {
+      await renderGrades();
       return;
     }
     renderHome(lastHome);
@@ -1155,14 +1325,16 @@
       .then((r) => r.notes || [])
       .catch(() => []);
     const sched = await schedule;
+    const courseRows = await courses;
     lastHome = {
-      courses: await courses,
+      courses: courseRows,
       assignments: await assignments,
       files: await files,
       messages: await messages,
       classes: sched.classes || [],
       meetings: sched.meetings || [],
       notes: await notes,
+      grades: courseRows.map((c) => ({ ...c, work: undefined })),
     };
     routeAndRender();
   }
@@ -1209,8 +1381,11 @@
     }
     const p = me.onedrivePending;
     if (p && (p.user_code || p.verification_uri)) {
-      setStatus(odStatus, "Enter this code on the Microsoft page, then come back here.");
-      showOnedriveCode(p.user_code, p.verification_uri || "https://login.microsoft.com/device");
+      setStatus(odStatus, "Microsoft should open with this code. Allow access, then come back.");
+      showOnedriveCode(
+        p.user_code,
+        p.verification_uri_complete || microsoftDeviceUrl(p.user_code, p.verification_uri)
+      );
       paintNavSummaries();
       return;
     }
@@ -1261,8 +1436,11 @@
     }
     const p = me.outlookPending;
     if (p && (p.user_code || p.verification_uri)) {
-      setStatus(olStatus, "Enter this code on the Microsoft page, then come back here.");
-      showOutlookCode(p.user_code, p.verification_uri || "https://login.microsoft.com/device");
+      setStatus(olStatus, "Microsoft should open with this code. Allow access, then come back.");
+      showOutlookCode(
+        p.user_code,
+        p.verification_uri_complete || microsoftDeviceUrl(p.user_code, p.verification_uri)
+      );
       paintNavSummaries();
       return;
     }
@@ -1278,6 +1456,8 @@
     const replacing = entry && entry.dataset.replace === "1";
     if (entry) entry.hidden = connected && !replacing;
     if (ready) ready.hidden = !connected;
+    const steps = document.getElementById("canvas-steps");
+    if (steps) steps.hidden = connected && !replacing;
     paintKeysSummary();
   }
 
@@ -1294,6 +1474,8 @@
       readyLabel.textContent = hasKey ? id : "";
     }
     paintKeysSummary();
+    const steps = document.getElementById("key-steps");
+    if (steps) steps.hidden = hasKey && !replacing;
     if (hasKey && !replacing) {
       setStatus(keyStatus, "");
       return;
@@ -1305,7 +1487,7 @@
     setStatus(
       keyStatus,
       signedInViaGoogle()
-        ? "Paste the Groq key here and tap Save key. Enter also saves. Then go back to chat."
+        ? "Paste the gsk_ key here, tap Save key, wait until Chat key says Groq, then ask in the pill."
         : ""
     );
   }
@@ -1582,6 +1764,15 @@
           onedriveEmail: st.email || "",
           onedrivePending: null,
         });
+        if (st.outlookConnected) {
+          stopOlPoll();
+          me = Object.assign({}, me, {
+            outlookConnected: true,
+            outlookEmail: st.outlookEmail || "",
+            outlookPending: null,
+          });
+          paintOutlook();
+        }
         paintOnedrive();
         await loadDashboard();
         return;
@@ -1589,6 +1780,7 @@
       if (st.pending && (st.pending.user_code || st.pending.verification_uri)) {
         me = Object.assign({}, me, { onedrivePending: st.pending });
         paintOnedrive();
+        if (st.error) setStatus(odStatus, st.error);
         return;
       }
       stopOdPoll();
@@ -1614,6 +1806,15 @@
           outlookEmail: st.email || "",
           outlookPending: null,
         });
+        if (st.onedriveConnected) {
+          stopOdPoll();
+          me = Object.assign({}, me, {
+            onedriveConnected: true,
+            onedriveEmail: st.onedriveEmail || "",
+            onedrivePending: null,
+          });
+          paintOnedrive();
+        }
         paintOutlook();
         await loadDashboard();
         return;
@@ -1621,6 +1822,7 @@
       if (st.pending && (st.pending.user_code || st.pending.verification_uri)) {
         me = Object.assign({}, me, { outlookPending: st.pending });
         paintOutlook();
+        if (st.error) setStatus(olStatus, st.error);
         return;
       }
       stopOlPoll();
@@ -1652,24 +1854,47 @@
     if (me?.outlookPending && !me.outlookConnected) tickOutlook();
   });
 
+  async function beginMicrosoftConnect(kind) {
+    const popup = window.open("https://login.microsoft.com/device", `eps-ms-${kind}`);
+    const started = await api(`/v1/me/${kind}/start`, {
+      method: "POST",
+      body: "{}",
+      timeoutMs: 20000,
+    });
+    if (!started.user_code) {
+      if (popup && !popup.closed) popup.close();
+      return started;
+    }
+    const openAt =
+      started.verification_uri_complete ||
+      microsoftDeviceUrl(started.user_code, started.verification_uri);
+    try {
+      await navigator.clipboard.writeText(started.user_code);
+    } catch {
+      /* clipboard is optional */
+    }
+    if (popup && !popup.closed) popup.location.replace(openAt);
+    else window.open(openAt, `eps-ms-${kind}`);
+    return started;
+  }
+
   document.getElementById("onedrive-start").addEventListener("click", async () => {
     try {
       if (!signedInViaGoogle()) {
         setStatus(odStatus, NEED_GOOGLE);
         return;
       }
-      const started = await api("/v1/me/onedrive/start", { method: "POST", body: "{}" });
+      const started = await beginMicrosoftConnect("onedrive");
       if (started.user_code) {
         me = Object.assign({}, me, {
           onedrivePending: {
             user_code: started.user_code,
             verification_uri: started.verification_uri,
+            verification_uri_complete: started.verification_uri_complete,
             message: started.message,
           },
         });
         paintOnedrive();
-        const openAt = started.verification_uri_complete || started.verification_uri;
-        if (openAt) window.open(openAt, "_blank", "noopener");
         watchOnedrive();
       } else {
         setStatus(odStatus, started.message || "Microsoft would not start school sign-in.");
@@ -1686,18 +1911,17 @@
         setStatus(olStatus, NEED_GOOGLE);
         return;
       }
-      const started = await api("/v1/me/outlook/start", { method: "POST", body: "{}", timeoutMs: 20000 });
+      const started = await beginMicrosoftConnect("outlook");
       if (started.user_code) {
         me = Object.assign({}, me, {
           outlookPending: {
             user_code: started.user_code,
             verification_uri: started.verification_uri,
+            verification_uri_complete: started.verification_uri_complete,
             message: started.message,
           },
         });
         paintOutlook();
-        const openAt = started.verification_uri_complete || started.verification_uri;
-        if (openAt) window.open(openAt, "_blank", "noopener");
         watchOutlook();
       } else {
         setStatus(olStatus, started.message || "Microsoft would not start Outlook sign-in.");
@@ -1705,6 +1929,23 @@
       }
     } catch (err) {
       setStatus(olStatus, err.message || "Could not start Outlook.");
+    }
+  });
+
+  appEl.addEventListener("click", (ev) => {
+    const t = ev.target;
+    const datesToggle = t.closest?.("[data-dates-expand]");
+    if (datesToggle) {
+      ev.preventDefault();
+      datesExpanded = !datesExpanded;
+      routeAndRender();
+      return;
+    }
+    const todosToggle = t.closest?.("[data-todos-expand]");
+    if (todosToggle) {
+      ev.preventDefault();
+      todoExpanded = !todoExpanded;
+      routeAndRender();
     }
   });
 

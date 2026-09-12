@@ -184,7 +184,12 @@ function publicPending(pending) {
   const verification_uri = String(pending.verification_uri || "");
   const message = String(pending.message || "");
   if (!user_code && !verification_uri && !message) return null;
-  return { user_code, verification_uri, message };
+  const verification_uri_complete =
+    String(pending.verification_uri_complete || "").trim() ||
+    (user_code
+      ? `https://login.microsoft.com/device?otc=${encodeURIComponent(user_code)}`
+      : "");
+  return { user_code, verification_uri, verification_uri_complete, message };
 }
 
 export function publicProfile(student) {

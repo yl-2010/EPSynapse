@@ -1,21 +1,22 @@
 /**
  * School Outlook via Microsoft Graph.
- * Graph Explorer is already preauthorized for Graph Mail.
- * Outlook on the web is not. That client returns AADSTS65002 against Exchange.
+ * Microsoft Office is already on the school tenant. Asking Graph Explorer for
+ * Mail.Read/Mail.Send hits "Approval required" at Eastside Prep.
  * Override with MICROSOFT_CLIENT_ID if we later register EPSynapse itself.
  */
 
-export const GRAPH_EXPLORER_CLIENT_ID = "de8bc8b5-d9f9-48b1-a8ad-b748da725064";
+import { completeDeviceUrl, OFFICE_CLIENT_ID } from "./onedrive.js";
+
 export const EPS_TENANT_ID = "b2681e8b-dd20-46cf-b163-371a2d7c6014";
 export const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
 export const OUTLOOK_REST_BASE = "https://outlook.office.com/api/v2.0";
 
 const LOGIN = `https://login.microsoftonline.com/${EPS_TENANT_ID}/oauth2/v2.0`;
 const GRAPH_SCOPE =
-  "https://graph.microsoft.com/Mail.Read https://graph.microsoft.com/Mail.Send offline_access openid profile";
+  "https://graph.microsoft.com/.default offline_access openid profile";
 
 export function outlookClientId() {
-  return String(process.env.MICROSOFT_CLIENT_ID || "").trim() || GRAPH_EXPLORER_CLIENT_ID;
+  return String(process.env.MICROSOFT_CLIENT_ID || "").trim() || OFFICE_CLIENT_ID;
 }
 const TOKEN_SKEW_S = 90;
 const GRAPH_APP_ID = "00000003-0000-0000-c000-000000000000";
@@ -126,8 +127,10 @@ async function requestDeviceCode(clientId, scope) {
   return {
     ok: true,
     user_code: String(data.user_code),
-    verification_uri: String(data.verification_uri || ""),
-    verification_uri_complete: String(data.verification_uri_complete || ""),
+      verification_uri: String(data.verification_uri || ""),
+      verification_uri_complete:
+        String(data.verification_uri_complete || "").trim() ||
+        completeDeviceUrl(data.user_code, data.verification_uri),
     device_code: String(data.device_code),
     clientId,
     scope,
@@ -425,6 +428,8 @@ export function publicPending(outlook) {
   return {
     user_code: code,
     verification_uri: uri,
+    verification_uri_complete:
+      String(src.verification_uri_complete || "").trim() || completeDeviceUrl(code, uri),
     message: String(src.message || "").trim(),
   };
 }

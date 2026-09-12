@@ -209,15 +209,6 @@ html.lg-chrome #lg-chrome-wash {
     linear-gradient(165deg, var(--bg-0), var(--bg-1));
 }
 
-html.lg-chrome .corner {
-  will-change: auto;
-}
-
-html.lg-chrome .corner:hover,
-html.lg-chrome .corner.is-dragging {
-  will-change: transform;
-}
-
 html.lg-chrome .edu-vote {
   will-change: auto;
 }
@@ -480,11 +471,33 @@ html[data-resolved-theme="dark"] .edu-check.lg-refraction::after {
 }
 
 .corner.squircle {
-  border-radius: var(--lg-radius, 21px);
+  --lg-radius: 21px;
+  border-radius: var(--lg-radius);
 }
 
 .corner.circle {
+  --lg-radius: 50%;
   border-radius: 50%;
+}
+
+/* url(#filter) backdrop paints a rect. Clip glass to the same shape as the
+   button so a stale --lg-radius cannot square the fill. */
+.corner.squircle::before,
+.corner.squircle.lg-refraction::after {
+  clip-path: inset(0 round var(--lg-radius, 21px));
+  -webkit-clip-path: inset(0 round var(--lg-radius, 21px));
+}
+
+.corner.circle::before,
+.corner.circle.lg-refraction::after {
+  clip-path: circle(50%);
+  -webkit-clip-path: circle(50%);
+}
+
+.yan-chat-pill.corner::before,
+.yan-chat-pill.corner.lg-refraction::after {
+  clip-path: inset(0 round calc(var(--chat-circle) / 2));
+  -webkit-clip-path: inset(0 round calc(var(--chat-circle) / 2));
 }
 
 .c-tl,
@@ -857,7 +870,8 @@ html[data-resolved-theme="dark"] .edu-back-shadow feGaussianBlur {
   min-width: 0;
 }
 
-.edu-grid--detail {
+.edu-grid--detail,
+.edu-grid--grades {
   grid-template-columns: 1fr;
 }
 
@@ -1280,6 +1294,20 @@ html[data-resolved-theme="light"] .edu-filter.is-on {
   color: var(--muted);
   font-size: 0.9rem;
   font-synthesis: none;
+}
+
+.edu-grade,
+.edu-grade-mark {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.edu-grade-mark {
+  padding-right: 0.15rem;
+  font-size: var(--text-subhead);
 }
 
 .edu-detail-row {
@@ -3312,6 +3340,26 @@ html[data-auth="in"] #stage-out {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
+}
+
+.set-steps {
+  margin: 0 0 0.85rem;
+  padding-left: 1.2rem;
+  font-size: var(--text-footnote);
+  line-height: 1.45;
+  color: var(--fg);
+}
+
+.set-steps li {
+  margin: 0 0 0.42rem;
+}
+
+.set-steps a {
+  color: var(--accent);
+}
+
+.set-steps[hidden] {
+  display: none !important;
 }
 
 .set-hint,

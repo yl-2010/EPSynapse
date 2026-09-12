@@ -18,7 +18,7 @@
     <title>EPSynapse</title>
     <meta name="description" content="EPSynapse student dashboard" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/styles.css?v=glass25" />
+    <link rel="stylesheet" href="/styles.css?v=glass28" />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
       .od-code {
@@ -397,6 +397,17 @@
             </button>
           </div>
           <div class="edu-sheet-body">
+            <ol class="set-steps" id="key-steps">
+              <li>Sign in with Google on this page if you have not already.</li>
+              <li>
+                Get a free Groq key at
+                <a href="https://console.groq.com/keys" rel="noopener noreferrer">console.groq.com/keys</a>.
+                Sign up with Google. No credit card. Create API Key, then copy the value that starts with gsk_. Groq shows it only once.
+              </li>
+              <li>Paste it in the API key field below. Leave Model on Groq.</li>
+              <li>Tap Save key. Enter also saves. Do not use the School Save button for this.</li>
+              <li>Chat key on the settings list must say Groq. Then close settings and ask in the chat pill. Do not paste the key in chat.</li>
+            </ol>
             <div id="key-ready" hidden>
               <div class="set-row">
                 <p class="set-ready" id="key-ready-label"></p>
@@ -434,6 +445,22 @@
             </button>
           </div>
           <div class="edu-sheet-body">
+            <ol class="set-steps" id="canvas-steps">
+              <li>Sign in with Google on this page if you have not already.</li>
+              <li>
+                Open
+                <a href="https://eastsideprep.instructure.com" rel="noopener noreferrer">eastsideprep.instructure.com</a>.
+                If you see four11, tap @eastsideprep.org login. Sign in with your school Microsoft account. Not Parent/Guardian.
+              </li>
+              <li>
+                In Canvas, click Account (your picture, left side), then Settings. Scroll to Approved Integrations. Click Add New Access Token.
+              </li>
+              <li>
+                Purpose: EPSynapse. Students must pick an expiration date. There is no permissions list. Click Generate Token and copy it now. Canvas shows it once.
+              </li>
+              <li>Leave Canvas URL as https://eastsideprep.instructure.com unless you use another school. Paste the token below. Tap Save.</li>
+              <li>Canvas on the settings list must say Connected. Then close settings.</li>
+            </ol>
             <label for="canvasHost">Canvas URL</label>
             <div class="edu-sheet-field">
               <input id="canvasHost" name="canvasHost" value="https://eastsideprep.instructure.com" />
@@ -449,11 +476,11 @@
               <div class="edu-sheet-field">
                 <input id="canvasToken" name="canvasToken" type="password" autocomplete="off" />
               </div>
-              <p class="set-hint">Canvas → Account → Settings → New Access Token</p>
             </div>
             <div class="edu-sheet-actions">
               <button type="submit" class="edu-sheet-btn edu-sheet-btn--gold">Save</button>
             </div>
+            <a class="set-link" href="/canvas">How to get a Canvas token</a>
           </div>
         </div>
 
@@ -511,10 +538,10 @@
       <defs id="liquid-glass-defs"></defs>
     </svg>
 
-    <script src="/liquid-glass.js?v=glass12"></script>
+    <script src="/liquid-glass.js?v=glass13"></script>
     <script src="/theme-orb.js?v=glass12"></script>
-    <script src="/app.js?v=glass24"></script>
+    <script src="/app.js?v=grades2"></script>
     <script src="/markdown.js?v=1"></script>
-    <script src="/chatbot.js?v=glass17"></script>
+    <script src="/chatbot.js?v=canvas1"></script>
   </body>
 </html>
