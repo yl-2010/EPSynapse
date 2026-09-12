@@ -1496,13 +1496,6 @@
     paintAssignmentFilters();
   }
 
-  function voteLine(label, vote) {
-    if (!vote || !vote.subject) return `<li class="edu-row"><span class="edu-name">${escapeHtml(label)}</span><span class="edu-meta">no vote</span></li>`;
-    const conf =
-      typeof vote.confidence === "number" ? ` · ${Math.round(vote.confidence * 100)}%` : "";
-    return `<li class="edu-row"><span class="edu-name">${escapeHtml(label)}</span><span class="edu-meta">${escapeHtml(vote.subject)}${escapeHtml(conf)}</span></li>`;
-  }
-
   function subjectOptions(selected) {
     const labels = [
       "Mathematics",
@@ -1530,8 +1523,6 @@
       `;
       return;
     }
-    const votes = note.votes || {};
-    const orch = note.orchestrator || {};
     const gold = note.userGoldSubject || note.subject || "";
     appEl.classList.add("is-settled");
     appEl.innerHTML = `
@@ -1547,16 +1538,6 @@
           ${panelHtml("Note", `<pre class="edu-note-body">${escapeHtml(note.text || "")}</pre>`, "lg-edu-note-text")}
         </div>
         <div class="edu-col edu-col--side">
-          ${panelHtml(
-            "Votes",
-            `<ul class="edu-list">
-              ${voteLine("Zero-shot BERT", votes.baseBert)}
-              ${voteLine("Fine-tuned BERT", votes.fineTunedBert)}
-              ${voteLine("Student-key model", votes.studentKey)}
-              ${voteLine("Orchestrator", { subject: orch.subject || note.subject, confidence: orch.confidence })}
-            </ul>`,
-            "lg-edu-note-votes"
-          )}
           ${panelHtml(
             "Subject",
             `<form class="edu-notes-form" id="note-gold">

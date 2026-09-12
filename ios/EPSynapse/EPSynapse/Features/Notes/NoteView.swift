@@ -34,7 +34,6 @@ struct NoteView: View {
                 backRow
                 if let note {
                     textCard(note.text)
-                    votesCard(note)
                     orchestratorCard(note)
                     subjectCard
                     researchButton
@@ -91,16 +90,6 @@ struct NoteView: View {
                 .foregroundStyle(EPSTheme.fg)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    private func votesCard(_ note: ClassifiedNote) -> some View {
-        EPSPanel(title: "Votes") {
-            VStack(alignment: .leading, spacing: 10) {
-                VoteRow(title: "Zero-shot BERT", vote: note.votes.zeroShot)
-                VoteRow(title: "Fine-tuned BERT", vote: note.votes.fineTuned)
-                VoteRow(title: "Student-key", vote: note.votes.studentKey)
-            }
         }
     }
 
@@ -167,34 +156,3 @@ struct NoteView: View {
     }
 }
 
-struct VoteRow: View {
-    var title: String
-    var vote: NoteVote?
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(EPSTheme.muted)
-                .frame(maxWidth: 140, alignment: .leading)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(subjectLabel)
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(EPSTheme.fg)
-                if let vote, !vote.confidenceLabel.isEmpty {
-                    Text(vote.confidenceLabel)
-                        .font(.caption)
-                        .foregroundStyle(EPSTheme.muted)
-                }
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.vertical, 4)
-        .padding(.horizontal, 4)
-    }
-
-    private var subjectLabel: String {
-        guard let vote, !vote.subject.isEmpty else { return "None" }
-        return vote.subject
-    }
-}
