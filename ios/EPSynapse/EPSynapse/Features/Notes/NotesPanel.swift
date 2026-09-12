@@ -7,6 +7,7 @@ struct NotesPanel: View {
     @Environment(\.openURL) private var openURL
 
     @State private var draft = ""
+    @FocusState private var fieldFocused: Bool
 
     var body: some View {
         EPSPanel(title: "Notes") {
@@ -15,6 +16,7 @@ struct NotesPanel: View {
                     .lineLimit(5 ... 12)
                     .font(.body)
                     .foregroundStyle(EPSTheme.fg)
+                    .focused($fieldFocused)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)
                     .epsGlassField(interactive: true, cornerRadius: 14)
@@ -60,6 +62,9 @@ struct NotesPanel: View {
                         .foregroundStyle(EPSTheme.muted)
                 }
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .epsDismissKeyboard)) { _ in
+            fieldFocused = false
         }
     }
 

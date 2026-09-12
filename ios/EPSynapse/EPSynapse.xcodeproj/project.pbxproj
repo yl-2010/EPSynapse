@@ -20,15 +20,16 @@
 		53593F906AF6799A94D256A3 /* NoteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98FFD2BA92EAF72474A93719 /* NoteView.swift */; };
 		639923CB8E0C1E23F596B1C5 /* HomeDestination.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3510B483F129606F547B9C6B /* HomeDestination.swift */; };
 		66043B500B482D908E9704F9 /* ChatHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA51BAECBAEAC04BE7BB1C76 /* ChatHistory.swift */; };
+		6751619D753BB9D8F3AEA426 /* Markdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3AF0A19753DC997EE55CAA3 /* Markdown.swift */; };
 		6BBF05D2B8EAABF7C905058A /* ChatOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 083CC9E2B8BA48AEA4876689 /* ChatOverlay.swift */; };
 		7EA85D7AFE3D8CE315294C1D /* SettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38378331DA95509DDF83EA11 /* SettingsSheet.swift */; };
 		82034A6D465FAE115757D44E /* ChatStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B8C2538723B2F0C9785D1D8 /* ChatStore.swift */; };
 		A99A08DB40E235E1245F8150 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FE3FA4CABABD9581D9D60A3 /* HomeView.swift */; };
+		AB155A99C431C77E575913FF /* KeyboardDismiss.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D8EA86A99899D8FB4FC8FDA /* KeyboardDismiss.swift */; };
 		B867302471945E2A703774E7 /* Mark.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26437E9A27791C15BDCBCABF /* Mark.swift */; };
 		C88B394A86285350CF8C2D1E /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = F34BB0DB83964EF98A568E2D /* Theme.swift */; };
 		D3D30776A5DB5C63992823C0 /* ChatHistoryOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BD05068815821D26AC8B738 /* ChatHistoryOverlay.swift */; };
 		D41EF186DAC050B047A1A3EB /* SessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4130A4ED23C8BF8A9677E84A /* SessionStore.swift */; };
-		D5F9B02C8E3A5F1B0C42D7E9 /* Markdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4E8A91B7D2F4E0A9B31C6D8 /* Markdown.swift */; };
 		DA7CFF3120B71B599F451341 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 2C5D40BDA4E60405BFEEF1FE /* GoogleSignIn */; };
 		E842FB99C4EA4655145E3C69 /* Panels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8388796443CE474081A8311E /* Panels.swift */; };
 		F5AF63727273D49042BF02D7 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C870AD9003B84236B411ED /* RootView.swift */; };
@@ -39,6 +40,7 @@
 /* Begin PBXFileReference section */
 		00789498338B32818C6282FE /* DashboardStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardStore.swift; sourceTree = "<group>"; };
 		083CC9E2B8BA48AEA4876689 /* ChatOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatOverlay.swift; sourceTree = "<group>"; };
+		0D8EA86A99899D8FB4FC8FDA /* KeyboardDismiss.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardDismiss.swift; sourceTree = "<group>"; };
 		1047250444DFCD9F54D0AA95 /* Haptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Haptics.swift; sourceTree = "<group>"; };
 		1B8C2538723B2F0C9785D1D8 /* ChatStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatStore.swift; sourceTree = "<group>"; };
 		1D49D863B71A593DE3C0AA9F /* NotesPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesPanel.swift; sourceTree = "<group>"; };
@@ -57,8 +59,8 @@
 		98FFD2BA92EAF72474A93719 /* NoteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteView.swift; sourceTree = "<group>"; };
 		A89D748793FD8AECBFD1275E /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		B2C870AD9003B84236B411ED /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		B3AF0A19753DC997EE55CAA3 /* Markdown.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Markdown.swift; sourceTree = "<group>"; };
 		B771AFED5734D5E80A1F3FEB /* CornerChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CornerChrome.swift; sourceTree = "<group>"; };
-		C4E8A91B7D2F4E0A9B31C6D8 /* Markdown.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Markdown.swift; sourceTree = "<group>"; };
 		CA51BAECBAEAC04BE7BB1C76 /* ChatHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatHistory.swift; sourceTree = "<group>"; };
 		F1F03974FD1C8B336D0073D8 /* AppLoadingScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLoadingScreen.swift; sourceTree = "<group>"; };
 		F34BB0DB83964EF98A568E2D /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
@@ -154,8 +156,9 @@
 				F1F03974FD1C8B336D0073D8 /* AppLoadingScreen.swift */,
 				659F015C8C3FE9B4918ABB1F /* GlassChrome.swift */,
 				1047250444DFCD9F54D0AA95 /* Haptics.swift */,
+				0D8EA86A99899D8FB4FC8FDA /* KeyboardDismiss.swift */,
 				26437E9A27791C15BDCBCABF /* Mark.swift */,
-				C4E8A91B7D2F4E0A9B31C6D8 /* Markdown.swift */,
+				B3AF0A19753DC997EE55CAA3 /* Markdown.swift */,
 				F34BB0DB83964EF98A568E2D /* Theme.swift */,
 			);
 			path = Design;
@@ -286,8 +289,9 @@
 				F75323FF82CFBD2DAECBDD58 /* Haptics.swift in Sources */,
 				639923CB8E0C1E23F596B1C5 /* HomeDestination.swift in Sources */,
 				A99A08DB40E235E1245F8150 /* HomeView.swift in Sources */,
+				AB155A99C431C77E575913FF /* KeyboardDismiss.swift in Sources */,
 				B867302471945E2A703774E7 /* Mark.swift in Sources */,
-				D5F9B02C8E3A5F1B0C42D7E9 /* Markdown.swift in Sources */,
+				6751619D753BB9D8F3AEA426 /* Markdown.swift in Sources */,
 				03338F0771A5563BAD3CBBE2 /* Models.swift in Sources */,
 				53593F906AF6799A94D256A3 /* NoteView.swift in Sources */,
 				3C176BFF92A534BCBA60D682 /* NotesPanel.swift in Sources */,

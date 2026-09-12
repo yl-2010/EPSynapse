@@ -11,6 +11,7 @@ struct RootView: View {
             ChatHistoryOverlay()
         }
         .chatHistoryOpenGesture()
+        .dismissKeyboardOnOutsideTap()
         .epsPageBackground()
         .toolbar(.hidden, for: .navigationBar)
         .task {
