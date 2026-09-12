@@ -35,6 +35,7 @@
     classes: [],
     meetings: [],
     notes: [],
+    grades: [],
   };
   let openMail = null;
   let mailBusy = false;
@@ -675,6 +676,7 @@
     if (classMatch) return { page: "class", id: decodeURIComponent(classMatch[1]) };
     const noteMatch = path.match(/^\/note\/([^/]+)$/);
     if (noteMatch) return { page: "note", id: decodeURIComponent(noteMatch[1]) };
+    if (path === "/grades") return { page: "grades" };
     return { page: "home" };
   }
 
@@ -746,6 +748,70 @@
   function listOrEmpty(itemsHtml, empty) {
     if (!itemsHtml) return `<p class="edu-empty">${escapeHtml(empty || "Nothing here")}</p>`;
     return `<ul class="edu-list">${itemsHtml}</ul>`;
+  }
+
+  function trimNum(n) {
+    if (typeof n !== "number" || !Number.isFinite(n)) return "";
+    return String(Math.round(n * 10) / 10);
+  }
+
+  function formatCourseGrade(row) {
+    const letter = String(row?.currentGrade || "").trim();
+    const pct = typeof row?.currentScore === "number" ? `${trimNum(row.currentScore)}%` : "";
+    if (letter && pct) return `${letter} ${pct}`;
+    return letter || pct || "—";
+  }
+
+  function formatWorkScore(w) {
+    if (w?.excused) return "Excused";
+    if (w?.missing && w.score == null) return "Missing";
+    if (w?.score == null && w?.submitted) return "Submitted";
+    if (w?.score == null) return "—";
+    const pts = typeof w.pointsPossible === "number" ? `/${trimNum(w.pointsPossible)}` : "";
+    const letter = w.grade && String(w.grade) !== String(w.score) ? ` ${w.grade}` : "";
+    return `${trimNum(w.score)}${pts}${letter}`;
+  }
+
+  function gradeForClass(klass) {
+    const ids = [
+      klass?.canvasCourseId,
+      klass?.courseId,
+      klass?.id,
+    ].map((v) => String(v || "")).filter(Boolean);
+    const rows = [...(lastHome.grades || []), ...(lastHome.courses || [])];
+    return (
+      rows.find((c) => ids.includes(String(c.id || ""))) ||
+      rows.find((c) => {
+        const a = String(klass?.name || "").toLowerCase();
+        const b = String(c.name || "").toLowerCase();
+        return a && b && (a === b || a.includes(b) || b.includes(a));
+      }) ||
+      null
+    );
+  }
+
+  function gradeRow(c) {
+    const period = c.period
+      ? `<span class="edu-tag edu-period">${escapeHtml(c.period)}</span>`
+      : "";
+    return `<li class="edu-row edu-class-row">
+      <a class="edu-row-link" data-route href="/grades">
+        <span class="edu-name">${period}<span class="edu-hero-class-name">${escapeHtml(c.name)}</span></span>
+        <span class="edu-meta edu-grade">${escapeHtml(formatCourseGrade(c))}</span>
+      </a>
+    </li>`;
+  }
+
+  function workRow(w) {
+    const tag = w.tag || "HW";
+    const href = w.canvasLink || "#";
+    const late = w.late ? " is-late" : "";
+    return `<li class="edu-row${late}">
+      <a class="edu-row-link" href="${escapeHtml(href)}" target="_blank" rel="noopener">
+        <span class="edu-name"><span class="edu-tag edu-tag-${escapeHtml(tag)}">${escapeHtml(tag)}</span> ${escapeHtml(w.title)}</span>
+        <span class="edu-meta edu-grade">${escapeHtml(formatWorkScore(w))}</span>
+      </a>
+    </li>`;
   }
 
   function formatDue(iso) {
@@ -892,7 +958,7 @@
       </form>`;
   }
 
-  function renderHome({ courses, assignments, files, messages, classes, meetings, notes } = lastHome) {
+  function renderHome({ courses, assignments, files, messages, classes, meetings, notes, grades } = lastHome) {
     lastHome = {
       courses: courses || lastHome.courses || [],
       assignments: assignments || lastHome.assignments || [],
@@ -901,6 +967,7 @@
       classes: classes || lastHome.classes || [],
       meetings: meetings || lastHome.meetings || [],
       notes: notes || lastHome.notes || [],
+      grades: grades || lastHome.grades || [],
     };
     const openAll = (lastHome.assignments || []).filter((t) => !t.done && matchesTag(t));
     const open = collapsedSlice(openAll, todoExpanded, TODOS_COLLAPSED_LIMIT);
@@ -921,10 +988,16 @@
     const fileEmpty = me?.onedriveConnected
       ? "No files in /EPSynapse yet"
       : "Connect OneDrive in settings";
+    const gradeItems = (lastHome.grades || []).length
+      ? lastHome.grades
+      : lastHome.courses || [];
+    const gradeEmpty = me?.canvasConnected
+      ? "No course grades yet"
+      : "Connect Canvas in settings";
 
     appEl.classList.add("is-settled");
     appEl.innerHTML = `
-      <p class="edu-home-mark">EPSynapse <a class="edu-home-research" href="/research">Research</a></p>
+      <p class="edu-home-mark">EPSynapse <a class="edu-home-research" data-route href="/grades">Grades</a> <a class="edu-home-research" href="/research">Research</a></p>
       <div class="edu-grid edu-grid--home">
         <div class="edu-col edu-col--main">
           ${panelHtml("TODO", listOrEmpty(open.map(todoRow).join(""), todoEmpty), "lg-edu-todo", "", todoExpanded ? filterBarHtml("todo") : "", collapseTitle("TODO", "todos", todoExpanded))}
@@ -933,6 +1006,7 @@
         </div>
         <div class="edu-col edu-col--side">
           ${panelHtml("Classes", listOrEmpty(classItems.map(classRow).join(""), classEmpty), "lg-edu-classes")}
+          ${panelHtml("Grades", listOrEmpty(gradeItems.map(gradeRow).join(""), gradeEmpty), "lg-edu-grades")}
           ${panelHtml("Dates", listOrEmpty(dates.map(dateRow).join(""), "No upcoming dates"), "lg-edu-dates", "", filterBarHtml("dates"), collapseTitle("Dates", "dates", datesExpanded))}
           ${panelHtml("Files", fileTiles ? `<div class="edu-files">${fileTiles}</div>` : `<p class="edu-empty">${escapeHtml(fileEmpty)}</p>`, "lg-edu-files")}
           ${panelHtml("Mail", mailPanelHtml(lastHome.messages), "lg-edu-mail")}
@@ -1021,7 +1095,11 @@
       ? `<span class="edu-tag edu-period edu-period--hero">${escapeHtml(klass.period)}</span>`
       : "";
     const next = nextMeetingLine(klass);
-    const sub = [klass.term, klass.subject, klass.courseCode, next].filter(Boolean).join(" · ");
+    const courseGrade = gradeForClass(klass);
+    const gradeText = courseGrade ? formatCourseGrade(courseGrade) : "";
+    const sub = [klass.term, klass.subject, klass.courseCode, gradeText && gradeText !== "—" ? gradeText : "", next]
+      .filter(Boolean)
+      .join(" · ");
     appEl.classList.add("is-settled");
     appEl.innerHTML = `
       <p class="edu-home-mark"><a class="edu-home-research" data-route href="/">Home</a></p>
@@ -1139,6 +1217,64 @@
     }
   }
 
+  async function ensureGrades(detail) {
+    if (!me?.canvasConnected) return [];
+    if (detail) {
+      const haveWork = (lastHome.grades || []).some((g) => Array.isArray(g.work));
+      if (haveWork) return lastHome.grades;
+      try {
+        const data = await api("/v1/me/canvas/grades?work=1", { timeoutMs: 25000 });
+        lastHome.grades = data.grades || [];
+        return lastHome.grades;
+      } catch {
+        return lastHome.grades || lastHome.courses || [];
+      }
+    }
+    if ((lastHome.grades || []).length) return lastHome.grades;
+    if ((lastHome.courses || []).length) return lastHome.courses;
+    try {
+      const data = await api("/v1/me/canvas/grades");
+      lastHome.grades = data.grades || [];
+      return lastHome.grades;
+    } catch {
+      return lastHome.courses || [];
+    }
+  }
+
+  function renderGradesView(grades) {
+    const rows = grades || [];
+    const empty = me?.canvasConnected
+      ? "Canvas has not posted grades for these classes yet."
+      : "Connect Canvas in settings";
+    const panels = rows
+      .map((g) => {
+        const title = [g.period, g.name].filter(Boolean).join(" · ");
+        const mark = `<span class="edu-grade-mark">${escapeHtml(formatCourseGrade(g))}</span>`;
+        const body = g.work === undefined
+          ? `<p class="edu-empty">Loading graded work…</p>`
+          : listOrEmpty((g.work || []).map(workRow).join(""), "No graded work yet");
+        return panelHtml(title, body, `lg-grade-${g.id}`, "", mark);
+      })
+      .join("");
+    appEl.classList.add("is-settled");
+    appEl.innerHTML = `
+      <p class="edu-home-mark"><a class="edu-home-research" data-route href="/">Home</a> Grades</p>
+      <div class="edu-grid edu-grid--grades">
+        <div class="edu-col edu-col--main">
+          ${panels || `<p class="edu-empty">${escapeHtml(empty)}</p>`}
+        </div>
+      </div>
+    `;
+    if (typeof window.reinitLiquidGlass === "function") window.reinitLiquidGlass();
+  }
+
+  async function renderGrades() {
+    const cached = lastHome.grades || lastHome.courses || [];
+    if (cached.length) renderGradesView(cached);
+    const grades = await ensureGrades(true);
+    renderGradesView(grades);
+  }
+
   async function routeAndRender() {
     if (!signedInViaGoogle()) {
       applyAuthGate();
@@ -1154,6 +1290,10 @@
     if (route.page === "note") {
       await ensureNote(route.id);
       renderNote(route.id);
+      return;
+    }
+    if (route.page === "grades") {
+      await renderGrades();
       return;
     }
     renderHome(lastHome);
@@ -1185,14 +1325,16 @@
       .then((r) => r.notes || [])
       .catch(() => []);
     const sched = await schedule;
+    const courseRows = await courses;
     lastHome = {
-      courses: await courses,
+      courses: courseRows,
       assignments: await assignments,
       files: await files,
       messages: await messages,
       classes: sched.classes || [],
       meetings: sched.meetings || [],
       notes: await notes,
+      grades: courseRows.map((c) => ({ ...c, work: undefined })),
     };
     routeAndRender();
   }

@@ -23,6 +23,7 @@ import {
   dashboardPayload,
   listAssignments,
   listCourses,
+  listGrades,
   normalizeHost,
   validateToken,
 } from "./canvas.js";
@@ -278,8 +279,16 @@ async function liveSnapshot(student) {
           const due = a.due ? a.due.slice(0, 10) : "no due";
           return `${a.tag} ${a.title} (${a.courseName || "class"}) ${due}`;
         });
+      const grades = (dash.courses || [])
+        .filter((c) => c.currentGrade || c.currentScore != null)
+        .slice(0, 12)
+        .map((c) => {
+          const pct = c.currentScore != null ? `${c.currentScore}%` : "";
+          return [c.name, c.currentGrade, pct].filter(Boolean).join(" ");
+        });
       bits.push(`Courses: ${courses.join("; ") || "none listed"}`);
       bits.push(`Open work: ${open.join("; ") || "none"}`);
+      if (grades.length) bits.push(`Grades: ${grades.join("; ")}`);
     } catch {
       bits.push("Canvas: could not load this turn.");
     }
@@ -541,6 +550,21 @@ app.get("/v1/me/canvas/assignments", async (req, res) => {
     }
     const assignments = await listAssignments(student.canvasHost, student.canvasToken);
     return res.json({ assignments });
+  } catch (err) {
+    return fail(res, err, err.status || 502);
+  }
+});
+
+app.get("/v1/me/canvas/grades", async (req, res) => {
+  try {
+    const student = await requireStudent(req, res);
+    if (!student) return;
+    if (!student.canvasToken) {
+      return res.status(400).json({ error: "Connect Canvas in settings first." });
+    }
+    const work = /^(1|true|yes)$/i.test(String(req.query.work || ""));
+    const grades = await listGrades(student.canvasHost, student.canvasToken, { work });
+    return res.json({ grades });
   } catch (err) {
     return fail(res, err, err.status || 502);
   }

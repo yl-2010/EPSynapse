@@ -870,7 +870,8 @@ html[data-resolved-theme="dark"] .edu-back-shadow feGaussianBlur {
   min-width: 0;
 }
 
-.edu-grid--detail {
+.edu-grid--detail,
+.edu-grid--grades {
   grid-template-columns: 1fr;
 }
 
@@ -1293,6 +1294,20 @@ html[data-resolved-theme="light"] .edu-filter.is-on {
   color: var(--muted);
   font-size: 0.9rem;
   font-synthesis: none;
+}
+
+.edu-grade,
+.edu-grade-mark {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.edu-grade-mark {
+  padding-right: 0.15rem;
+  font-size: var(--text-subhead);
 }
 
 .edu-detail-row {
