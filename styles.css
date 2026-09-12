@@ -2732,7 +2732,10 @@ html.lg-chrome[data-resolved-theme="dark"] .edu-file-tile.lg-static.lg-refractio
   left: calc(var(--corner-pad) + var(--corner-orb) + 0.65rem);
   bottom: var(--corner-pad);
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0.28rem;
   min-height: var(--corner-orb);
 }
 
@@ -2751,6 +2754,19 @@ html.lg-chrome[data-resolved-theme="dark"] .edu-file-tile.lg-static.lg-refractio
   cursor: pointer;
 }
 
+.home-google-fallback--text {
+  --lg-filter: none;
+  padding: 0.1rem 0.15rem;
+  border: 0;
+  border-radius: 0;
+  font-weight: 550;
+  color: var(--fg);
+  background: none;
+  box-shadow: none;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
 .home-google-btn {
   display: flex;
   align-items: center;
@@ -2761,7 +2777,8 @@ html.lg-chrome[data-resolved-theme="dark"] .edu-file-tile.lg-static.lg-refractio
 .home-google-fallback[hidden],
 .home-google-chip[hidden],
 .edu-google-slot[hidden],
-.edu-google-account[hidden] {
+.edu-google-account[hidden],
+.edu-google-redirect[hidden] {
   display: none !important;
 }
 
@@ -2794,8 +2811,23 @@ html[data-resolved-theme="dark"] .home-google-chip {
 }
 
 .edu-google-slot {
-  margin: 0 0 0.85rem;
+  margin: 0 0 0.45rem;
   min-height: 2.5rem;
+}
+
+.edu-google-redirect {
+  display: block;
+  margin: 0 0 0.85rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--text-footnote);
+  font-weight: 550;
+  color: var(--fg);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  cursor: pointer;
 }
 
 .edu-google-slot iframe {

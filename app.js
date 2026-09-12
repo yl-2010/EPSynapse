@@ -119,6 +119,7 @@
     const outRow = document.getElementById("google-signout-row");
     const homeChip = document.getElementById("home-google-chip");
     const fallback = document.getElementById("home-google-fallback");
+    const redirectBtn = document.getElementById("google-redirect");
     const pic = document.getElementById("google-picture");
     const nameEl = document.getElementById("google-name");
     const emailEl = document.getElementById("google-email");
@@ -129,6 +130,7 @@
       if (slot) slot.hidden = true;
       if (homeSlot) homeSlot.hidden = true;
       if (fallback) fallback.hidden = true;
+      if (redirectBtn) redirectBtn.hidden = true;
       if (profile) profile.hidden = false;
       if (outRow) outRow.hidden = false;
       if (homeChip) {
@@ -159,10 +161,19 @@
       if (profile) profile.hidden = true;
       if (outRow) outRow.hidden = true;
       if (homeChip) homeChip.hidden = true;
-      if (slot) slot.hidden = false;
       const showGis = Boolean(gisInitialized && googleClientId);
+      if (slot) slot.hidden = !showGis;
       if (homeSlot) homeSlot.hidden = !showGis;
-      if (fallback) fallback.hidden = showGis;
+      const redirectLabel = showGis ? "Use Google redirect" : "Sign in with Google";
+      if (fallback) {
+        fallback.hidden = false;
+        fallback.textContent = redirectLabel;
+        fallback.classList.toggle("home-google-fallback--text", showGis);
+      }
+      if (redirectBtn) {
+        redirectBtn.hidden = false;
+        redirectBtn.textContent = redirectLabel;
+      }
     }
     setStatus(statusEl, accountStatusText());
     renderGoogleButtons();
@@ -218,6 +229,63 @@
     queueMicrotask(() => window.reinitLiquidGlass?.());
   }
 
+  function googleRedirectUri() {
+    return `${location.origin}${location.pathname || "/"}`;
+  }
+
+  async function startGoogleRedirect() {
+    if (!googleClientId) {
+      try {
+        const cfg = await api("/v1/auth/google/config");
+        googleClientId = String(cfg.clientId || "").trim();
+      } catch (err) {
+        setStatus(
+          statusEl,
+          err.status === 404
+            ? "Google sign-in is not on the API yet. Try again in a minute."
+            : err.message || "Could not load Google sign-in.",
+        );
+        openSheet();
+        return;
+      }
+    }
+    if (!googleClientId) {
+      setStatus(statusEl, gisConfigError || "Google sign-in has no client id from the API yet.");
+      openSheet();
+      return;
+    }
+    const nonce = crypto.randomUUID();
+    const q = [
+      ["client_id", googleClientId],
+      ["redirect_uri", googleRedirectUri()],
+      ["response_type", "id_token"],
+      ["scope", "openid email profile"],
+      ["nonce", nonce],
+      ["prompt", "select_account"],
+    ]
+      .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
+      .join("&");
+    location.assign(`https://accounts.google.com/o/oauth2/v2/auth?${q}`);
+  }
+
+  function takeHashIdToken() {
+    const raw = location.hash.startsWith("#") ? location.hash.slice(1) : location.hash;
+    if (!raw) return "";
+    return new URLSearchParams(raw).get("id_token") || "";
+  }
+
+  function stripLocationHash() {
+    history.replaceState(null, "", `${location.pathname}${location.search}`);
+  }
+
+  async function consumeGoogleHash() {
+    const token = takeHashIdToken();
+    if (!token) return false;
+    await onGoogleCredential({ credential: token });
+    stripLocationHash();
+    return true;
+  }
+
   async function onGoogleCredential(resp) {
     const idToken = resp && resp.credential;
     if (!idToken) {
@@ -264,7 +332,8 @@
 
     const ok = await waitForGis();
     if (!ok) {
-      gisConfigError = "Google sign-in script did not load.";
+      gisInitialized = false;
+      gisConfigError = "";
       paintAccount();
       return;
     }
@@ -746,15 +815,18 @@
     }
     refreshKeyStatus();
 
-    try {
-      me = await api("/v1/me");
-      fillFormFromMe();
-      await loadDashboard();
-    } catch {
-      me = null;
-      loading.hidden = true;
-      stage.hidden = false;
-      renderHome({ courses: [], assignments: [], files: [], messages: [] });
+    const fromHash = await consumeGoogleHash();
+    if (!fromHash) {
+      try {
+        me = await api("/v1/me");
+        fillFormFromMe();
+        await loadDashboard();
+      } catch {
+        me = null;
+        loading.hidden = true;
+        stage.hidden = false;
+        renderHome({ courses: [], assignments: [], files: [], messages: [] });
+      }
     }
     paintAccount();
     paintOnedrive();
@@ -767,7 +839,12 @@
   document.getElementById("settings-close").addEventListener("click", () => {
     closeSheet();
   });
-  document.getElementById("home-google-fallback")?.addEventListener("click", openSheet);
+  document.getElementById("home-google-fallback")?.addEventListener("click", () => {
+    startGoogleRedirect();
+  });
+  document.getElementById("google-redirect")?.addEventListener("click", () => {
+    startGoogleRedirect();
+  });
   document.getElementById("home-google-chip")?.addEventListener("click", openSheet);
   document.getElementById("google-signout")?.addEventListener("click", () => {
     signOutGoogle();
