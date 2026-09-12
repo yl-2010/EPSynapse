@@ -1254,6 +1254,11 @@ html[data-resolved-theme="light"] .edu-filter.is-on {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
+.edu-row.edu-class-row:hover,
+.edu-row.edu-todo:hover {
+  background: none;
+}
+
 .edu-row-main {
   flex: 1;
   min-width: 0;
@@ -1324,17 +1329,8 @@ html[data-resolved-theme="light"] .edu-filter.is-on {
   text-decoration-thickness: 1px;
 }
 
-.edu-class-row.is-current {
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-}
-
 .edu-class-row.is-current .edu-name {
   font-weight: 600;
-}
-
-.edu-class-row.is-current .edu-meta {
-  color: color-mix(in srgb, var(--accent) 75%, var(--muted));
 }
 
 .edu-tone-rose { --card: var(--tone-rose); }
