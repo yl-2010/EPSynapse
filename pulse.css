@@ -73,6 +73,10 @@
   margin-top: 1.05rem;
 }
 
+.pulse-chips:not(.pulse-chips--grade) > .pulse-chip:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
 .pulse-chips--grade {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
@@ -151,6 +155,10 @@
 .pulse-send:disabled {
   opacity: 0.36;
   cursor: not-allowed;
+}
+
+.pulse-send[hidden] {
+  display: none !important;
 }
 
 .pulse-thanks {
