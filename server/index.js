@@ -35,12 +35,13 @@ import {
   downloadFile,
   ensureFreshToken,
   isConnected,
+  listDashboardFiles,
   listFiles,
   pollDeviceCode,
+  probeGraph,
   publicPending,
+  searchFiles,
   startDeviceCode,
-  tokenHasFiles,
-  tokenHasMail,
   uploadFile,
   WRITE_FOLDER,
 } from "./onedrive.js";
@@ -49,6 +50,7 @@ import {
   acceptPastedToken as acceptOutlookToken,
   ensureFreshToken as ensureOutlookToken,
   isConnected as outlookConnected,
+  listEvents,
   listMessages,
   pollDeviceCode as pollOutlookCode,
   publicPending as outlookPending,
@@ -56,6 +58,7 @@ import {
   sendMessage,
   startDeviceCode as startOutlookCode,
 } from "./outlook.js";
+import { listVault, readVault, saveVault } from "./vault.js";
 import {
   getSchool,
   listSchools,
@@ -227,6 +230,31 @@ function pendingStartPayload(pending) {
   };
 }
 
+function shortMsError(err) {
+  return String(err?.message || "Graph failed")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 180);
+}
+
+function mergeListedFiles(...lists) {
+  const byId = new Set();
+  const byName = new Set();
+  const out = [];
+  for (const list of lists) {
+    for (const row of list || []) {
+      const id = String(row?.id || "").trim();
+      const name = String(row?.name || "").trim();
+      if (id && byId.has(id)) continue;
+      if (name && byName.has(name)) continue;
+      if (id) byId.add(id);
+      if (name) byName.add(name);
+      out.push(row);
+    }
+  }
+  return out;
+}
+
 async function applyMicrosoftToken(current, poll, pending) {
   const bag = {
     accessToken: poll.accessToken,
@@ -237,13 +265,20 @@ async function applyMicrosoftToken(current, poll, pending) {
     scope: poll.scope || pending?.scope || "",
     pending: null,
   };
-  const files = tokenHasFiles(poll.accessToken);
-  const mail = tokenHasMail(poll.accessToken);
+  let probe = { user: false, files: false, mail: false, calendar: false, email: "", error: "" };
+  try {
+    probe = await probeGraph(poll.accessToken);
+  } catch (err) {
+    probe.error = shortMsError(err);
+  }
+  if (probe.email) bag.email = probe.email;
+  const files = Boolean(probe.files || probe.user);
+  const mail = Boolean(probe.mail || probe.user);
   if (files) await persistGraph(current, bag);
   if (mail) await persistOutlook(current, bag);
   if (!files && !mail) await persistGraph(current, bag);
   console.log(
-    `[ms-oauth] token for ${bag.email || "unknown"} files=${files} mail=${mail}`
+    `[ms-oauth] probe email=${bag.email || ""} files=${probe.files} mail=${probe.mail} calendar=${probe.calendar}`
   );
 }
 
@@ -674,13 +709,31 @@ app.get("/v1/me/onedrive/files", async (req, res) => {
   try {
     const student = await requireStudent(req, res);
     if (!student) return;
-    if (!student.graph?.accessToken) {
-      return res.status(400).json({ error: "Connect OneDrive in settings first." });
-    }
-    const token = await graphToken(student);
+    const fileId = googleFileId(student.googleSub);
     const folder = String(req.query.folder || WRITE_FOLDER);
-    const files = await listFiles(token, { folder });
-    return res.json({ files, folder });
+    const q = String(req.query.q || "").trim();
+    let vaultFiles = await listVault(fileId);
+    if (q) {
+      const needle = q.toLowerCase();
+      vaultFiles = vaultFiles.filter((f) => String(f.name || "").toLowerCase().includes(needle));
+    }
+    let graphFiles = [];
+    let error = "";
+    if (student.graph?.accessToken) {
+      try {
+        const token = await graphToken(student);
+        graphFiles = q
+          ? await searchFiles(token, q)
+          : await listDashboardFiles(token, { folder });
+      } catch (err) {
+        error = shortMsError(err);
+      }
+    }
+    return res.json({
+      files: mergeListedFiles(vaultFiles, graphFiles),
+      folder,
+      error,
+    });
   } catch (err) {
     return fail(res, err, err.status || 502);
   }
@@ -690,11 +743,17 @@ app.get("/v1/me/onedrive/file", async (req, res) => {
   try {
     const student = await requireStudent(req, res);
     if (!student) return;
-    if (!student.graph?.accessToken) {
-      return res.status(400).json({ error: "Connect OneDrive in settings first." });
+    const id = String(req.query.id || "").trim();
+    let file;
+    if (id.startsWith("vault:")) {
+      file = await readVault(googleFileId(student.googleSub), id.slice("vault:".length));
+    } else {
+      if (!student.graph?.accessToken) {
+        return res.status(400).json({ error: "Connect OneDrive in settings first." });
+      }
+      const token = await graphToken(student);
+      file = await downloadFile(token, id);
     }
-    const token = await graphToken(student);
-    const file = await downloadFile(token, req.query.id);
     res.setHeader("Content-Type", file.contentType);
     res.setHeader(
       "Content-Disposition",
@@ -810,13 +869,37 @@ app.get("/v1/me/outlook/messages", async (req, res) => {
     const student = await requireStudent(req, res);
     if (!student) return;
     if (!student.outlook?.accessToken) {
-      return res.status(400).json({ error: "Connect Outlook in settings first." });
+      return res.json({ messages: [], error: "Connect Outlook in settings first." });
     }
-    const token = await outlookToken(student);
-    const search = String(req.query.q || "").trim();
-    const limit = Number(req.query.limit) || 20;
-    const messages = await listMessages(token, { search, limit });
-    return res.json({ messages });
+    try {
+      const token = await outlookToken(student);
+      const search = String(req.query.q || "").trim();
+      const limit = Number(req.query.limit) || 20;
+      const messages = await listMessages(token, { search, limit });
+      return res.json({ messages, error: "" });
+    } catch (err) {
+      return res.json({ messages: [], error: shortMsError(err) });
+    }
+  } catch (err) {
+    return fail(res, err, err.status || 502);
+  }
+});
+
+app.get("/v1/me/outlook/events", async (req, res) => {
+  try {
+    const student = await requireStudent(req, res);
+    if (!student) return;
+    if (!student.outlook?.accessToken) {
+      return res.json({ events: [], error: "Connect Outlook in settings first." });
+    }
+    try {
+      const token = await outlookToken(student);
+      const days = Number(req.query.days) || 7;
+      const events = await listEvents(token, { days });
+      return res.json({ events, error: "" });
+    } catch (err) {
+      return res.json({ events: [], error: shortMsError(err) });
+    }
   } catch (err) {
     return fail(res, err, err.status || 502);
   }
@@ -860,21 +943,32 @@ app.put("/v1/me/onedrive/file", async (req, res) => {
   try {
     const student = await requireStudent(req, res);
     if (!student) return;
-    if (!student.graph?.accessToken) {
-      return res.status(400).json({ error: "Connect OneDrive in settings first." });
-    }
-    const token = await graphToken(student);
     const name = String(req.body?.name || "").trim();
     let content = req.body?.content;
     if (req.body?.encoding === "base64") {
       content = Buffer.from(String(content || ""), "base64");
     }
-    const saved = await uploadFile(token, {
+    const contentType = String(req.body?.contentType || "text/plain");
+    const saved = await saveVault(googleFileId(student.googleSub), {
       name,
       content,
-      contentType: String(req.body?.contentType || "text/plain"),
+      contentType,
     });
-    return res.json(saved);
+    if (!student.graph?.accessToken) {
+      return res.json({ ...saved, error: "" });
+    }
+    try {
+      const token = await graphToken(student);
+      const uploaded = await uploadFile(token, { name, content, contentType });
+      return res.json({
+        ...saved,
+        webUrl: uploaded.webUrl || saved.webUrl,
+        size: uploaded.size || saved.size,
+        error: "",
+      });
+    } catch (err) {
+      return res.json({ ...saved, error: shortMsError(err) });
+    }
   } catch (err) {
     return fail(res, err, err.status || 400);
   }

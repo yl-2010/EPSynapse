@@ -365,6 +365,31 @@ export async function listMessages(token, { search = "", limit = 20 } = {}) {
   return rows.map((row) => normalizeMessage(row));
 }
 
+export async function listEvents(token, { days = 7 } = {}) {
+  const base = apiBaseForToken(token);
+  if (base !== GRAPH_BASE) return [];
+  const span = Math.min(31, Math.max(1, Number(days) || 7));
+  const start = new Date();
+  const end = new Date(start.getTime() + span * 24 * 60 * 60 * 1000);
+  const url =
+    `${GRAPH_BASE}/me/calendarView` +
+    `?startDateTime=${encodeURIComponent(start.toISOString())}` +
+    `&endDateTime=${encodeURIComponent(end.toISOString())}` +
+    `&$top=20&$orderby=start/dateTime`;
+  const data = await mailRequest(token, "GET", url);
+  const rows = Array.isArray(data.value) ? data.value : [];
+  return rows.map((raw) => ({
+    id: String(raw.id || raw.Id || ""),
+    subject: String(raw.subject || raw.Subject || "(no subject)").trim(),
+    start: String(raw.start?.dateTime || raw.Start?.DateTime || ""),
+    end: String(raw.end?.dateTime || raw.End?.DateTime || ""),
+    webLink: String(raw.webLink || raw.WebLink || "").trim(),
+    location: String(
+      raw.location?.displayName || raw.Location?.DisplayName || raw.location || ""
+    ).trim(),
+  }));
+}
+
 export async function readMessage(token, id) {
   const mid = String(id || "").trim();
   if (!mid) throw new Error("message id required");

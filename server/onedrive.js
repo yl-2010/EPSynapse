@@ -324,6 +324,109 @@ export async function listFiles(token, { folder } = {}) {
   }
 }
 
+function shortProbeError(err) {
+  return String(err?.message || "Graph failed")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 180);
+}
+
+function tagOnedrive(item) {
+  return { ...item, source: "onedrive" };
+}
+
+function dedupeDriveItems(rows) {
+  const byId = new Set();
+  const byName = new Set();
+  const out = [];
+  for (const row of rows) {
+    const id = String(row?.id || "").trim();
+    const name = String(row?.name || "").trim();
+    if (id && byId.has(id)) continue;
+    if (name && byName.has(name)) continue;
+    if (id) byId.add(id);
+    if (name) byName.add(name);
+    out.push(row);
+  }
+  return out;
+}
+
+export async function probeGraph(token) {
+  const out = {
+    user: false,
+    files: false,
+    mail: false,
+    calendar: false,
+    email: "",
+    error: "",
+  };
+  const jobs = [
+    ["user", "/me?$select=userPrincipalName,mail,displayName"],
+    ["files", "/me/drive/root?$select=id"],
+    ["mail", "/me/mailFolders/Inbox?$select=id"],
+    ["calendar", "/me/calendar?$select=id"],
+  ];
+  const results = await Promise.allSettled(
+    jobs.map(([, path]) => graphGet(token, path))
+  );
+  for (let i = 0; i < jobs.length; i += 1) {
+    const [key] = jobs[i];
+    const result = results[i];
+    if (result.status === "fulfilled") {
+      out[key] = true;
+      if (key === "user") {
+        const me = result.value || {};
+        out.email = String(me.mail || me.userPrincipalName || "").trim();
+      }
+      continue;
+    }
+    if (!out.error) out.error = shortProbeError(result.reason);
+  }
+  return out;
+}
+
+export async function listRecentFiles(token) {
+  try {
+    const data = await graphGet(token, "/me/drive/recent");
+    const rows = Array.isArray(data.value) ? data.value : [];
+    return rows.map(mapDriveItem);
+  } catch (err) {
+    const status = Number(err?.status);
+    if (status === 404 || status === 400) {
+      const data = await graphGet(token, "/me/drive/root/children");
+      const rows = Array.isArray(data.value) ? data.value : [];
+      return rows.map(mapDriveItem);
+    }
+    throw err;
+  }
+}
+
+export async function listDashboardFiles(token, { folder } = {}) {
+  let recent = [];
+  try {
+    recent = await listRecentFiles(token);
+  } catch {
+    recent = [];
+  }
+  let folderFiles = [];
+  try {
+    folderFiles = await listFiles(token, { folder: folder || WRITE_FOLDER });
+  } catch {
+    folderFiles = [];
+  }
+  return dedupeDriveItems([...recent, ...folderFiles].map(tagOnedrive));
+}
+
+export async function searchFiles(token, q) {
+  const query = String(q || "").trim();
+  if (!query) return [];
+  const safe = query.replace(/'/g, "''").slice(0, 80);
+  const path = `/me/drive/root/search(q='${encodeURIComponent(safe)}')?$top=20`;
+  const data = await graphGet(token, path);
+  const rows = Array.isArray(data.value) ? data.value : [];
+  return rows.map((raw) => tagOnedrive(mapDriveItem(raw)));
+}
+
 export async function ensureWriteFolder(token) {
   try {
     return mapDriveItem(await graphGet(token, `/me/drive/root:/${WRITE_FOLDER}`));
