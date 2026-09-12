@@ -342,25 +342,41 @@
   const reduceMotionGlow = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   let glowRaf = 0;
 
-  function isStaticContentBox(el) {
+  function isTextContentBox(el) {
     return (
+      el.classList.contains("edu-sheet") ||
+      el.classList.contains("edu-sheet-field") ||
+      el.classList.contains("edu-sheet-btn") ||
+      el.classList.contains("edu-sheet-close") ||
       el.classList.contains("edu-panel") ||
-      el.classList.contains("edu-file-tile") ||
+      el.classList.contains("edu-file-tile")
+    );
+  }
+
+  function applyTextBoxFrost(el) {
+    unobserveChromeGlass(el);
+    el.classList.add("lg-fallback");
+    el.classList.remove("lg-refraction", "lg-static", "lg-paused");
+    el.style.removeProperty("--lg-spec");
+    el.style.removeProperty("--lg-spec-opacity");
+    el.style.setProperty("--lg-filter", "none");
+  }
+
+  function isStaticContentBox(el) {
+    if (isTextContentBox(el)) return false;
+    return (
       el.classList.contains("dash-login") ||
       el.classList.contains("dash-entry") ||
       el.classList.contains("dash-agent") ||
       el.classList.contains("yan-chat-widget") ||
       el.classList.contains("yan-chat-map-ios") ||
       el.classList.contains("yan-chat-bubble") ||
-      el.classList.contains("edu-sheet") ||
-      el.classList.contains("edu-sheet-field") ||
-      el.classList.contains("edu-sheet-btn") ||
       el.classList.contains("sheet")
     );
   }
 
   const STATIC_BOX_SEL =
-    ".edu-panel.lg-static, .edu-file-tile.lg-static, .edu-sheet.lg-static, .edu-sheet-field.lg-static, .edu-sheet-btn.lg-static, .dash-login.lg-static, .dash-entry.lg-static, .dash-agent.lg-static, .yan-chat-widget.lg-static, .yan-chat-map-ios.lg-static, .yan-chat-bubble.lg-static, .sheet.lg-static";
+    ".dash-login.lg-static, .dash-entry.lg-static, .dash-agent.lg-static, .yan-chat-widget.lg-static, .yan-chat-map-ios.lg-static, .yan-chat-bubble.lg-static, .sheet.lg-static";
 
   const STATIC_BOX_MAG_SCALE = 0.6;
 
@@ -455,6 +471,10 @@
   }
 
   function initStaticChromeBox(el, shape, w, h, radius) {
+    if (isTextContentBox(el)) {
+      applyTextBoxFrost(el);
+      return;
+    }
     unobserveChromeGlass(el);
 
     const tune = SHAPE_TUNE[shape] || SHAPE_TUNE.circle;
@@ -517,6 +537,11 @@
 
     const defs = document.getElementById("liquid-glass-defs");
     if (!defs) return;
+
+    if (isTextContentBox(el)) {
+      applyTextBoxFrost(el);
+      return;
+    }
 
     if (!useSvgBackdrop) {
       el.classList.add("lg-fallback");
