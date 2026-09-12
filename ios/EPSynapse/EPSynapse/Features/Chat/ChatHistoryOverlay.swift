@@ -11,7 +11,7 @@ struct ChatHistoryOverlay: View {
             let width = Self.panelWidth(for: geo.size)
             let travel = width + 8
 
-            ZStack(alignment: .leading) {
+            ZStack(alignment: .topLeading) {
                 Color.black
                     .opacity(0.28 * max(0, min(1, chat.historyReveal)))
                     .ignoresSafeArea()
@@ -21,10 +21,9 @@ struct ChatHistoryOverlay: View {
 
                 ChatHistoryPanel()
                     .frame(width: width)
-                    .frame(maxHeight: .infinity)
-                    .padding(.top, geo.safeAreaInsets.top + 8)
-                    .padding(.bottom, geo.safeAreaInsets.bottom + 8)
+                    .frame(height: Self.panelHeight(for: geo.size))
                     .epsGlassRounded(cornerRadius: 22, interactive: true, clear: true)
+                    .padding(.top, geo.safeAreaInsets.top + 8)
                     .padding(.leading, 8)
                     .offset(x: (chat.historyReveal - 1) * travel)
             }
@@ -50,6 +49,16 @@ struct ChatHistoryOverlay: View {
             return min(300, size.width * 0.40)
         }
         return size.width * 0.69
+    }
+
+    static func panelHeight(for size: CGSize) -> CGFloat {
+        if AdaptiveLayout.isPad {
+            return min(520, size.height * 0.55)
+        }
+        if size.width > size.height {
+            return min(size.height * 0.78, size.height - 36)
+        }
+        return min(size.height * 0.58, size.height - 160)
     }
 
     private func closeDrag(travel: CGFloat) -> some Gesture {
