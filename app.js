@@ -751,13 +751,21 @@
   }
 
   function trimNum(n) {
-    if (typeof n !== "number" || !Number.isFinite(n)) return "";
-    return String(Math.round(n * 10) / 10);
+    const v = typeof n === "number" ? n : Number(String(n || "").replace(/%/g, "").trim());
+    if (!Number.isFinite(v)) return "";
+    return String(Math.round(v * 10) / 10);
+  }
+
+  function scoreNumber(v) {
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+    const n = Number(String(v || "").replace(/%/g, "").replace(/,/g, "").trim());
+    return Number.isFinite(n) ? n : null;
   }
 
   function formatCourseGrade(row) {
     const letter = String(row?.currentGrade || "").trim();
-    const pct = typeof row?.currentScore === "number" ? `${trimNum(row.currentScore)}%` : "";
+    const score = scoreNumber(row?.currentScore);
+    const pct = score != null ? `${trimNum(score)}%` : "";
     if (letter && pct) return `${letter} ${pct}`;
     return letter || pct || "—";
   }
@@ -1309,6 +1317,9 @@
     const courses = me?.canvasConnected
       ? api("/v1/me/canvas/courses").then((r) => r.courses || []).catch(() => [])
       : Promise.resolve([]);
+    const gradeFetch = me?.canvasConnected
+      ? api("/v1/me/canvas/grades").then((r) => r.grades || []).catch(() => [])
+      : Promise.resolve([]);
     const assignments = me?.canvasConnected
       ? api("/v1/me/canvas/assignments").then((r) => r.assignments || []).catch(() => [])
       : Promise.resolve([]);
@@ -1326,15 +1337,29 @@
       .catch(() => []);
     const sched = await schedule;
     const courseRows = await courses;
+    const gradeRows = await gradeFetch;
+    const gradeById = new Map((gradeRows || []).map((g) => [String(g.id), g]));
+    const mergedCourses = courseRows.map((c) => {
+      const g = gradeById.get(String(c.id));
+      if (!g) return c;
+      return {
+        ...c,
+        currentScore: c.currentScore != null ? c.currentScore : g.currentScore,
+        currentGrade: c.currentGrade || g.currentGrade,
+        finalScore: c.finalScore != null ? c.finalScore : g.finalScore,
+        finalGrade: c.finalGrade || g.finalGrade,
+        htmlUrl: c.htmlUrl || g.htmlUrl,
+      };
+    });
     lastHome = {
-      courses: courseRows,
+      courses: mergedCourses,
       assignments: await assignments,
       files: await files,
       messages: await messages,
       classes: sched.classes || [],
       meetings: sched.meetings || [],
       notes: await notes,
-      grades: courseRows.map((c) => ({ ...c, work: undefined })),
+      grades: (gradeRows.length ? gradeRows : mergedCourses).map((c) => ({ ...c, work: undefined })),
     };
     routeAndRender();
   }
