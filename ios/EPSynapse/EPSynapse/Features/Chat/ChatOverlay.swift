@@ -400,7 +400,7 @@ struct ChatOverlay: View {
                     chat.mutateTurn(id: assistantId) { turn in
                         turn.thinking = ""
                         turn.content = (error as? APIError)?.message
-                            ?? "Could not reach api.epsynapse.com."
+                            ?? "Chat never reached api.epsynapse.com, so the model never saw your question. The site and the Mac API are different hosts. The prompt was not blocked. Try again. If it keeps failing, the tunnel or the Mac API is down."
                     }
                     chat.busy = false
                 }

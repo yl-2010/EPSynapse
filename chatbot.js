@@ -67,6 +67,17 @@
     return window.__epsynapseApiBase || "";
   }
 
+  function unreachableApiMessage() {
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      return "You look offline. Chat needs a network path to api.epsynapse.com, so the model never saw your question. Reconnect and try again.";
+    }
+    return [
+      "Chat never reached api.epsynapse.com, so the model never saw your question.",
+      "This page is the public site. Chat talks to a separate Mac API published through a Cloudflare tunnel.",
+      "The prompt was not blocked or filtered. Try again in a moment. If it keeps failing, the tunnel or the Mac API is down.",
+    ].join(" ");
+  }
+
   function state() {
     return root.dataset.state || "closed";
   }
@@ -916,7 +927,7 @@
       saveChat();
       await persistThread();
     } catch {
-      writeBubble(slot.body, "assistant", "Could not reach api.epsynapse.com.");
+      writeBubble(slot.body, "assistant", unreachableApiMessage());
       if (slot.think) slot.think.remove();
       messages.pop();
     } finally {
