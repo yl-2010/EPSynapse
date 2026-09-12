@@ -51,7 +51,7 @@
     "Full click-by-click is on [epsynapse.com/canvas](/canvas).",
   ].join("\n");
   const READY_GUIDE =
-    "Your Groq key and Canvas token are saved on this account. Ask about a class, homework, or the day.";
+    "Your Groq key and Canvas token are saved on this account. When OneDrive, Outlook, and Teams say Connected in settings, the agent can use them too. Ask about a class, homework, or the day.";
 
   let messages = [];
   let sessionId = "";

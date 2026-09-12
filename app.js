@@ -16,6 +16,7 @@
   const statusEl = document.getElementById("settings-status");
   const odStatus = document.getElementById("onedrive-status");
   const olStatus = document.getElementById("outlook-status");
+  const tmStatus = document.getElementById("teams-status");
   const keyStatus = document.getElementById("key-status");
   const providerSel = document.getElementById("provider");
 
@@ -23,8 +24,10 @@
   let me = null;
   let odPollTimer = 0;
   let olPollTimer = 0;
+  let tmPollTimer = 0;
   let odPollInFlight = false;
   let olPollInFlight = false;
+  let tmPollInFlight = false;
   const TAGS = ["CW", "HW", "QA", "MA"];
   const PERIOD_TONES = {
     A: "rose",
@@ -58,6 +61,7 @@
   };
   let lastOdError = "";
   let lastOlError = "";
+  let lastTmError = "";
   let classFilesInFlight = "";
   let openMail = null;
   let mailBusy = false;
@@ -413,7 +417,8 @@
       paintAccount();
       paintOnedrive();
       paintOutlook();
-      /* Graph device-code is blocked by school admin consent. */
+      paintTeams();
+      resumeMsPolls();
       await migrateLocalKey();
       await loadDashboard();
     } catch (err) {
@@ -525,8 +530,12 @@
     gisInitialized = Boolean(window.google?.accounts?.id && googleClientId);
     fillFormFromMe();
     paintAccount();
+    stopOdPoll();
+    stopOlPoll();
+    stopTeamsPoll();
     paintOnedrive();
     paintOutlook();
+    paintTeams();
     lastHome = { courses: [], assignments: [], files: [], messages: [] };
     if (appEl) appEl.innerHTML = "";
   }
@@ -624,6 +633,11 @@
     applyAgentFromMe();
   }
 
+  function msNavLabel(connected, studio, email, fallback) {
+    if (connected || studio) return email || "Connected";
+    return fallback;
+  }
+
   function paintNavSummaries() {
     const school = document.getElementById("school-summary");
     if (school) {
@@ -641,6 +655,33 @@
     }
     const canvas = document.getElementById("canvas-summary");
     if (canvas) canvas.textContent = me && me.canvasConnected ? "Connected" : "URL and token";
+    const odSum = document.getElementById("onedrive-summary");
+    if (odSum) {
+      odSum.textContent = msNavLabel(
+        me && me.onedriveConnected,
+        me && me.studioOnedrive,
+        me && me.onedriveEmail,
+        "School files"
+      );
+    }
+    const olSum = document.getElementById("outlook-summary");
+    if (olSum) {
+      olSum.textContent = msNavLabel(
+        me && me.outlookConnected,
+        me && me.studioOutlook,
+        me && me.outlookEmail,
+        "School mail"
+      );
+    }
+    const tmSum = document.getElementById("teams-summary");
+    if (tmSum) {
+      tmSum.textContent = msNavLabel(
+        me && me.teamsConnected,
+        me && me.studioTeams,
+        me && me.teamsEmail,
+        "School chat"
+      );
+    }
     document.querySelectorAll(".set-nav[data-pane]").forEach((btn) => {
       btn.classList.toggle("is-on", btn.getAttribute("data-pane") === activePane());
     });
@@ -678,6 +719,7 @@
     paintCanvasToken();
     paintOnedrive();
     paintOutlook();
+    paintTeams();
     paintNavSummaries();
     glassAfterMove();
     window.setTimeout(glassAfterMove, 320);
@@ -761,6 +803,7 @@
     paintNavSummaries();
     paintOnedrive();
     paintOutlook();
+    paintTeams();
     glassAfterMove();
     window.setTimeout(glassAfterMove, 280);
     window.setTimeout(glassAfterMove, 520);
@@ -2196,41 +2239,100 @@
     }
   }
 
-  function paintOnedrive() {
+  function paintMsService(opts) {
+    const { prefix, statusEl, connected, studio, email, pending, lastError } = opts;
+    const entry = document.getElementById(`${prefix}-entry`);
+    const ready = document.getElementById(`${prefix}-ready`);
+    const pendingEl = document.getElementById(`${prefix}-pending`);
+    const codeEl = document.getElementById(`${prefix}-code`);
+    const openEl = document.getElementById(`${prefix}-open`);
+    const studioEl = document.getElementById(`${prefix}-studio`);
+    const adminEl = document.getElementById(`${prefix}-admin`);
+    const emailEl = document.getElementById(`${prefix}-email`);
+    const steps = document.getElementById(`${prefix}-steps`);
+
+    const isConnected = Boolean(connected || studio);
+    const hasPending = pending && (pending.user_code || pending.verification_uri);
+
+    if (entry) entry.hidden = isConnected || Boolean(hasPending);
+    if (ready) ready.hidden = !isConnected;
+    if (pendingEl) pendingEl.hidden = !hasPending;
+    if (steps) steps.hidden = isConnected || Boolean(hasPending);
+    if (studioEl) studioEl.hidden = !studio;
+
+    if (emailEl) emailEl.textContent = isConnected && email ? email : "";
+
+    if (hasPending) {
+      if (codeEl && pending.user_code) codeEl.textContent = pending.user_code;
+      const href = pending.verification_uri_complete || pending.verification_uri || "";
+      if (openEl && href) openEl.href = href;
+    }
+
+    const adminUrl = (pending && pending.adminConsentUrl) || (me && me.adminConsentUrl) || "";
+    if (adminEl) {
+      if (adminUrl) {
+        adminEl.href = adminUrl;
+        adminEl.hidden = false;
+      } else if (!adminEl.href) {
+        adminEl.hidden = true;
+      }
+    }
+
     if (!signedInViaGoogle()) {
-      setStatus(odStatus, NEED_GOOGLE);
-      paintNavSummaries();
+      setStatus(statusEl, NEED_GOOGLE);
       return;
     }
-    const n = localFiles().length;
-    setStatus(
-      odStatus,
-      lastOdError ||
-        (n
-          ? `${n} file${n === 1 ? "" : "s"} on Home. Open OneDrive or upload more.`
-          : "School IT blocks app sign-in. Open OneDrive, or upload files here.")
-    );
+    if (lastError) {
+      setStatus(statusEl, lastError);
+      return;
+    }
+    if (studio) {
+      setStatus(statusEl, "Connected on this Mac. The agent can use it today.");
+    } else if (connected) {
+      setStatus(statusEl, email || "Connected");
+    } else if (hasPending) {
+      setStatus(statusEl, "Finish the Microsoft sign-in. School IT may need to Accept once.");
+    } else {
+      setStatus(statusEl, "Connect with your school Microsoft account. IT Accepts the app once.");
+    }
+  }
+
+  function paintOnedrive() {
+    paintMsService({
+      prefix: "onedrive",
+      statusEl: odStatus,
+      connected: Boolean(me && me.onedriveConnected),
+      studio: Boolean(me && me.studioOnedrive),
+      email: (me && me.onedriveEmail) || "",
+      pending: me && me.onedrivePending,
+      lastError: lastOdError,
+    });
     paintNavSummaries();
   }
 
   function paintOutlook() {
-    if (!signedInViaGoogle()) {
-      setStatus(olStatus, NEED_GOOGLE);
-      paintNavSummaries();
-      return;
-    }
-    const mail = localMail().length;
-    const ev = localEvents().length;
-    const bits = [];
-    if (mail) bits.push(`${mail} saved`);
-    if (ev) bits.push(`${ev} calendar`);
-    setStatus(
-      olStatus,
-      lastOlError ||
-        (bits.length
-          ? `${bits.join(", ")} on Home. Open Outlook to read the rest.`
-          : "School IT blocks app sign-in. Open Outlook. Send uses your mail app.")
-    );
+    paintMsService({
+      prefix: "outlook",
+      statusEl: olStatus,
+      connected: Boolean(me && me.outlookConnected),
+      studio: Boolean(me && me.studioOutlook),
+      email: (me && me.outlookEmail) || "",
+      pending: me && me.outlookPending,
+      lastError: lastOlError,
+    });
+    paintNavSummaries();
+  }
+
+  function paintTeams() {
+    paintMsService({
+      prefix: "teams",
+      statusEl: tmStatus,
+      connected: Boolean(me && me.teamsConnected),
+      studio: Boolean(me && me.studioTeams),
+      email: (me && me.teamsEmail) || "",
+      pending: me && me.teamsPending,
+      lastError: lastTmError,
+    });
     paintNavSummaries();
   }
 
@@ -2336,6 +2438,8 @@
     paintCanvasToken();
     paintOnedrive();
     paintOutlook();
+    paintTeams();
+    resumeMsPolls();
     await initGoogle();
   }
 
@@ -2544,6 +2648,7 @@
       paintCanvasToken();
       paintOnedrive();
       paintOutlook();
+      paintTeams();
       applyAgentFromMe();
       await loadDashboard();
     } catch (err) {
@@ -2565,16 +2670,34 @@
     olPollTimer = 0;
   }
 
+  function stopTeamsPoll() {
+    clearInterval(tmPollTimer);
+    tmPollTimer = 0;
+  }
+
+  function msPendingLive(pending) {
+    return pending && (pending.user_code || pending.verification_uri);
+  }
+
+  function resumeMsPolls() {
+    if (!signedInViaGoogle()) return;
+    if (msPendingLive(me && me.onedrivePending)) watchOnedrive();
+    if (msPendingLive(me && me.outlookPending)) watchOutlook();
+    if (msPendingLive(me && me.teamsPending)) watchTeams();
+  }
+
   async function tickOnedrive() {
     if (odPollInFlight) return;
     odPollInFlight = true;
     try {
       const st = await api("/v1/me/onedrive/status", { timeoutMs: 15000 });
       lastOdError = st.error || "";
-      if (st.connected) {
+      setMsAdminLink("onedrive", st.adminConsentUrl || "");
+      if (st.connected || st.studio) {
         stopOdPoll();
         me = Object.assign({}, me, {
-          onedriveConnected: true,
+          onedriveConnected: Boolean(st.connected),
+          studioOnedrive: Boolean(st.studio),
           onedriveEmail: st.email || "",
           onedrivePending: null,
         });
@@ -2591,7 +2714,7 @@
         await loadDashboard();
         return;
       }
-      if (st.pending && (st.pending.user_code || st.pending.verification_uri)) {
+      if (st.pending && msPendingLive(st.pending)) {
         me = Object.assign({}, me, { onedrivePending: st.pending });
         paintOnedrive();
         if (st.error) setStatus(odStatus, st.error);
@@ -2614,10 +2737,12 @@
     try {
       const st = await api("/v1/me/outlook/status", { timeoutMs: 15000 });
       lastOlError = st.error || "";
-      if (st.connected) {
+      setMsAdminLink("outlook", st.adminConsentUrl || "");
+      if (st.connected || st.studio) {
         stopOlPoll();
         me = Object.assign({}, me, {
-          outlookConnected: true,
+          outlookConnected: Boolean(st.connected),
+          studioOutlook: Boolean(st.studio),
           outlookEmail: st.email || "",
           outlookPending: null,
         });
@@ -2634,7 +2759,7 @@
         await loadDashboard();
         return;
       }
-      if (st.pending && (st.pending.user_code || st.pending.verification_uri)) {
+      if (st.pending && msPendingLive(st.pending)) {
         me = Object.assign({}, me, { outlookPending: st.pending });
         paintOutlook();
         if (st.error) setStatus(olStatus, st.error);
@@ -2651,6 +2776,42 @@
     }
   }
 
+  async function tickTeams() {
+    if (tmPollInFlight) return;
+    tmPollInFlight = true;
+    try {
+      const st = await api("/v1/me/teams/status", { timeoutMs: 15000 });
+      lastTmError = st.error || "";
+      setMsAdminLink("teams", st.adminConsentUrl || "");
+      if (st.connected || st.studio) {
+        stopTeamsPoll();
+        me = Object.assign({}, me, {
+          teamsConnected: Boolean(st.connected),
+          studioTeams: Boolean(st.studio),
+          teamsEmail: st.email || "",
+          teamsPending: null,
+        });
+        paintTeams();
+        await loadDashboard();
+        return;
+      }
+      if (st.pending && msPendingLive(st.pending)) {
+        me = Object.assign({}, me, { teamsPending: st.pending });
+        paintTeams();
+        if (st.error) setStatus(tmStatus, st.error);
+        return;
+      }
+      stopTeamsPoll();
+      me = Object.assign({}, me, { teamsPending: null });
+      paintTeams();
+      if (st.error) setStatus(tmStatus, st.error);
+    } catch {
+      /* keep polling */
+    } finally {
+      tmPollInFlight = false;
+    }
+  }
+
   function watchOnedrive() {
     stopOdPoll();
     tickOnedrive();
@@ -2662,6 +2823,53 @@
     tickOutlook();
     olPollTimer = setInterval(tickOutlook, 4000);
   }
+
+  function watchTeams() {
+    stopTeamsPoll();
+    tickTeams();
+    tmPollTimer = setInterval(tickTeams, 4000);
+  }
+
+  function setMsAdminLink(prefix, url) {
+    const admin = document.getElementById(`${prefix}-admin`);
+    if (!admin) return;
+    if (url) {
+      admin.href = url;
+      admin.hidden = false;
+    }
+  }
+
+  async function startMsConnect(prefix, path, pendingKey, watchFn, statusEl) {
+    if (!signedInViaGoogle()) return;
+    setStatus(statusEl, "Starting Microsoft sign-in…");
+    try {
+      const started = await api(path, { method: "POST", body: "{}" });
+      if (prefix === "onedrive") lastOdError = "";
+      else if (prefix === "outlook") lastOlError = "";
+      else lastTmError = "";
+      const pending = msPendingLive(started) ? started : null;
+      me = Object.assign({}, me, { [pendingKey]: pending });
+      setMsAdminLink(prefix, started.adminConsentUrl || "");
+      if (prefix === "onedrive") paintOnedrive();
+      else if (prefix === "outlook") paintOutlook();
+      else paintTeams();
+      if (pending) watchFn();
+      const openUrl = started.verification_uri_complete || started.verification_uri || "";
+      if (openUrl) window.open(openUrl, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      setStatus(statusEl, err.message || "Could not start sign-in.");
+    }
+  }
+
+  document.getElementById("onedrive-connect")?.addEventListener("click", () => {
+    startMsConnect("onedrive", "/v1/me/onedrive/start", "onedrivePending", watchOnedrive, odStatus);
+  });
+  document.getElementById("outlook-connect")?.addEventListener("click", () => {
+    startMsConnect("outlook", "/v1/me/outlook/start", "outlookPending", watchOutlook, olStatus);
+  });
+  document.getElementById("teams-connect")?.addEventListener("click", () => {
+    startMsConnect("teams", "/v1/me/teams/start", "teamsPending", watchTeams, tmStatus);
+  });
 
   function linkNameFromUrl(url) {
     try {

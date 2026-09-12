@@ -65,6 +65,29 @@ import {
   sendMessage,
   startDeviceCode as startOutlookCode,
 } from "./outlook.js";
+import {
+  adminConsentUrl,
+  acceptPastedToken as acceptTeamsToken,
+  ensureFreshToken as ensureTeamsToken,
+  isConnected as teamsGraphConnected,
+  listChats as listTeamsChats,
+  listChatMessages as listTeamsMessages,
+  pollDeviceCode as pollTeamsCode,
+  publicPending as teamsPending,
+  sendChatMessage as sendTeamsGraph,
+  startDeviceCode as startTeamsCode,
+} from "./teams.js";
+import {
+  isStudioDemoStudent,
+  listStudioChatMessages,
+  listStudioChats,
+  listStudioFiles,
+  readStudioFile,
+  sendStudioChat,
+  studioFlags,
+  studioOutlookToken,
+  writeStudioFile,
+} from "./studio-ms.js";
 import { listVault, readVault, saveVault } from "./vault.js";
 import {
   getSchool,
@@ -82,6 +105,7 @@ import {
   loadStudentByFileId,
   mergeGraph,
   mergeOutlook,
+  mergeTeams,
   publicProfile,
   saveStudent,
   sessionIdFromRequest,
@@ -178,10 +202,25 @@ async function requireStudent(req, res) {
   return student;
 }
 
+function publicMe(student) {
+  const flags = studioFlags(student);
+  const base = publicProfile(student);
+  return {
+    ...base,
+    onedriveConnected: Boolean(base.onedriveConnected || flags.onedrive),
+    outlookConnected: Boolean(base.outlookConnected || flags.outlook),
+    teamsConnected: Boolean(base.teamsConnected || flags.teams),
+    studioOnedrive: flags.onedrive,
+    studioOutlook: flags.outlook,
+    studioTeams: flags.teams,
+    adminConsentUrl: adminConsentUrl(),
+  };
+}
+
 function sessionJson(req, res, student, sid) {
   if (sid) setSessionCookie(req, res, sid);
   return res.json({
-    ...publicProfile(student),
+    ...publicMe(student),
     sessionId: sid || "",
   });
 }
@@ -193,6 +232,11 @@ async function persistGraph(student, patch) {
 
 async function persistOutlook(student, patch) {
   mergeOutlook(student, patch);
+  return saveStudent(student);
+}
+
+async function persistTeams(student, patch) {
+  mergeTeams(student, patch);
   return saveStudent(student);
 }
 
@@ -253,6 +297,7 @@ function pendingStartPayload(pending) {
       pending.verification_uri_complete || completeDeviceUrl(user_code, verification_uri),
     message: pending.message || "",
     interval: pending.interval || 5,
+    adminConsentUrl: adminConsentUrl(),
   };
 }
 
@@ -300,11 +345,19 @@ async function applyMicrosoftToken(current, poll, pending) {
   if (probe.email) bag.email = probe.email;
   const files = Boolean(probe.files || probe.user);
   const mail = Boolean(probe.mail || probe.user);
+  let chats = false;
+  try {
+    await listTeamsChats(poll.accessToken, { limit: 1 });
+    chats = true;
+  } catch {
+    chats = false;
+  }
   if (files) await persistGraph(current, bag);
   if (mail) await persistOutlook(current, bag);
-  if (!files && !mail) await persistGraph(current, bag);
+  if (chats) await persistTeams(current, bag);
+  if (!files && !mail && !chats) await persistGraph(current, bag);
   console.log(
-    `[ms-oauth] probe email=${bag.email || ""} files=${probe.files} mail=${probe.mail} calendar=${probe.calendar}`
+    `[ms-oauth] probe email=${bag.email || ""} files=${probe.files} mail=${probe.mail} calendar=${probe.calendar} chats=${chats}`
   );
 }
 
@@ -324,6 +377,21 @@ async function outlookToken(student) {
     await saveStudent(student);
   }
   return fresh.accessToken;
+}
+
+async function teamsToken(student) {
+  const fresh = await ensureTeamsToken(student.teams);
+  if (fresh !== student.teams) {
+    mergeTeams(student, fresh);
+    await saveStudent(student);
+  }
+  return fresh.accessToken;
+}
+
+async function outlookAccessToken(student) {
+  if (student.outlook?.accessToken) return outlookToken(student);
+  if (isStudioDemoStudent(student)) return studioOutlookToken();
+  return "";
 }
 
 async function liveSnapshot(student) {
@@ -369,6 +437,7 @@ async function liveSnapshot(student) {
     }
   }
 
+  const flags = studioFlags(student);
   if (student.graph?.accessToken) {
     try {
       const token = await graphToken(student);
@@ -378,6 +447,14 @@ async function liveSnapshot(student) {
     } catch (err) {
       bits.push(`OneDrive: ${shortMsError(err) || "could not list files this turn."}`);
     }
+  } else if (flags.onedrive) {
+    try {
+      const files = await listStudioFiles({ limit: 12 });
+      const names = (files || []).map((f) => f.name).filter(Boolean);
+      bits.push(`OneDrive on this Mac: ${names.join("; ") || "empty"}`);
+    } catch (err) {
+      bits.push(`OneDrive: ${shortMsError(err) || "could not list Finder files this turn."}`);
+    }
   } else {
     bits.push("OneDrive: not connected.");
   }
@@ -385,10 +462,10 @@ async function liveSnapshot(student) {
     bits.push(`Uploaded files: ${vaultNames.slice(0, 8).join("; ")}`);
   }
 
-  if (student.outlook?.accessToken) {
+  const outlookTok = await outlookAccessToken(student).catch(() => "");
+  if (outlookTok) {
     try {
-      const token = await outlookToken(student);
-      const inbox = await listMessages(token, { limit: 8 });
+      const inbox = await listMessages(outlookTok, { limit: 8 });
       const lines = (inbox || []).map((m) => {
         const when = String(m.received || "").slice(0, 16);
         const flag = m.unread ? "unread" : "read";
@@ -399,8 +476,7 @@ async function liveSnapshot(student) {
       bits.push(`Outlook: ${shortMsError(err) || "could not read inbox this turn."}`);
     }
     try {
-      const token = await outlookToken(student);
-      const events = await listEvents(token, { days: 7 });
+      const events = await listEvents(outlookTok, { days: 7 });
       const ev = (events || []).slice(0, 5).map((e) => {
         const when = String(e.start || "").slice(0, 16);
         return `${when} ${e.subject || "event"}`;
@@ -411,6 +487,29 @@ async function liveSnapshot(student) {
     }
   } else {
     bits.push("Outlook: not connected.");
+  }
+
+  if (student.teams?.accessToken) {
+    try {
+      const token = await teamsToken(student);
+      const chats = await listTeamsChats(token, { limit: 8 });
+      bits.push(
+        `Teams chats: ${(chats || []).map((c) => c.name).filter(Boolean).join("; ") || "empty"}`
+      );
+    } catch (err) {
+      bits.push(`Teams: ${shortMsError(err) || "could not list chats this turn."}`);
+    }
+  } else if (flags.teams) {
+    try {
+      const chats = await listStudioChats({ limit: 8 });
+      bits.push(
+        `Teams chats: ${(chats || []).map((c) => c.name).filter(Boolean).join("; ") || "empty"}`
+      );
+    } catch (err) {
+      bits.push(`Teams: ${shortMsError(err) || "could not list chats this turn."}`);
+    }
+  } else {
+    bits.push("Teams: not connected.");
   }
 
   const ownerId = ownerIdForStudent(student);
@@ -436,7 +535,7 @@ async function liveSnapshot(student) {
   }
 
   bits.push(
-    "You can add, edit, check off, and delete notes and todos, add HTML or other files to a class, and rename classes. Use the tools."
+    "You can add, edit, check off, and delete notes and todos, add HTML or other files to a class, and rename classes. You can also list and write OneDrive files, read and send Outlook, and read and send Teams when those are connected. Use the tools."
   );
 
   return bits.join("\n").slice(0, 7000);
@@ -522,7 +621,7 @@ app.get("/v1/me", async (req, res) => {
     if (!student) {
       return res.status(401).json({ error: "No student session." });
     }
-    return res.json(publicProfile(student));
+    return res.json(publicMe(student));
   } catch (err) {
     return fail(res, err);
   }
@@ -634,7 +733,7 @@ app.post("/v1/me/canvas", async (req, res) => {
     student.canvasToken = token;
     student.displayName = self.displayName || student.displayName;
     await saveStudent(student);
-    return res.json(publicProfile(student));
+    return res.json(publicMe(student));
   } catch (err) {
     return fail(res, err, err.status || 400);
   }
@@ -746,6 +845,7 @@ app.post("/v1/me/onedrive/start", async (req, res) => {
         user_code: "",
         verification_uri: "",
         message: started.error || "Microsoft would not start school sign-in.",
+        adminConsentUrl: adminConsentUrl(),
       });
     }
     await persistGraph(student, {
@@ -794,12 +894,15 @@ app.get("/v1/me/onedrive/status", async (req, res) => {
       }
       return { current, pollError: poll.error || "" };
     });
+    const flags = studioFlags(current);
     return res.json({
-      connected: isConnected(current.graph),
+      connected: isConnected(current.graph) || flags.onedrive,
       pending: publicPending(current.graph),
       email: current.graph?.email || "",
       error: pollError || "",
-      outlookConnected: outlookConnected(current.outlook),
+      studio: flags.onedrive,
+      adminConsentUrl: adminConsentUrl(),
+      outlookConnected: outlookConnected(current.outlook) || flags.outlook,
       outlookEmail: current.outlook?.email || "",
     });
   } catch (err) {
@@ -845,6 +948,7 @@ app.get("/v1/me/onedrive/files", async (req, res) => {
       vaultFiles = vaultFiles.filter((f) => String(f.name || "").toLowerCase().includes(needle));
     }
     let graphFiles = [];
+    let studioFiles = [];
     let error = "";
     if (student.graph?.accessToken) {
       try {
@@ -856,8 +960,15 @@ app.get("/v1/me/onedrive/files", async (req, res) => {
         error = shortMsError(err);
       }
     }
+    if (studioFlags(student).onedrive) {
+      try {
+        studioFiles = await listStudioFiles({ q, limit: 40 });
+      } catch (err) {
+        if (!error) error = shortMsError(err);
+      }
+    }
     return res.json({
-      files: mergeListedFiles(vaultFiles, graphFiles),
+      files: mergeListedFiles(vaultFiles, graphFiles, studioFiles),
       folder,
       error,
     });
@@ -874,6 +985,10 @@ app.get("/v1/me/onedrive/file", async (req, res) => {
     let file;
     if (id.startsWith("vault:")) {
       file = await readVault(googleFileId(student.googleSub), id.slice("vault:".length));
+    } else if (id.startsWith("studio:")) {
+      file = await readStudioFile(id);
+    } else if (!student.graph?.accessToken && studioFlags(student).onedrive) {
+      file = await readStudioFile(id);
     } else {
       if (!student.graph?.accessToken) {
         return res.status(400).json({ error: "Open that file in OneDrive." });
@@ -902,6 +1017,7 @@ app.post("/v1/me/outlook/start", async (req, res) => {
         user_code: "",
         verification_uri: "",
         message: started.error || "Microsoft would not start Outlook sign-in.",
+        adminConsentUrl: adminConsentUrl(),
       });
     }
     await persistOutlook(student, {
@@ -951,12 +1067,15 @@ app.get("/v1/me/outlook/status", async (req, res) => {
       }
       return { current, pollError: poll.error || "" };
     });
+    const flags = studioFlags(current);
     return res.json({
-      connected: outlookConnected(current.outlook),
+      connected: outlookConnected(current.outlook) || flags.outlook,
       pending: outlookPending(current.outlook),
       email: current.outlook?.email || "",
       error: pollError || "",
-      onedriveConnected: isConnected(current.graph),
+      studio: flags.outlook,
+      adminConsentUrl: adminConsentUrl(),
+      onedriveConnected: isConnected(current.graph) || flags.onedrive,
       onedriveEmail: current.graph?.email || "",
     });
   } catch (err) {
@@ -995,11 +1114,11 @@ app.get("/v1/me/outlook/messages", async (req, res) => {
   try {
     const student = await requireStudent(req, res);
     if (!student) return;
-    if (!student.outlook?.accessToken) {
+    const token = await outlookAccessToken(student);
+    if (!token) {
       return res.json({ messages: [], error: "" });
     }
     try {
-      const token = await outlookToken(student);
       const search = String(req.query.q || "").trim();
       const limit = Number(req.query.limit) || 20;
       const messages = await listMessages(token, { search, limit });
@@ -1016,11 +1135,11 @@ app.get("/v1/me/outlook/events", async (req, res) => {
   try {
     const student = await requireStudent(req, res);
     if (!student) return;
-    if (!student.outlook?.accessToken) {
+    const token = await outlookAccessToken(student);
+    if (!token) {
       return res.json({ events: [], error: "" });
     }
     try {
-      const token = await outlookToken(student);
       const days = Number(req.query.days) || 7;
       const events = await listEvents(token, { days });
       return res.json({ events, error: "" });
@@ -1036,10 +1155,10 @@ app.get("/v1/me/outlook/message", async (req, res) => {
   try {
     const student = await requireStudent(req, res);
     if (!student) return;
-    if (!student.outlook?.accessToken) {
+    const token = await outlookAccessToken(student);
+    if (!token) {
       return res.status(400).json({ error: "Open that message in Outlook." });
     }
-    const token = await outlookToken(student);
     const message = await readMessage(token, req.query.id);
     return res.json({ message });
   } catch (err) {
@@ -1051,16 +1170,178 @@ app.post("/v1/me/outlook/send", async (req, res) => {
   try {
     const student = await requireStudent(req, res);
     if (!student) return;
-    if (!student.outlook?.accessToken) {
-      return res.status(400).json({ error: "Send uses your mail app." });
+    const token = await outlookAccessToken(student);
+    if (!token) {
+      return res.status(400).json({ error: "Connect Outlook first." });
     }
-    const token = await outlookToken(student);
     const sent = await sendMessage(token, {
       to: req.body?.to,
       subject: req.body?.subject,
       body: req.body?.body,
     });
     return res.json(sent);
+  } catch (err) {
+    return fail(res, err, err.status || 400);
+  }
+});
+
+app.post("/v1/me/teams/start", async (req, res) => {
+  try {
+    const student = await requireStudent(req, res);
+    if (!student) return;
+    const started = await startTeamsCode();
+    if (!started.ok) {
+      return res.json({
+        user_code: "",
+        verification_uri: "",
+        message: started.error || "Microsoft would not start Teams sign-in.",
+        adminConsentUrl: started.adminConsentUrl || adminConsentUrl(),
+      });
+    }
+    await persistTeams(student, {
+      pending: {
+        device_code: started.device_code,
+        clientId: started.clientId,
+        scope: started.scope,
+        interval: started.interval,
+        expiresAt: started.expiresAt,
+        user_code: started.user_code,
+        verification_uri: started.verification_uri,
+        verification_uri_complete: started.verification_uri_complete || "",
+        message: started.message,
+      },
+    });
+    return res.json(pendingStartPayload(started));
+  } catch (err) {
+    return fail(res, err);
+  }
+});
+
+app.get("/v1/me/teams/status", async (req, res) => {
+  try {
+    const student = await requireStudent(req, res);
+    if (!student) return;
+    const fileId = googleFileId(student.googleSub);
+    const { current, pollError } = await withStudentLock(fileId, async () => {
+      const current = (await loadStudentByFileId(fileId)) || student;
+      const pending = current.teams?.pending;
+      if (!pending?.device_code) return { current, pollError: "" };
+      if (!livePending(pending)) {
+        await persistTeams(current, { pending: null });
+        return { current, pollError: "That Microsoft sign-in expired. Connect again." };
+      }
+      const poll = await pollTeamsCode(pending.device_code, pending.clientId);
+      if (poll.ok) {
+        await persistTeams(current, {
+          accessToken: poll.accessToken,
+          refreshToken: poll.refreshToken,
+          exp: poll.exp,
+          email: poll.email,
+          clientId: poll.clientId || pending.clientId,
+          scope: poll.scope || pending.scope,
+          pending: null,
+        });
+        return { current, pollError: "" };
+      }
+      if (poll.pending || waitingDeviceError(poll.error)) {
+        return { current, pollError: "" };
+      }
+      console.warn("[ms-oauth] teams poll", poll.error);
+      if (terminalDeviceError(poll.error)) {
+        await persistTeams(current, { pending: null });
+        return { current, pollError: poll.error };
+      }
+      return { current, pollError: poll.error || "" };
+    });
+    const flags = studioFlags(current);
+    return res.json({
+      connected: teamsGraphConnected(current.teams) || flags.teams,
+      pending: teamsPending(current.teams),
+      email: current.teams?.email || "",
+      error: pollError || "",
+      studio: flags.teams,
+      adminConsentUrl: adminConsentUrl(),
+    });
+  } catch (err) {
+    return fail(res, err);
+  }
+});
+
+app.post("/v1/me/teams/token", async (req, res) => {
+  try {
+    const student = await requireStudent(req, res);
+    if (!student) return;
+    const accepted = acceptTeamsToken(req.body?.accessToken);
+    if (!accepted.ok) {
+      return res.status(400).json({ error: accepted.error || "That token is not a Teams token." });
+    }
+    await persistTeams(student, {
+      accessToken: accepted.accessToken,
+      refreshToken: accepted.refreshToken,
+      exp: accepted.exp,
+      email: accepted.email,
+      clientId: accepted.clientId,
+      scope: accepted.scope,
+      pending: null,
+    });
+    return res.json({ connected: true, email: accepted.email, pending: null });
+  } catch (err) {
+    return fail(res, err, 400);
+  }
+});
+
+app.get("/v1/me/teams/chats", async (req, res) => {
+  try {
+    const student = await requireStudent(req, res);
+    if (!student) return;
+    const limit = Number(req.query.limit) || 20;
+    if (student.teams?.accessToken) {
+      const token = await teamsToken(student);
+      return res.json({ chats: await listTeamsChats(token, { limit }), error: "" });
+    }
+    if (studioFlags(student).teams) {
+      return res.json({ chats: await listStudioChats({ limit }), error: "" });
+    }
+    return res.json({ chats: [], error: "" });
+  } catch (err) {
+    return res.json({ chats: [], error: shortMsError(err) });
+  }
+});
+
+app.get("/v1/me/teams/messages", async (req, res) => {
+  try {
+    const student = await requireStudent(req, res);
+    if (!student) return;
+    const chat = String(req.query.chat || req.query.id || "").trim();
+    const limit = Number(req.query.limit) || 20;
+    if (!chat) return res.status(400).json({ error: "chat is required." });
+    if (student.teams?.accessToken) {
+      const token = await teamsToken(student);
+      return res.json({ messages: await listTeamsMessages(token, chat, { limit }), error: "" });
+    }
+    if (studioFlags(student).teams) {
+      return res.json({ messages: await listStudioChatMessages(chat, { limit }), error: "" });
+    }
+    return res.json({ messages: [], error: "Connect Teams first." });
+  } catch (err) {
+    return fail(res, err, err.status || 502);
+  }
+});
+
+app.post("/v1/me/teams/send", async (req, res) => {
+  try {
+    const student = await requireStudent(req, res);
+    if (!student) return;
+    const chat = String(req.body?.chat || "").trim();
+    const text = String(req.body?.text || "").trim();
+    if (student.teams?.accessToken) {
+      const token = await teamsToken(student);
+      return res.json(await sendTeamsGraph(token, { chat, text }));
+    }
+    if (studioFlags(student).teams) {
+      return res.json(await sendStudioChat({ chat, text }));
+    }
+    return res.status(400).json({ error: "Connect Teams first." });
   } catch (err) {
     return fail(res, err, err.status || 400);
   }
@@ -1081,6 +1362,18 @@ app.put("/v1/me/onedrive/file", async (req, res) => {
       content,
       contentType,
     });
+    if (studioFlags(student).onedrive) {
+      try {
+        const studio = await writeStudioFile({ name, content, contentType });
+        if (!student.graph?.accessToken) {
+          return res.json({ ...saved, ...studio, error: "" });
+        }
+      } catch (err) {
+        if (!student.graph?.accessToken) {
+          return res.json({ ...saved, error: shortMsError(err) });
+        }
+      }
+    }
     if (!student.graph?.accessToken) {
       return res.json({ ...saved, error: "" });
     }

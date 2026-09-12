@@ -58,6 +58,18 @@ function emptyOutlook() {
   };
 }
 
+function emptyTeams() {
+  return {
+    accessToken: "",
+    refreshToken: "",
+    exp: 0,
+    email: "",
+    pending: null,
+    clientId: "",
+    scope: "",
+  };
+}
+
 export function normalizeSchool(raw) {
   const school = String(raw ?? "").trim().replace(/\s+/g, " ");
   if (!school) return "";
@@ -136,6 +148,7 @@ function hydrate(raw) {
   const src = raw && typeof raw === "object" ? raw : {};
   const graph = src.graph && typeof src.graph === "object" ? src.graph : {};
   const outlook = src.outlook && typeof src.outlook === "object" ? src.outlook : {};
+  const teams = src.teams && typeof src.teams === "object" ? src.teams : {};
   return {
     googleSub: String(src.googleSub || ""),
     email: String(src.email || ""),
@@ -165,6 +178,15 @@ function hydrate(raw) {
       pending: outlook.pending ?? null,
       clientId: String(outlook.clientId || ""),
       scope: String(outlook.scope || ""),
+    },
+    teams: {
+      accessToken: String(teams.accessToken || ""),
+      refreshToken: String(teams.refreshToken || ""),
+      exp: Number(teams.exp) || 0,
+      email: String(teams.email || ""),
+      pending: teams.pending ?? null,
+      clientId: String(teams.clientId || ""),
+      scope: String(teams.scope || ""),
     },
     createdAt: String(src.createdAt || ""),
     updatedAt: String(src.updatedAt || ""),
@@ -214,6 +236,9 @@ export function publicProfile(student) {
     outlookConnected: graphConnected(s.outlook),
     outlookEmail: s.outlook.email || "",
     outlookPending: publicPending(s.outlook.pending),
+    teamsConnected: graphConnected(s.teams),
+    teamsEmail: s.teams.email || "",
+    teamsPending: publicPending(s.teams.pending),
   };
 }
 
@@ -291,6 +316,7 @@ export async function upsertGoogleStudent({ googleSub, email, googleName, pictur
     displayName: "",
     graph: emptyGraph(),
     outlook: emptyOutlook(),
+    teams: emptyTeams(),
     createdAt: now,
     updatedAt: now,
   };
@@ -306,6 +332,7 @@ export async function upsertGoogleStudent({ googleSub, email, googleName, pictur
   student.updatedAt = now;
   if (!student.graph) student.graph = emptyGraph();
   if (!student.outlook) student.outlook = emptyOutlook();
+  if (!student.teams) student.teams = emptyTeams();
   return saveStudent(student);
 }
 
@@ -482,5 +509,13 @@ export function mergeOutlook(student, patch) {
     student.outlook = emptyOutlook();
   }
   mergeTokenBag(student.outlook, patch, ["clientId", "scope"]);
+  return student;
+}
+
+export function mergeTeams(student, patch) {
+  if (!student.teams || typeof student.teams !== "object") {
+    student.teams = emptyTeams();
+  }
+  mergeTokenBag(student.teams, patch, ["clientId", "scope"]);
   return student;
 }

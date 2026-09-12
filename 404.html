@@ -355,6 +355,33 @@
               <path d="M9 6.2L15.2 12L9 17.8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </button>
+          <button type="button" class="set-nav" data-pane="onedrive">
+            <span class="set-nav-copy">
+              <span class="set-nav-title">OneDrive</span>
+              <span class="set-nav-meta" id="onedrive-summary">School files</span>
+            </span>
+            <svg class="set-nav-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M9 6.2L15.2 12L9 17.8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <button type="button" class="set-nav" data-pane="outlook">
+            <span class="set-nav-copy">
+              <span class="set-nav-title">Outlook</span>
+              <span class="set-nav-meta" id="outlook-summary">School mail</span>
+            </span>
+            <svg class="set-nav-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M9 6.2L15.2 12L9 17.8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <button type="button" class="set-nav" data-pane="teams">
+            <span class="set-nav-copy">
+              <span class="set-nav-title">Teams</span>
+              <span class="set-nav-meta" id="teams-summary">School chat</span>
+            </span>
+            <svg class="set-nav-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M9 6.2L15.2 12L9 17.8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
         </section>
         </div>
         </div>
@@ -499,6 +526,110 @@
           </div>
         </div>
 
+        <div class="edu-sheet edu-sheet--set" data-pane="onedrive" hidden>
+          <div class="edu-sheet-head">
+            <h2 class="edu-sheet-title">OneDrive</h2>
+            <button type="button" class="edu-sheet-close set-pane-close" aria-label="Close OneDrive">
+              <svg viewBox="0 0 24 24" fill="currentColor" shape-rendering="geometricPrecision" aria-hidden="true">
+                <path d="M5.448 7.252 16.748 18.552a1.275 1.275 0 0 0 1.804-1.804L7.252 5.448a1.275 1.275 0 0 0-1.804 1.804Zm11.3-1.804L5.448 16.748a1.275 1.275 0 0 0 1.804 1.804L18.552 7.252a1.275 1.275 0 0 0-1.804-1.804Z"/>
+              </svg>
+            </button>
+          </div>
+          <div class="edu-sheet-body">
+            <ol class="set-steps" id="onedrive-steps">
+              <li>Sign in with Google on this page if you have not already.</li>
+              <li>Tap Connect OneDrive. Microsoft opens a school sign-in.</li>
+              <li>Use your @eastsideprep.org account. If Microsoft says the app needs admin approval, that is expected. School IT Accepts once, then every student can connect.</li>
+              <li>OneDrive on the settings list must say Connected.</li>
+            </ol>
+            <div id="onedrive-ready" hidden>
+              <p class="set-ready">OneDrive connected</p>
+              <p class="set-hint" id="onedrive-email"></p>
+            </div>
+            <div id="onedrive-entry">
+              <div class="edu-sheet-actions">
+                <button type="button" id="onedrive-connect" class="edu-sheet-btn edu-sheet-btn--gold">Connect OneDrive</button>
+              </div>
+            </div>
+            <div id="onedrive-pending" hidden>
+              <p id="onedrive-code" class="od-code"></p>
+              <a id="onedrive-open" class="set-link" href="#">Open Microsoft sign-in</a>
+            </div>
+            <p class="set-hint" id="onedrive-studio" hidden>On this Mac the agent can already use the school OneDrive folder in Finder for today's demo.</p>
+            <p class="set-hint" id="onedrive-status"></p>
+            <a class="set-link" id="onedrive-admin" href="https://login.microsoftonline.com/b2681e8b-dd20-46cf-b163-371a2d7c6014/v2.0/adminconsent?client_id=d3590ed6-52b3-4102-aeff-aad2292ab01c&amp;scope=https://graph.microsoft.com/.default&amp;redirect_uri=https://epsynapse.com/" rel="noopener noreferrer">Ask school IT to approve</a>
+          </div>
+        </div>
+
+        <div class="edu-sheet edu-sheet--set" data-pane="outlook" hidden>
+          <div class="edu-sheet-head">
+            <h2 class="edu-sheet-title">Outlook</h2>
+            <button type="button" class="edu-sheet-close set-pane-close" aria-label="Close Outlook">
+              <svg viewBox="0 0 24 24" fill="currentColor" shape-rendering="geometricPrecision" aria-hidden="true">
+                <path d="M5.448 7.252 16.748 18.552a1.275 1.275 0 0 0 1.804-1.804L7.252 5.448a1.275 1.275 0 0 0-1.804 1.804Zm11.3-1.804L5.448 16.748a1.275 1.275 0 0 0 1.804 1.804L18.552 7.252a1.275 1.275 0 0 0-1.804-1.804Z"/>
+              </svg>
+            </button>
+          </div>
+          <div class="edu-sheet-body">
+            <ol class="set-steps" id="outlook-steps">
+              <li>Sign in with Google on this page if you have not already.</li>
+              <li>Tap Connect Outlook. Microsoft opens a school sign-in.</li>
+              <li>Use your @eastsideprep.org account. If Microsoft says the app needs admin approval, that is expected. School IT Accepts once, then every student can connect.</li>
+              <li>Outlook on the settings list must say Connected.</li>
+            </ol>
+            <div id="outlook-ready" hidden>
+              <p class="set-ready">Outlook connected</p>
+              <p class="set-hint" id="outlook-email"></p>
+            </div>
+            <div id="outlook-entry">
+              <div class="edu-sheet-actions">
+                <button type="button" id="outlook-connect" class="edu-sheet-btn edu-sheet-btn--gold">Connect Outlook</button>
+              </div>
+            </div>
+            <div id="outlook-pending" hidden>
+              <p id="outlook-code" class="od-code"></p>
+              <a id="outlook-open" class="set-link" href="#">Open Microsoft sign-in</a>
+            </div>
+            <p class="set-hint" id="outlook-studio" hidden>On this Mac the agent can already read and send school Outlook for today's demo.</p>
+            <p class="set-hint" id="outlook-status"></p>
+            <a class="set-link" id="outlook-admin" href="https://login.microsoftonline.com/b2681e8b-dd20-46cf-b163-371a2d7c6014/v2.0/adminconsent?client_id=d3590ed6-52b3-4102-aeff-aad2292ab01c&amp;scope=https://graph.microsoft.com/.default&amp;redirect_uri=https://epsynapse.com/" rel="noopener noreferrer">Ask school IT to approve</a>
+          </div>
+        </div>
+
+        <div class="edu-sheet edu-sheet--set" data-pane="teams" hidden>
+          <div class="edu-sheet-head">
+            <h2 class="edu-sheet-title">Teams</h2>
+            <button type="button" class="edu-sheet-close set-pane-close" aria-label="Close Teams">
+              <svg viewBox="0 0 24 24" fill="currentColor" shape-rendering="geometricPrecision" aria-hidden="true">
+                <path d="M5.448 7.252 16.748 18.552a1.275 1.275 0 0 0 1.804-1.804L7.252 5.448a1.275 1.275 0 0 0-1.804 1.804Zm11.3-1.804L5.448 16.748a1.275 1.275 0 0 0 1.804 1.804L18.552 7.252a1.275 1.275 0 0 0-1.804-1.804Z"/>
+              </svg>
+            </button>
+          </div>
+          <div class="edu-sheet-body">
+            <ol class="set-steps" id="teams-steps">
+              <li>Sign in with Google on this page if you have not already.</li>
+              <li>Tap Connect Teams. Microsoft opens a school sign-in.</li>
+              <li>Use your @eastsideprep.org account. If Microsoft says the app needs admin approval, that is expected. School IT Accepts once, then every student can connect.</li>
+              <li>Teams on the settings list must say Connected.</li>
+            </ol>
+            <div id="teams-ready" hidden>
+              <p class="set-ready">Teams connected</p>
+              <p class="set-hint" id="teams-email"></p>
+            </div>
+            <div id="teams-entry">
+              <div class="edu-sheet-actions">
+                <button type="button" id="teams-connect" class="edu-sheet-btn edu-sheet-btn--gold">Connect Teams</button>
+              </div>
+            </div>
+            <div id="teams-pending" hidden>
+              <p id="teams-code" class="od-code"></p>
+              <a id="teams-open" class="set-link" href="#">Open Microsoft sign-in</a>
+            </div>
+            <p class="set-hint" id="teams-studio" hidden>On this Mac the agent can already read and send school Teams for today's demo.</p>
+            <p class="set-hint" id="teams-status"></p>
+            <a class="set-link" id="teams-admin" href="https://login.microsoftonline.com/b2681e8b-dd20-46cf-b163-371a2d7c6014/v2.0/adminconsent?client_id=d3590ed6-52b3-4102-aeff-aad2292ab01c&amp;scope=https://graph.microsoft.com/.default&amp;redirect_uri=https://epsynapse.com/" rel="noopener noreferrer">Ask school IT to approve</a>
+          </div>
+        </div>
       </div>
       </form>
     </div>
@@ -518,9 +649,9 @@
 
     <script src="/liquid-glass.js?v=glass14"></script>
     <script src="/theme-orb.js?v=moon5"></script>
-    <script src="/app.js?v=todo9"></script>
+    <script src="/app.js?v=ms1"></script>
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js" crossorigin="anonymous"></script>
     <script src="/markdown.js?v=2"></script>
-    <script src="/chatbot.js?v=math1"></script>
+    <script src="/chatbot.js?v=ms1"></script>
   </body>
 </html>

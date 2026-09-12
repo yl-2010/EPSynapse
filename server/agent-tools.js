@@ -33,6 +33,38 @@ import {
   renameClass,
   writeClassFile,
 } from "./workspace.js";
+import {
+  downloadFile,
+  ensureFreshToken as ensureGraphToken,
+  listDashboardFiles,
+  searchFiles,
+  uploadFile,
+} from "./onedrive.js";
+import {
+  ensureFreshToken as ensureOutlookToken,
+  listEvents,
+  listMessages,
+  readMessage,
+  sendMessage,
+} from "./outlook.js";
+import {
+  ensureFreshToken as ensureTeamsToken,
+  listChatMessages as listGraphTeamMessages,
+  listChats as listGraphTeamChats,
+  sendChatMessage as sendGraphTeamMessage,
+} from "./teams.js";
+import {
+  isStudioDemoStudent,
+  listStudioChatMessages,
+  listStudioChats,
+  listStudioFiles,
+  readStudioFile,
+  sendStudioChat,
+  studioFlags,
+  studioOutlookToken,
+  writeStudioFile,
+} from "./studio-ms.js";
+import { mergeGraph, mergeOutlook, mergeTeams, saveStudent } from "./students.js";
 
 const MAX_RESULT = 6000;
 
@@ -287,6 +319,149 @@ export const AGENT_TOOLS = [
   {
     type: "function",
     function: {
+      name: "list_onedrive_files",
+      description: "List school OneDrive files (Graph or this Mac's Finder folder).",
+      parameters: {
+        type: "object",
+        properties: { q: { type: "string", description: "Optional name search" } },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "read_onedrive_file",
+      description: "Read a OneDrive or Finder file. Use an id from list_onedrive_files.",
+      parameters: {
+        type: "object",
+        properties: { id: { type: "string" } },
+        required: ["id"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "write_onedrive_file",
+      description: "Write a file to school OneDrive / the Finder folder (EPSynapse).",
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          content: { type: "string" },
+          contentType: { type: "string" },
+        },
+        required: ["name", "content"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_outlook_mail",
+      description: "List recent school Outlook inbox messages.",
+      parameters: {
+        type: "object",
+        properties: {
+          q: { type: "string" },
+          limit: { type: "number" },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "read_outlook_mail",
+      description: "Read one Outlook message body.",
+      parameters: {
+        type: "object",
+        properties: { id: { type: "string" } },
+        required: ["id"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "send_outlook_mail",
+      description: "Send a school Outlook email.",
+      parameters: {
+        type: "object",
+        properties: {
+          to: { type: "string" },
+          subject: { type: "string" },
+          body: { type: "string" },
+        },
+        required: ["to", "subject", "body"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_outlook_events",
+      description: "List school Outlook calendar events.",
+      parameters: {
+        type: "object",
+        properties: { days: { type: "number" } },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_teams_chats",
+      description: "List school Teams chats.",
+      parameters: {
+        type: "object",
+        properties: { limit: { type: "number" } },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "read_teams_thread",
+      description: "Read recent messages in a Teams chat. Use a chat id or name from list_teams_chats.",
+      parameters: {
+        type: "object",
+        properties: {
+          chat: { type: "string" },
+          limit: { type: "number" },
+        },
+        required: ["chat"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "send_teams_message",
+      description: "Send a message to a school Teams chat.",
+      parameters: {
+        type: "object",
+        properties: {
+          chat: { type: "string" },
+          text: { type: "string" },
+        },
+        required: ["chat", "text"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "open_page",
       description:
         "Open a dashboard page when this turn finishes. Call after creating something the student should see.",
@@ -329,6 +504,39 @@ function fileTarget(input) {
     classId: String(input?.classId || "").trim(),
     name: String(input?.name || "").trim(),
   };
+}
+
+async function graphAccess(student) {
+  if (!student?.graph?.accessToken) return "";
+  const fresh = await ensureGraphToken(student.graph);
+  if (fresh !== student.graph) {
+    mergeGraph(student, fresh);
+    await saveStudent(student);
+  }
+  return fresh.accessToken;
+}
+
+async function mailAccess(student) {
+  if (student?.outlook?.accessToken) {
+    const fresh = await ensureOutlookToken(student.outlook);
+    if (fresh !== student.outlook) {
+      mergeOutlook(student, fresh);
+      await saveStudent(student);
+    }
+    return fresh.accessToken;
+  }
+  if (isStudioDemoStudent(student)) return studioOutlookToken();
+  return "";
+}
+
+async function teamsGraphAccess(student) {
+  if (!student?.teams?.accessToken) return "";
+  const fresh = await ensureTeamsToken(student.teams);
+  if (fresh !== student.teams) {
+    mergeTeams(student, fresh);
+    await saveStudent(student);
+  }
+  return fresh.accessToken;
 }
 
 export async function executeAgentTool(call, { ownerId, student, req } = {}) {
@@ -472,6 +680,112 @@ export async function executeAgentTool(call, { ownerId, student, req } = {}) {
         const klass = await resolveClass(ownerId, student, target.classId);
         const classId = klass?.id || target.classId;
         return ok(await deleteClassFile(ownerId, classId, target.name), { kinds: ["files"] });
+      }
+      case "list_onedrive_files": {
+        const q = String(input.q || "").trim();
+        const token = await graphAccess(student);
+        let files = [];
+        if (token) {
+          files = q ? await searchFiles(token, q) : await listDashboardFiles(token, {});
+        }
+        if (studioFlags(student).onedrive) {
+          files = [...files, ...(await listStudioFiles({ q, limit: 40 }))];
+        }
+        if (!files.length && !token && !studioFlags(student).onedrive) {
+          return fail("Connect OneDrive in settings first.");
+        }
+        return ok({ files: files.slice(0, 40) });
+      }
+      case "read_onedrive_file": {
+        const id = String(input.id || "").trim();
+        if (!id) return fail("File id required.");
+        if (id.startsWith("studio:") || (!student?.graph?.accessToken && studioFlags(student).onedrive)) {
+          const file = await readStudioFile(id);
+          const text = isProbablyText(file.contentType, file.name)
+            ? file.buffer.toString("utf8").slice(0, MAX_RESULT)
+            : `[binary ${file.buffer.length} bytes]`;
+          return ok({ name: file.name, contentType: file.contentType, content: text, path: file.path });
+        }
+        const token = await graphAccess(student);
+        if (!token) return fail("Connect OneDrive in settings first.");
+        const file = await downloadFile(token, id);
+        const text = isProbablyText(file.contentType, file.name)
+          ? file.buffer.toString("utf8").slice(0, MAX_RESULT)
+          : `[binary ${file.buffer.length} bytes]`;
+        return ok({ name: file.name, contentType: file.contentType, content: text });
+      }
+      case "write_onedrive_file": {
+        const name = String(input.name || "").trim();
+        const content = String(input.content ?? "");
+        const contentType = String(input.contentType || "text/plain");
+        const out = {};
+        if (studioFlags(student).onedrive) {
+          out.studio = await writeStudioFile({ name, content, contentType });
+        }
+        const token = await graphAccess(student);
+        if (token) {
+          out.onedrive = await uploadFile(token, { name, content, contentType });
+        }
+        if (!out.studio && !out.onedrive) return fail("Connect OneDrive in settings first.");
+        return ok(out, { kinds: ["files"] });
+      }
+      case "list_outlook_mail": {
+        const token = await mailAccess(student);
+        if (!token) return fail("Connect Outlook in settings first.");
+        return ok({
+          messages: await listMessages(token, {
+            search: String(input.q || "").trim(),
+            limit: Number(input.limit) || 12,
+          }),
+        });
+      }
+      case "read_outlook_mail": {
+        const token = await mailAccess(student);
+        if (!token) return fail("Connect Outlook in settings first.");
+        return ok({ message: await readMessage(token, input.id) });
+      }
+      case "send_outlook_mail": {
+        const token = await mailAccess(student);
+        if (!token) return fail("Connect Outlook in settings first.");
+        return ok(
+          await sendMessage(token, { to: input.to, subject: input.subject, body: input.body })
+        );
+      }
+      case "list_outlook_events": {
+        const token = await mailAccess(student);
+        if (!token) return fail("Connect Outlook in settings first.");
+        return ok({ events: await listEvents(token, { days: Number(input.days) || 7 }) });
+      }
+      case "list_teams_chats": {
+        const token = await teamsGraphAccess(student);
+        if (token) return ok({ chats: await listGraphTeamChats(token, { limit: Number(input.limit) || 20 }) });
+        if (studioFlags(student).teams) {
+          return ok({ chats: await listStudioChats({ limit: Number(input.limit) || 20 }) });
+        }
+        return fail("Connect Teams in settings first.");
+      }
+      case "read_teams_thread": {
+        const chat = String(input.chat || "").trim();
+        const token = await teamsGraphAccess(student);
+        if (token) {
+          return ok({
+            messages: await listGraphTeamMessages(token, chat, { limit: Number(input.limit) || 20 }),
+          });
+        }
+        if (studioFlags(student).teams) {
+          return ok({ messages: await listStudioChatMessages(chat, { limit: Number(input.limit) || 20 }) });
+        }
+        return fail("Connect Teams in settings first.");
+      }
+      case "send_teams_message": {
+        const token = await teamsGraphAccess(student);
+        if (token) {
+          return ok(await sendGraphTeamMessage(token, { chat: input.chat, text: input.text }));
+        }
+        if (studioFlags(student).teams) {
+          return ok(await sendStudioChat({ chat: input.chat, text: input.text }));
+        }
+        return fail("Connect Teams in settings first.");
       }
       case "open_page": {
         const view = String(input.view || "home").trim().toLowerCase();
