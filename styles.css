@@ -66,7 +66,7 @@
     --muted: #9aa8b8;
     --accent: #eba700;
     --hairline: rgba(232, 238, 244, 0.12);
-    --panel-bg: rgba(11, 31, 58, 0.42);
+    --panel-bg: rgba(11, 31, 58, 0.28);
     --panel-brd: rgba(255, 255, 255, 0.1);
     --rim: rgba(255, 255, 255, 0.16);
     --accent-rgb: 235, 167, 0;
@@ -93,7 +93,7 @@ html[data-resolved-theme="dark"] {
   --muted: #9aa8b8;
   --accent: #eba700;
   --hairline: rgba(232, 238, 244, 0.12);
-  --panel-bg: rgba(11, 31, 58, 0.42);
+  --panel-bg: rgba(11, 31, 58, 0.28);
   --panel-brd: rgba(255, 255, 255, 0.1);
   --rim: rgba(255, 255, 255, 0.16);
   --accent-rgb: 235, 167, 0;
@@ -347,6 +347,44 @@ a {
   box-shadow: inset 0 0 var(--lg-shadow-blur) var(--lg-shadow-spread) var(--lg-shadow-color);
   background-color: rgba(var(--lg-tint-rgb), var(--lg-tint-opacity));
   pointer-events: none;
+}
+
+.corner::before,
+.yan-chat-close::before,
+.yan-chat-send::before {
+  background-image: radial-gradient(
+    140% 100% at 28% 14%,
+    rgba(255, 255, 255, 0.5) 0%,
+    rgba(255, 255, 255, 0.1) 32%,
+    transparent 58%
+  );
+  box-shadow:
+    inset 0 0 var(--lg-shadow-blur) var(--lg-shadow-spread) var(--lg-shadow-color),
+    inset 0 1px 0 rgba(255, 255, 255, 0.38);
+}
+
+html[data-resolved-theme="dark"] .corner::before,
+html[data-resolved-theme="dark"] .yan-chat-close::before,
+html[data-resolved-theme="dark"] .yan-chat-send::before {
+  background-image: radial-gradient(
+    140% 100% at 28% 14%,
+    rgba(255, 255, 255, 0.4) 0%,
+    rgba(255, 255, 255, 0.08) 34%,
+    transparent 58%
+  );
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-resolved-theme="light"]) .corner::before,
+  html:not([data-resolved-theme="light"]) .yan-chat-close::before,
+  html:not([data-resolved-theme="light"]) .yan-chat-send::before {
+    background-image: radial-gradient(
+      140% 100% at 28% 14%,
+      rgba(255, 255, 255, 0.4) 0%,
+      rgba(255, 255, 255, 0.08) 34%,
+      transparent 58%
+    );
+  }
 }
 
 .edu-panel::before,
