@@ -36,7 +36,6 @@ import {
   ensureFreshToken,
   isConnected,
   listDashboardFiles,
-  listFiles,
   pollDeviceCode,
   probeGraph,
   publicPending,
@@ -333,17 +332,30 @@ async function liveSnapshot(student) {
     bits.push("Canvas: not connected.");
   }
 
+  const fileId = student.googleSub ? googleFileId(student.googleSub) : "";
+  let vaultNames = [];
+  if (fileId) {
+    try {
+      vaultNames = (await listVault(fileId)).map((f) => f.name).filter(Boolean);
+    } catch {
+      vaultNames = [];
+    }
+  }
+
   if (student.graph?.accessToken) {
     try {
       const token = await graphToken(student);
-      const files = await listFiles(token, { folder: WRITE_FOLDER });
+      const files = await listDashboardFiles(token, { folder: WRITE_FOLDER });
       const names = (files || []).map((f) => f.name).filter(Boolean).slice(0, 12);
-      bits.push(`OneDrive /EPSynapse: ${names.join("; ") || "empty"}`);
-    } catch {
-      bits.push("OneDrive: could not list /EPSynapse this turn.");
+      bits.push(`OneDrive recent: ${names.join("; ") || "empty"}`);
+    } catch (err) {
+      bits.push(`OneDrive: ${shortMsError(err) || "could not list files this turn."}`);
     }
   } else {
     bits.push("OneDrive: not connected.");
+  }
+  if (vaultNames.length) {
+    bits.push(`Uploaded files: ${vaultNames.slice(0, 8).join("; ")}`);
   }
 
   if (student.outlook?.accessToken) {
@@ -356,8 +368,19 @@ async function liveSnapshot(student) {
         return `${when} ${flag} ${m.fromAddress || m.from}: ${m.subject}`;
       });
       bits.push(`Outlook inbox: ${lines.join(" | ") || "empty"}`);
+    } catch (err) {
+      bits.push(`Outlook: ${shortMsError(err) || "could not read inbox this turn."}`);
+    }
+    try {
+      const token = await outlookToken(student);
+      const events = await listEvents(token, { days: 7 });
+      const ev = (events || []).slice(0, 5).map((e) => {
+        const when = String(e.start || "").slice(0, 16);
+        return `${when} ${e.subject || "event"}`;
+      });
+      if (ev.length) bits.push(`Outlook this week: ${ev.join(" | ")}`);
     } catch {
-      bits.push("Outlook: could not read inbox this turn.");
+      /* calendar is optional */
     }
   } else {
     bits.push("Outlook: not connected.");
