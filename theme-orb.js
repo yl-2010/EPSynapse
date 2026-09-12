@@ -7,6 +7,25 @@
   const el = document.querySelector(".c-tr");
   if (!el) return;
 
+  if (!document.getElementById("theme-mode-icon-style")) {
+    const style = document.createElement("style");
+    style.id = "theme-mode-icon-style";
+    style.textContent =
+      ".c-tr .theme-mode-icon{width:40%;height:40%;pointer-events:none}";
+    document.head.appendChild(style);
+  }
+
+  if (!el.querySelector(".theme-mode-icon")) {
+    el.insertAdjacentHTML(
+      "afterbegin",
+      `<svg class="theme-mode-icon" viewBox="0 0 24 24" shape-rendering="geometricPrecision" aria-hidden="true">
+        <circle cx="12" cy="12" r="10" fill="#f2f2f7"/>
+        <path d="M12 2a10 10 0 1 0 0 20Z" fill="#1c1c1e"/>
+        <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="0.7" opacity="0.28"/>
+      </svg>`
+    );
+  }
+
   /** @typedef {"light"|"dark"|"system"} ThemePreference */
   /** @typedef {"light"|"dark"} ResolvedTheme */
 
