@@ -104,9 +104,6 @@ struct ClassView: View {
                     .font(.title.weight(.bold))
                     .foregroundStyle(EPSTheme.fg)
                 HStack(spacing: 8) {
-                    if !schoolClass.trimester.isEmpty {
-                        Text(schoolClass.trimester)
-                    }
                     if schoolClass.freePeriod {
                         Text("Free period")
                     }

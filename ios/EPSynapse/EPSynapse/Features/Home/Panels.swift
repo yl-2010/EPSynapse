@@ -297,8 +297,7 @@ struct ClassRow: View {
     }
 
     private var trailing: String {
-        if !course.courseCode.isEmpty { return course.courseCode }
-        return course.trimester
+        course.courseCode
     }
 
     var body: some View {

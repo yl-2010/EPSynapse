@@ -1120,7 +1120,7 @@
   function classRow(c) {
     const highlight = isCurrentClass(c);
     const href = classHref(c);
-    const meta = c.courseCode || (c.term ? c.term : "");
+    const meta = c.courseCode || "";
     return `<li class="edu-row edu-class-row${highlight ? " is-current" : ""}">
       <a class="edu-row-link" data-route href="${escapeHtml(href)}">
         <span class="edu-name">${periodTagHtml(c.period)}<span class="edu-hero-class-name">${escapeHtml(fullerClassName(c.name, gradeForClass(c)?.name))}</span></span>
@@ -1468,7 +1468,7 @@
     const next = nextMeetingLine(klass);
     const courseGrade = gradeForClass(klass);
     const gradeText = courseGrade ? formatCourseGrade(courseGrade) : "";
-    const sub = [klass.term, klass.subject, klass.courseCode, gradeText && gradeText !== "—" ? gradeText : "", next]
+    const sub = [klass.subject, klass.courseCode, gradeText && gradeText !== "—" ? gradeText : "", next]
       .filter(Boolean)
       .join(" · ");
     appEl.classList.add("is-settled");
