@@ -7,7 +7,7 @@
     "server": "npm run start --prefix server",
     "server:dev": "npm run dev --prefix server",
     "verify:public-api": "curl -sS -f https://api.epsynapse.com/health",
-    "deploy:web": "npx vercel deploy --prod --yes --scope jype1"
+    "deploy:web": "bash scripts/deploy-web.sh"
   },
   "engines": {
     "node": ">=20"

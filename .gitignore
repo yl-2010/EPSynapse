@@ -35,6 +35,7 @@ server/node_modules/
 .env.local
 .env.*.local
 server/.env
+vercel.env
 *.log
 
 # Student profiles and sessions (tokens live here)
