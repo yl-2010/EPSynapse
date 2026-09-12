@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 const ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const LOCAL_PREFIX = "local:";
 const CLASS_FILE_PREFIX = "class:";
+const TODO_FILE_PREFIX = "todo:";
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const MAX_HTML_PREVIEW = 200 * 1024;
 const META_NAME = "_meta.json";
@@ -102,6 +103,33 @@ function todoPath(ownerId, id) {
 
 function classFilesDir(ownerId, classId) {
   return join(ownerDir(ownerId), "files", safeClassKey(classId));
+}
+
+function safeTodoKey(raw) {
+  const key = String(raw || "")
+    .trim()
+    .replace(/^local:/i, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .slice(0, 80);
+  if (!key || key === "." || key === "..") {
+    const err = new Error("Unknown todo.");
+    err.status = 404;
+    throw err;
+  }
+  return key;
+}
+
+function todoFilesDir(ownerId, todoId) {
+  return join(ownerDir(ownerId), "files", "todos", safeTodoKey(todoId));
+}
+
+function originalTodoId(raw, stored = "") {
+  const given = String(raw || "").trim();
+  if (given) return given;
+  const kept = String(stored || "").trim();
+  if (kept) return kept;
+  return "";
 }
 
 export function isLocalTodoId(raw) {
@@ -521,7 +549,7 @@ export async function listAllClassFiles(ownerId, { includeText = false } = {}) {
   }
   const out = [];
   for (const classId of classIds) {
-    if (classId.startsWith(".")) continue;
+    if (classId.startsWith(".") || classId === "todos") continue;
     out.push(...(await listClassFiles(ownerId, classId, { includeText })));
   }
   return out;
@@ -580,6 +608,173 @@ export async function deleteClassFile(ownerId, classId, name) {
   return { ok: true, id: classFileId(classId, safe) };
 }
 
+function todoFileId(todoId, name) {
+  return `${TODO_FILE_PREFIX}${todoId}:${name}`;
+}
+
+export function parseTodoFileId(raw) {
+  const id = String(raw || "").trim();
+  if (!id.startsWith(TODO_FILE_PREFIX)) return null;
+  const rest = id.slice(TODO_FILE_PREFIX.length);
+  if (rest.toLowerCase().startsWith(LOCAL_PREFIX)) {
+    const afterLocal = rest.slice(LOCAL_PREFIX.length);
+    const colon = afterLocal.indexOf(":");
+    if (colon < 1) return null;
+    return { todoId: `${LOCAL_PREFIX}${afterLocal.slice(0, colon)}`, name: afterLocal.slice(colon + 1) };
+  }
+  const colon = rest.indexOf(":");
+  if (colon < 1) return null;
+  return { todoId: rest.slice(0, colon), name: rest.slice(colon + 1) };
+}
+
+function publicTodoFile(todoId, name, size, lastModified, contentType, text) {
+  const row = {
+    id: todoFileId(todoId, name),
+    name,
+    size: Number(size) || 0,
+    lastModified: String(lastModified || ""),
+    folder: false,
+    webUrl: "",
+    downloadUrl: "",
+    source: "todo",
+    todoId: String(todoId || ""),
+    contentType: contentType || "application/octet-stream",
+  };
+  if (text != null) row.text = text;
+  return row;
+}
+
+export async function listTodoFiles(ownerId, todoId, { includeText = false } = {}) {
+  const publicId = originalTodoId(todoId);
+  const dir = todoFilesDir(ownerId, todoId);
+  let names;
+  try {
+    names = await readdir(dir);
+  } catch (err) {
+    if (err?.code === "ENOENT") return [];
+    throw err;
+  }
+  const meta = await readClassFileMeta(dir);
+  const keptId = originalTodoId(publicId, meta._todoId);
+  const out = [];
+  for (const name of names) {
+    if (name === META_NAME || name.startsWith(".")) continue;
+    let info;
+    try {
+      info = await stat(join(dir, name));
+    } catch {
+      continue;
+    }
+    if (!info.isFile()) continue;
+    const row = meta[name] && typeof meta[name] === "object" ? meta[name] : {};
+    const contentType = String(row.contentType || guessContentType(name, ""));
+    let text;
+    if (includeText && isTextType(contentType, name) && info.size <= MAX_HTML_PREVIEW) {
+      try {
+        text = await readFile(join(dir, name), "utf8");
+      } catch {
+        text = undefined;
+      }
+    }
+    out.push(
+      publicTodoFile(
+        keptId || publicId,
+        name,
+        info.size,
+        row.lastModified || info.mtime.toISOString(),
+        contentType,
+        text
+      )
+    );
+  }
+  out.sort((a, b) => String(b.lastModified).localeCompare(String(a.lastModified)));
+  return out;
+}
+
+export async function listAllTodoFiles(ownerId, { includeText = false } = {}) {
+  const root = join(ownerDir(ownerId), "files", "todos");
+  let keys = [];
+  try {
+    keys = await readdir(root);
+  } catch (err) {
+    if (err?.code === "ENOENT") return [];
+    throw err;
+  }
+  const out = [];
+  for (const key of keys) {
+    if (key.startsWith(".")) continue;
+    const dir = join(root, key);
+    let info;
+    try {
+      info = await stat(dir);
+    } catch {
+      continue;
+    }
+    if (!info.isDirectory()) continue;
+    const meta = await readClassFileMeta(dir);
+    const todoId = originalTodoId(meta._todoId, ID_RE.test(key) ? publicTodoId(key) : key);
+    out.push(...(await listTodoFiles(ownerId, todoId || key, { includeText })));
+  }
+  return out;
+}
+
+export async function writeTodoFile(ownerId, todoId, { name, content, contentType, encoding } = {}) {
+  const publicId = originalTodoId(todoId);
+  if (!publicId) {
+    throw Object.assign(new Error("todo id required"), { status: 400 });
+  }
+  const safe = safeFileName(name);
+  const buf = toBuffer(content, encoding);
+  if (buf.length > MAX_FILE_BYTES) {
+    throw Object.assign(new Error("File is too large (2MB max)."), { status: 400 });
+  }
+  const dir = todoFilesDir(ownerId, publicId);
+  await mkdir(dir, { recursive: true });
+  const type = guessContentType(safe, contentType);
+  await writeFile(join(dir, safe), buf);
+  const lastModified = new Date().toISOString();
+  const meta = await readClassFileMeta(dir);
+  meta._todoId = publicId;
+  meta[safe] = { contentType: type, lastModified };
+  await writeClassFileMeta(dir, meta);
+  const text = isTextType(type, safe) && buf.length <= MAX_HTML_PREVIEW ? buf.toString("utf8") : undefined;
+  return publicTodoFile(publicId, safe, buf.length, lastModified, type, text);
+}
+
+export async function readTodoFile(ownerId, todoId, name) {
+  const publicId = originalTodoId(todoId);
+  const safe = safeFileName(name);
+  const dir = todoFilesDir(ownerId, publicId || todoId);
+  let buffer;
+  try {
+    buffer = await readFile(join(dir, safe));
+  } catch (err) {
+    if (err?.code === "ENOENT") {
+      throw Object.assign(new Error("file not found"), { status: 404 });
+    }
+    throw err;
+  }
+  const meta = await readClassFileMeta(dir);
+  const contentType = String(meta[safe]?.contentType || guessContentType(safe, ""));
+  return { name: safe, todoId: originalTodoId(publicId, meta._todoId), contentType, buffer };
+}
+
+export async function deleteTodoFile(ownerId, todoId, name) {
+  const publicId = originalTodoId(todoId);
+  const safe = safeFileName(name);
+  const dir = todoFilesDir(ownerId, publicId || todoId);
+  await unlink(join(dir, safe)).catch((err) => {
+    if (err?.code === "ENOENT") {
+      throw Object.assign(new Error("file not found"), { status: 404 });
+    }
+    throw err;
+  });
+  const meta = await readClassFileMeta(dir);
+  delete meta[safe];
+  await writeClassFileMeta(dir, meta);
+  return { ok: true, id: todoFileId(originalTodoId(publicId, meta._todoId) || publicId, safe) };
+}
+
 export async function workspaceSnapshotBits(ownerId) {
   if (!ownerId) return [];
   const bits = [];
@@ -607,6 +802,19 @@ export async function workspaceSnapshotBits(ownerId) {
         `Class files: ${files
           .slice(0, 16)
           .map((f) => `${f.name} [${f.classId}]`)
+          .join("; ")}`
+      );
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    const todoFiles = await listAllTodoFiles(ownerId);
+    if (todoFiles.length) {
+      bits.push(
+        `Todo files (${todoFiles.length}): ${todoFiles
+          .slice(0, 16)
+          .map((f) => `${f.name} [${f.todoId}]`)
           .join("; ")}`
       );
     }

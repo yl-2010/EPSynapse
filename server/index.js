@@ -130,17 +130,23 @@ import {
   hideCanvasTodo,
   isLocalTodoId,
   listAllClassFiles,
+  listAllTodoFiles,
   listClassFiles,
+  listTodoFiles,
   listTodos,
   loadWorkspaceMeta,
   mergeAssignments,
   parseClassFileId,
+  parseTodoFileId,
   patchTodo,
   setCanvasTodoDone,
   readClassFile,
+  readTodoFile,
   renameClass,
   writeClassFile,
+  writeTodoFile,
   deleteClassFile,
+  deleteTodoFile,
   createTodo,
   deleteTodo,
   workspaceSnapshotBits,
@@ -539,7 +545,7 @@ async function liveSnapshot(student) {
   }
 
   bits.push(
-    "You can add, edit, check off, and delete notes and todos, add HTML or other files to a class, and rename classes. You can also list and write OneDrive files, read and send Outlook, and read and send Teams when those are connected. Use the tools."
+    "You can add, edit, check off, and delete notes and todos, add HTML or other files to a class or a todo page, and rename classes. You can also list and write OneDrive files, read and send Outlook, and read and send Teams when those are connected. Use the tools."
   );
 
   return bits.join("\n").slice(0, 7000);
@@ -1517,6 +1523,76 @@ app.delete("/v1/me/class-files/file", async (req, res) => {
       name: String(req.body?.name || req.query.name || "").trim(),
     };
     return res.json(await deleteClassFile(ctx.ownerId, parsed.classId, parsed.name));
+  } catch (err) {
+    return fail(res, err, err.status || 404);
+  }
+});
+
+app.get("/v1/me/todo-files", async (req, res) => {
+  try {
+    const ctx = await ownerFromStudent(req, res);
+    if (!ctx) return;
+    const todoId = String(req.query.todoId || "").trim();
+    const includeText = /^(1|true|yes)$/i.test(String(req.query.text || "1"));
+    const files = todoId
+      ? await listTodoFiles(ctx.ownerId, todoId, { includeText })
+      : await listAllTodoFiles(ctx.ownerId, { includeText });
+    return res.json({ files, todoId });
+  } catch (err) {
+    return fail(res, err, err.status || 404);
+  }
+});
+
+app.put("/v1/me/todo-files", async (req, res) => {
+  try {
+    const ctx = await ownerFromStudent(req, res);
+    if (!ctx) return;
+    const todoId = String(req.body?.todoId || req.query.todoId || "").trim();
+    let content = req.body?.content;
+    if (req.body?.encoding === "base64") {
+      content = Buffer.from(String(content || ""), "base64");
+    }
+    const file = await writeTodoFile(ctx.ownerId, todoId, {
+      name: req.body?.name,
+      content,
+      contentType: req.body?.contentType,
+    });
+    return res.json({ file });
+  } catch (err) {
+    return fail(res, err, err.status || 400);
+  }
+});
+
+app.get("/v1/me/todo-files/file", async (req, res) => {
+  try {
+    const ctx = await ownerFromStudent(req, res);
+    if (!ctx) return;
+    const parsed = parseTodoFileId(req.query.id) || {
+      todoId: String(req.query.todoId || "").trim(),
+      name: String(req.query.name || "").trim(),
+    };
+    const file = await readTodoFile(ctx.ownerId, parsed.todoId, parsed.name);
+    const inline = /html|text|json|javascript|svg/i.test(file.contentType);
+    res.setHeader("Content-Type", file.contentType);
+    res.setHeader(
+      "Content-Disposition",
+      `${inline ? "inline" : "attachment"}; filename="${String(file.name || "file").replace(/"/g, "")}"`
+    );
+    return res.send(file.buffer);
+  } catch (err) {
+    return fail(res, err, err.status || 404);
+  }
+});
+
+app.delete("/v1/me/todo-files/file", async (req, res) => {
+  try {
+    const ctx = await ownerFromStudent(req, res);
+    if (!ctx) return;
+    const parsed = parseTodoFileId(req.query.id) || {
+      todoId: String(req.body?.todoId || req.query.todoId || "").trim(),
+      name: String(req.body?.name || req.query.name || "").trim(),
+    };
+    return res.json(await deleteTodoFile(ctx.ownerId, parsed.todoId, parsed.name));
   } catch (err) {
     return fail(res, err, err.status || 404);
   }

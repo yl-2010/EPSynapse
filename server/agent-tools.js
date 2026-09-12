@@ -18,17 +18,23 @@ import {
   createTodo,
   deleteClassFile,
   deleteTodo,
+  deleteTodoFile,
   hideCanvasTodo,
   isLocalTodoId,
+  listAllTodoFiles,
   listClassFiles,
+  listTodoFiles,
   listTodos,
   loadWorkspaceMeta,
   parseClassFileId,
+  parseTodoFileId,
   patchTodo,
   readClassFile,
+  readTodoFile,
   renameClass,
   setCanvasTodoDone,
   writeClassFile,
+  writeTodoFile,
 } from "./workspace.js";
 import {
   downloadFile,
@@ -316,6 +322,69 @@ export const AGENT_TOOLS = [
   {
     type: "function",
     function: {
+      name: "list_todo_files",
+      description: "List files saved on a todo page. Omit todoId to list every todo file.",
+      parameters: {
+        type: "object",
+        properties: { todoId: { type: "string" } },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "write_todo_file",
+      description:
+        "Create or replace a file on a todo page. Use for notes, study sheets, or a standalone .html page.",
+      parameters: {
+        type: "object",
+        properties: {
+          todoId: { type: "string" },
+          name: { type: "string", description: "File name, e.g. outline.html" },
+          content: { type: "string", description: "Full file text" },
+          contentType: { type: "string" },
+        },
+        required: ["todoId", "name", "content"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "read_todo_file",
+      description: "Read a todo file's text.",
+      parameters: {
+        type: "object",
+        properties: {
+          todoId: { type: "string" },
+          name: { type: "string" },
+          id: { type: "string", description: "todo:id:name from list_todo_files" },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "delete_todo_file",
+      description: "Delete a file from a todo page.",
+      parameters: {
+        type: "object",
+        properties: {
+          todoId: { type: "string" },
+          name: { type: "string" },
+          id: { type: "string" },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "list_onedrive_files",
       description: "List school OneDrive files (Graph or this Mac's Finder folder).",
       parameters: {
@@ -465,9 +534,10 @@ export const AGENT_TOOLS = [
       parameters: {
         type: "object",
         properties: {
-          view: { type: "string", description: "home | class | note" },
+          view: { type: "string", description: "home | class | note | todo" },
           classId: { type: "string" },
           noteId: { type: "string" },
+          todoId: { type: "string" },
         },
         required: ["view"],
         additionalProperties: false,
@@ -499,6 +569,17 @@ function fileTarget(input) {
   }
   return {
     classId: String(input?.classId || "").trim(),
+    name: String(input?.name || "").trim(),
+  };
+}
+
+function todoFileTarget(input) {
+  if (input?.id) {
+    const parsed = parseTodoFileId(input.id);
+    if (parsed) return parsed;
+  }
+  return {
+    todoId: String(input?.todoId || "").trim(),
     name: String(input?.name || "").trim(),
   };
 }
@@ -669,6 +750,37 @@ export async function executeAgentTool(call, { ownerId, student, req } = {}) {
         const classId = klass?.id || target.classId;
         return ok(await deleteClassFile(ownerId, classId, target.name), { kinds: ["files"] });
       }
+      case "list_todo_files": {
+        const todoId = String(input.todoId || "").trim();
+        const files = todoId
+          ? await listTodoFiles(ownerId, todoId, { includeText: false })
+          : await listAllTodoFiles(ownerId, { includeText: false });
+        return ok({ todoId, files });
+      }
+      case "write_todo_file": {
+        const todoId = String(input.todoId || "").trim();
+        const file = await writeTodoFile(ownerId, todoId, {
+          name: input.name,
+          content: input.content,
+          contentType: input.contentType,
+        });
+        return ok({ file }, { kinds: ["files"], navigate: { view: "todo", todoId: file.todoId || todoId } });
+      }
+      case "read_todo_file": {
+        const target = todoFileTarget(input);
+        const file = await readTodoFile(ownerId, target.todoId, target.name);
+        const text = isProbablyText(file.contentType, file.name)
+          ? file.buffer.toString("utf8").slice(0, MAX_RESULT)
+          : `[binary ${file.buffer.length} bytes]`;
+        return ok({ name: file.name, todoId: file.todoId, contentType: file.contentType, content: text });
+      }
+      case "delete_todo_file": {
+        const target = todoFileTarget(input);
+        return ok(await deleteTodoFile(ownerId, target.todoId, target.name), {
+          kinds: ["files"],
+          navigate: { view: "todo", todoId: target.todoId },
+        });
+      }
       case "list_onedrive_files": {
         const q = String(input.q || "").trim();
         const token = await graphAccess(student);
@@ -777,10 +889,19 @@ export async function executeAgentTool(call, { ownerId, student, req } = {}) {
       }
       case "open_page": {
         const view = String(input.view || "home").trim().toLowerCase();
-        if (!["home", "class", "note"].includes(view)) return fail("view must be home, class, or note.");
+        if (!["home", "class", "note", "todo"].includes(view)) {
+          return fail("view must be home, class, note, or todo.");
+        }
         return ok(
           { queued: view },
-          { navigate: { view, classId: input.classId || "", noteId: input.noteId || "" } }
+          {
+            navigate: {
+              view,
+              classId: input.classId || "",
+              noteId: input.noteId || "",
+              todoId: input.todoId || "",
+            },
+          }
         );
       }
       default:
@@ -814,6 +935,10 @@ export function normalizeNavigate(raw) {
     const noteId = String(raw.noteId || "").trim();
     return noteId ? { view: "note", noteId } : { view: "home" };
   }
+  if (view === "todo") {
+    const todoId = String(raw.todoId || "").trim();
+    return todoId ? { view: "todo", todoId } : { view: "home" };
+  }
   return null;
 }
 
@@ -821,5 +946,6 @@ export function navigateHref(nav) {
   if (!nav) return "/";
   if (nav.view === "class" && nav.classId) return `/class/${encodeURIComponent(nav.classId)}`;
   if (nav.view === "note" && nav.noteId) return `/note/${encodeURIComponent(nav.noteId)}`;
+  if (nav.view === "todo" && nav.todoId) return `/todo/${encodeURIComponent(nav.todoId)}`;
   return "/";
 }
