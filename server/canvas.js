@@ -24,6 +24,14 @@ export function normalizeHost(raw) {
   return `${url.protocol}//${url.host}`;
 }
 
+function absCanvasUrl(host, raw) {
+  const href = String(raw || "").trim();
+  if (!href) return "";
+  if (/^https?:\/\//i.test(href)) return href;
+  const base = normalizeHost(host || DEFAULT_HOST);
+  return href.startsWith("/") ? `${base}${href}` : `${base}/${href}`;
+}
+
 export function inferTag(assignment) {
   const name = String(assignment?.name || assignment?.title || "");
   const prefix = name.match(/^\s*(CW|HW|QA|MA)\s*[:\-\u2013]\s*/i);
@@ -400,7 +408,7 @@ export async function listCourses(host, token) {
   return attachEnrollmentGrades(host, token, mapped);
 }
 
-function workFromSubmission(row) {
+function workFromSubmission(host, row) {
   const asg = row?.assignment || {};
   const title = String(asg.name || asg.title || "").trim();
   if (!title && !row?.assignment_id && !row?.id) return null;
@@ -418,7 +426,7 @@ function workFromSubmission(row) {
     grade: String(row?.grade || "").trim(),
     pointsPossible,
     due: String(asg.due_at || "").trim(),
-    canvasLink: String(asg.html_url || row.preview_url || "").trim(),
+    canvasLink: absCanvasUrl(host, asg.html_url || row.preview_url),
     excused,
     missing,
     late: Boolean(row?.late),
@@ -437,7 +445,7 @@ async function listCourseWork(host, token, courseId) {
     1
   );
   if (!Array.isArray(rows)) return [];
-  return rows.map(workFromSubmission).filter(Boolean).slice(0, 40);
+  return rows.map((row) => workFromSubmission(host, row)).filter(Boolean).slice(0, 40);
 }
 
 export async function listGrades(host, token, { work = false } = {}) {
@@ -452,7 +460,7 @@ export async function listGrades(host, token, { work = false } = {}) {
   return [...head, ...courses.slice(12).map((c) => ({ ...c, work: [] }))];
 }
 
-function assignmentFromTodo(item, coursesById) {
+function assignmentFromTodo(host, item, coursesById) {
   const asg = item?.assignment || item?.plannable || item;
   if (!asg || (!asg.id && !item.plannable_id)) return null;
   const courseId = String(
@@ -474,7 +482,7 @@ function assignmentFromTodo(item, coursesById) {
   return {
     id: canvasId,
     canvasId,
-    canvasLink: String(asg.html_url || item.html_url || "").trim(),
+    canvasLink: absCanvasUrl(host, asg.html_url || item.html_url),
     title,
     courseName: course?.name || String(item.context_name || "").trim(),
     courseId,
@@ -486,7 +494,7 @@ function assignmentFromTodo(item, coursesById) {
   };
 }
 
-function assignmentFromPlanner(item, coursesById) {
+function assignmentFromPlanner(host, item, coursesById) {
   const p = item?.plannable || {};
   const type = String(item?.plannable_type || "").toLowerCase();
   if (type && !/assignment|quiz|discussion|planner_note/.test(type)) return null;
@@ -498,7 +506,7 @@ function assignmentFromPlanner(item, coursesById) {
   return {
     id: canvasId,
     canvasId,
-    canvasLink: String(item.html_url || p.html_url || "").trim(),
+    canvasLink: absCanvasUrl(host, item.html_url || p.html_url),
     title,
     courseName: course?.name || String(item.context_name || "").trim(),
     courseId,
@@ -539,7 +547,7 @@ export async function listAssignments(host, token) {
 
   try {
     const todo = await canvasFetch(host, token, "/users/self/todo?per_page=50");
-    if (Array.isArray(todo)) todo.forEach((item) => add(assignmentFromTodo(item, coursesById)));
+    if (Array.isArray(todo)) todo.forEach((item) => add(assignmentFromTodo(host, item, coursesById)));
   } catch {
     // planner is the fallback
   }
@@ -553,7 +561,7 @@ export async function listAssignments(host, token) {
       `/planner/items?start_date=${start}&end_date=${end}&per_page=50`
     );
     if (Array.isArray(planner)) {
-      planner.forEach((item) => add(assignmentFromPlanner(item, coursesById)));
+      planner.forEach((item) => add(assignmentFromPlanner(host, item, coursesById)));
     }
   } catch {
     // todo-only is fine

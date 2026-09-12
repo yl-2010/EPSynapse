@@ -1254,9 +1254,17 @@
     </li>`;
   }
 
+  function canvasHref(link) {
+    const href = String(link || "").trim();
+    if (!href || href === "#") return "#";
+    if (/^https?:\/\//i.test(href)) return href;
+    const host = String(me?.canvasHost || "https://eastsideprep.instructure.com").replace(/\/$/, "");
+    return href.startsWith("/") ? `${host}${href}` : `${host}/${href}`;
+  }
+
   function workRow(w, tone) {
     const tag = w.tag || "HW";
-    const href = w.canvasLink || "#";
+    const href = canvasHref(w.canvasLink);
     const late = w.late ? " is-late" : "";
     return `<li class="edu-row${late} ${cardClass(tone || workTone(w))}">
       <a class="edu-row-link" href="${escapeHtml(href)}" target="_blank" rel="noopener">
@@ -1283,7 +1291,7 @@
     const tag = t.tag || "HW";
     const due = t.due ? `<span class="edu-meta">${escapeHtml(formatDue(t.due))}</span>` : "";
     const klass = t.courseName ? `<span class="edu-meta">${escapeHtml(t.courseName)}</span>` : "";
-    const href = t.canvasLink || "#";
+    const href = canvasHref(t.canvasLink);
     return `<li class="edu-row edu-todo${t.done ? " is-done" : ""} ${cardClass(workTone(t))}" data-id="${escapeHtml(t.id || t.canvasId || "")}" data-tag="${escapeHtml(tag)}">
       <button type="button" class="edu-check${t.done ? " is-checked" : ""}" data-liquid-glass="circle" data-filter-id="lg-check-${escapeHtml(t.id)}" data-todo-id="${escapeHtml(t.id || t.canvasId || "")}" aria-label="${t.done ? "Completed" : "Mark complete"}"${t.done ? " disabled" : ""}><span class="edu-check-dot"></span></button>
       <a class="edu-row-link" href="${escapeHtml(href)}" target="_blank" rel="noopener">

@@ -27,6 +27,6 @@ Logs: `/tmp/jype-server.log`
 
 Do this after anyone lands a change under `server/`. Until this restart, `api.epsynapse.com` is still the old code.
 
-Waiting on this machine: TODO check into Completed. Pull, restart Express, then `npm run deploy:web`. Notes: [`TODO_COMPLETE.md`](TODO_COMPLETE.md).
+TODO checks into Completed are live. Notes: [`TODO_COMPLETE.md`](TODO_COMPLETE.md).
 
 Full startup notes: [`STARTUP.md`](STARTUP.md).
