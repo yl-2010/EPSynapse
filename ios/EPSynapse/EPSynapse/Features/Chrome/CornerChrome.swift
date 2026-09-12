@@ -103,23 +103,15 @@ struct CornerChrome: View {
             EPSHaptics.medium()
             theme.cycle()
         } label: {
-            Circle()
-                .fill(
-                    RadialGradient(
-                        colors: [
-                            EPSTheme.accent,
-                            EPSTheme.accent.opacity(0.75),
-                            Color(red: 11 / 255, green: 31 / 255, blue: 58 / 255),
-                        ],
-                        center: .topLeading,
-                        startRadius: 2,
-                        endRadius: orbSide * 0.74
-                    )
-                )
-                .overlay {
-                    Circle().strokeBorder(Color.white.opacity(0.28), lineWidth: 0.6)
-                }
-                .frame(width: orbSide, height: orbSide)
+            ZStack {
+                Image(systemName: "circle.fill")
+                    .foregroundStyle(Color(red: 242 / 255, green: 242 / 255, blue: 247 / 255))
+                Image(systemName: "circle.lefthalf.filled")
+                    .foregroundStyle(Color(red: 28 / 255, green: 28 / 255, blue: 30 / 255))
+            }
+            .font(.system(size: orbSide * 0.38, weight: .semibold))
+            .frame(width: orbSide, height: orbSide)
+            .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .epsSizedGlassCircle(side: orbSide)
