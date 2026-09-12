@@ -4,9 +4,8 @@
   },
   "cleanUrls": true,
   "rewrites": [
-    { "source": "/class/:id", "destination": "/index.html" },
-    { "source": "/note/:id", "destination": "/index.html" },
-    { "source": "/research", "destination": "/research.html" }
+    { "source": "/class/:id", "destination": "/index" },
+    { "source": "/note/:id", "destination": "/index" }
   ],
   "redirects": [
     {
