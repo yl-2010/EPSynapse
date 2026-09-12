@@ -2,6 +2,10 @@
   const LS_SID = "epsynapse.sid";
   const LS_KEY = "epsynapse.agent.key";
   const LS_PROV = "epsynapse.agent.provider";
+  const LS_FILES = "epsynapse.ms.files";
+  const LS_LINKS = "epsynapse.ms.links";
+  const LS_MAIL = "epsynapse.ms.mail";
+  const LS_EVENTS = "epsynapse.ms.events";
 
   const loading = document.getElementById("stage-loading");
   const stage = document.getElementById("stage-full");
@@ -29,12 +33,21 @@
     courses: [],
     assignments: [],
     files: [],
+    filesError: "",
     messages: [],
+    mailError: "",
+    events: [],
     classes: [],
     meetings: [],
     notes: [],
     grades: [],
+    classFiles: [],
+    classFilesFor: "",
+    classFilesError: "",
   };
+  let lastOdError = "";
+  let lastOlError = "";
+  let classFilesInFlight = "";
   let openMail = null;
   let mailBusy = false;
   let googleClientId = "";
@@ -43,11 +56,101 @@
   let schoolTimer = 0;
   const DEFAULT_SCHOOL = "Eastside Prep";
   const NEED_GOOGLE = "Sign in with Google first.";
+  const OD_WEB = "https://eastsideprep-my.sharepoint.com/";
+  const OL_WEB = "https://outlook.office.com/mail/";
 
-  function microsoftDeviceUrl(code, uri) {
-    const c = String(code || "").trim();
-    if (c) return `https://login.microsoft.com/device?otc=${encodeURIComponent(c)}`;
-    return uri || "https://login.microsoft.com/device";
+  function readJson(key, fallback) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return fallback;
+      const val = JSON.parse(raw);
+      return val == null ? fallback : val;
+    } catch {
+      return fallback;
+    }
+  }
+
+  function writeJson(key, val) {
+    localStorage.setItem(key, JSON.stringify(val));
+  }
+
+  function localFiles() {
+    return []
+      .concat(readJson(LS_LINKS, []), readJson(LS_FILES, []))
+      .filter((f) => f && (f.name || f.webUrl));
+  }
+
+  function localMail() {
+    return readJson(LS_MAIL, []).filter((m) => m && m.id);
+  }
+
+  function localEvents() {
+    return readJson(LS_EVENTS, []).filter((e) => e && (e.subject || e.start));
+  }
+
+  function mergeById(primary, extra) {
+    const out = [];
+    const seen = new Set();
+    for (const row of [].concat(primary || [], extra || [])) {
+      const key = String(row?.id || row?.webUrl || row?.name || "").trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(row);
+    }
+    return out;
+  }
+
+  function uselessMsError(err) {
+    const e = String(err || "").toLowerCase();
+    if (!e) return true;
+    return (
+      e.includes("connect outlook") ||
+      e.includes("connect onedrive") ||
+      e.includes("sign in with google") ||
+      e.includes("cannot get") ||
+      e.includes("not connected")
+    );
+  }
+
+  function parseIcsDate(raw) {
+    const s = String(raw || "").trim();
+    const m = s.match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z)?)?/);
+    if (!m) return "";
+    const iso = `${m[1]}-${m[2]}-${m[3]}T${m[4] || "00"}:${m[5] || "00"}:${m[6] || "00"}${m[7] || ""}`;
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? "" : d.toISOString();
+  }
+
+  function icsField(block, name) {
+    for (const line of String(block || "").split(/\n/)) {
+      if (line.startsWith(`${name}:`) || line.startsWith(`${name};`)) {
+        const i = line.indexOf(":");
+        return i >= 0 ? line.slice(i + 1).trim() : "";
+      }
+    }
+    return "";
+  }
+
+  function parseIcs(text) {
+    const unfolded = String(text || "")
+      .replace(/\r\n[ \t]/g, "")
+      .replace(/\r\n/g, "\n");
+    return unfolded
+      .split("BEGIN:VEVENT")
+      .slice(1)
+      .map((chunk, i) => {
+        const block = chunk.split("END:VEVENT")[0] || "";
+        const start = parseIcsDate(icsField(block, "DTSTART"));
+        return {
+          id: icsField(block, "UID") || `ics:${i}:${start}`,
+          subject: icsField(block, "SUMMARY") || "Event",
+          start,
+          end: parseIcsDate(icsField(block, "DTEND")),
+          location: icsField(block, "LOCATION"),
+          webLink: "",
+        };
+      })
+      .filter((e) => e.start || e.subject);
   }
 
   function escapeHtml(s) {
@@ -299,8 +402,7 @@
       paintAccount();
       paintOnedrive();
       paintOutlook();
-      if (me?.onedrivePending && !me.onedriveConnected) watchOnedrive();
-      if (me?.outlookPending && !me.outlookConnected) watchOutlook();
+      /* Graph device-code is blocked by school admin consent. */
       await migrateLocalKey();
       await loadDashboard();
     } catch (err) {
@@ -530,13 +632,13 @@
     if (canvas) canvas.textContent = me && me.canvasConnected ? "Connected" : "URL and token";
     const od = document.getElementById("onedrive-summary");
     if (od) {
-      od.textContent =
-        me && me.onedriveConnected ? me.onedriveEmail || "Connected" : "School files";
+      const n = localFiles().length;
+      od.textContent = n ? `${n} on Home` : "Open or upload";
     }
     const ol = document.getElementById("outlook-summary");
     if (ol) {
-      ol.textContent =
-        me && me.outlookConnected ? me.outlookEmail || "Connected" : "School mail";
+      const n = localMail().length + localEvents().length;
+      ol.textContent = n ? `${n} on Home` : "Open and send";
     }
     document.querySelectorAll(".set-nav[data-pane]").forEach((btn) => {
       btn.classList.toggle("is-on", btn.getAttribute("data-pane") === activePane());
@@ -1027,9 +1129,34 @@
     </li>`;
   }
 
+  function fileHref(f) {
+    if (f.dataUrl) return f.dataUrl;
+    if (f.webUrl) return f.webUrl;
+    if (String(f.id || "").startsWith("local:")) return "#";
+    return `${apiBase}/v1/me/onedrive/file?id=${encodeURIComponent(f.id || "")}`;
+  }
+
   function fileTile(f, i) {
-    const href = f.webUrl || `${apiBase}/v1/me/onedrive/file?id=${encodeURIComponent(f.id)}`;
-    return `<a class="edu-file-tile" href="${escapeHtml(href)}" target="_blank" rel="noopener" data-filter-id="lg-file-${i}" title="${escapeHtml(f.name)}"><span class="edu-file-name">${escapeHtml(f.name)}</span></a>`;
+    const href = fileHref(f);
+    const vault = String(f.id || "").startsWith("vault:");
+    const vaultAttr = vault ? ` data-vault-id="${escapeHtml(f.id)}"` : "";
+    return `<a class="edu-file-tile" href="${escapeHtml(href)}" target="_blank" rel="noopener" data-filter-id="lg-file-${i}" title="${escapeHtml(f.name)}"${vaultAttr}><span class="edu-file-name">${escapeHtml(f.name)}</span></a>`;
+  }
+
+  function filesToolsHtml() {
+    return `<div class="edu-files-tools">
+      <button type="button" class="edu-sheet-btn" data-file-upload data-liquid-glass="rounded" data-filter-id="lg-edu-file-up">Upload</button>
+      <a class="set-link" href="${OD_WEB}" target="_blank" rel="noopener">Open OneDrive</a>
+      <p class="edu-empty" id="onedrive-upload-status"></p>
+    </div>`;
+  }
+
+  function filesPanelBody(tiles, emptyText, errorText) {
+    const grid = tiles
+      ? `<div class="edu-files">${tiles}</div>`
+      : `<p class="edu-empty">${escapeHtml(emptyText)}</p>`;
+    const err = errorText ? `<p class="edu-empty">${escapeHtml(errorText)}</p>` : "";
+    return `${grid}${err}${filesToolsHtml()}`;
   }
 
   function formatMailWhen(iso) {
@@ -1042,36 +1169,126 @@
   function mailRow(m) {
     const unread = m.unread ? " edu-mail-unread" : "";
     const who = m.fromAddress || m.from || "";
+    const open = m.webLink
+      ? `<a class="set-link edu-mail-open-web" href="${escapeHtml(m.webLink)}" target="_blank" rel="noopener">Open</a>`
+      : "";
     return `<li class="edu-row${unread}">
       <button type="button" class="edu-row-link" data-mail-id="${escapeHtml(m.id)}" style="all:unset;cursor:pointer;display:block;width:100%">
         <span class="edu-name">${escapeHtml(m.subject || "(no subject)")}</span>
         <span class="edu-meta">${escapeHtml(who)} · ${escapeHtml(formatMailWhen(m.received))}</span>
       </button>
+      ${open}
     </li>`;
   }
 
-  function mailPanelHtml(messages) {
-    if (!me?.outlookConnected) {
-      return `<p class="edu-empty">Connect Outlook in settings</p>`;
-    }
-    const rows = (messages || []).map(mailRow).join("");
-    const list = rows ? `<ul class="edu-list">${rows}</ul>` : `<p class="edu-empty">Inbox is empty</p>`;
-    const open = openMail
-      ? `<div class="edu-mail-open">
-          <p class="edu-name">${escapeHtml(openMail.subject || "")}</p>
-          <p class="edu-meta">${escapeHtml(openMail.from || "")}</p>
-          <pre class="edu-mail-body">${escapeHtml(openMail.body || openMail.preview || "")}</pre>
-        </div>`
-      : "";
+  function mailComposeHtml(mode) {
     const sendLabel = mailBusy ? "Sending…" : "Send";
-    return `${list}${open}
-      <form class="edu-compose" id="outlook-compose">
+    return `<form class="edu-compose" id="outlook-compose" data-mail-mode="${escapeHtml(mode)}">
         <input id="outlook-to" name="to" type="text" placeholder="To (comma-separated)" required />
         <input id="outlook-subject" name="subject" placeholder="Subject" required maxlength="200" />
         <textarea id="outlook-body" name="body" placeholder="Message" required maxlength="8000"></textarea>
         <button type="submit" class="edu-sheet-btn edu-sheet-btn--gold" data-liquid-glass="rounded" data-filter-id="lg-edu-ol-send"${mailBusy ? " disabled" : ""}>${sendLabel}</button>
         <p class="edu-empty" id="outlook-send-status"></p>
       </form>`;
+  }
+
+  function eventsThisWeek(events) {
+    const now = new Date();
+    const start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+    const day = start.getDay();
+    const mondayOffset = day === 0 ? -6 : 1 - day;
+    start.setDate(start.getDate() + mondayOffset);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 7);
+    return (events || [])
+      .filter((e) => {
+        const t = new Date(e.start);
+        return !Number.isNaN(t.getTime()) && t >= start && t < end;
+      })
+      .slice(0, 3);
+  }
+
+  function formatEventLine(e) {
+    const d = new Date(e.start);
+    const when = Number.isNaN(d.getTime())
+      ? ""
+      : d.toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" });
+    const subject = e.subject || "Event";
+    return when ? `${when} · ${subject}` : subject;
+  }
+
+  function mailWeekHtml(events) {
+    const lines = eventsThisWeek(events)
+      .map((e) => `<p>${escapeHtml(formatEventLine(e))}</p>`)
+      .join("");
+    return lines ? `<div class="edu-mail-week">${lines}</div>` : "";
+  }
+
+  const MAIL_TODO_RE = /due|homework|assignment|quiz|test|project|exam/i;
+
+  function mailTodoItems(messages, assignments) {
+    const titles = new Set(
+      (assignments || []).map((a) => String(a.title || "").trim().toLowerCase()).filter(Boolean)
+    );
+    const hits = [];
+    for (const m of messages || []) {
+      const sub = String(m.subject || "").trim();
+      if (!MAIL_TODO_RE.test(sub)) continue;
+      if (titles.has(sub.toLowerCase())) continue;
+      hits.push(m);
+      if (hits.length >= 5) break;
+    }
+    return hits;
+  }
+
+  function mailTodoRow(m) {
+    return `<li class="edu-row edu-todo">
+      <span class="edu-check" aria-hidden="true"><span class="edu-check-dot"></span></span>
+      <button type="button" class="edu-row-link" data-mail-id="${escapeHtml(m.id)}" style="all:unset;cursor:pointer;display:block;width:100%">
+        <span class="edu-name">${escapeHtml(m.subject || "(no subject)")}</span>
+        <span class="edu-meta">Mail</span>
+      </button>
+    </li>`;
+  }
+
+  function outlookWebLink() {
+    return `<a class="set-link" href="${OL_WEB}" target="_blank" rel="noopener">Open school Outlook</a>`;
+  }
+
+  function mailPanelHtml(messages) {
+    const week = mailWeekHtml(lastHome.events);
+    const err = lastHome.mailError ? `<p class="edu-empty">${escapeHtml(lastHome.mailError)}</p>` : "";
+    const rows = (messages || []).map(mailRow).join("");
+    const list = rows
+      ? `<ul class="edu-list">${rows}</ul>`
+      : `<p class="edu-empty">Open Outlook, or save a message in settings</p>`;
+    const open = openMail
+      ? `<div class="edu-mail-open">
+          <p class="edu-name">${escapeHtml(openMail.subject || "")}</p>
+          <p class="edu-meta">${escapeHtml(openMail.from || "")}</p>
+          ${
+            openMail.webLink
+              ? `<a class="set-link" href="${escapeHtml(openMail.webLink)}" target="_blank" rel="noopener">Open</a>`
+              : ""
+          }
+          <pre class="edu-mail-body">${escapeHtml(openMail.body || openMail.preview || "")}</pre>
+        </div>`
+      : "";
+    return `${week}${err}${list}${open}${outlookWebLink()}${mailComposeHtml("mailto")}`;
+  }
+
+  function classMailHtml(klass) {
+    const hint = String(klass?.name || "").toLowerCase();
+    const messages = (lastHome.messages || []).filter((m) => {
+      if (!hint) return false;
+      const blob = `${m.subject || ""} ${m.from || ""} ${m.fromAddress || ""} ${m.preview || ""}`.toLowerCase();
+      return blob.includes(hint);
+    });
+    if (!messages.length) {
+      return `<p class="edu-empty">No saved mail for this class</p>${outlookWebLink()}`;
+    }
+    return `<ul class="edu-list">${messages.slice(0, 8).map(mailRow).join("")}</ul>`;
   }
 
   function homeClasses() {
@@ -1104,19 +1321,25 @@
       </form>`;
   }
 
-  function renderHome({ courses, assignments, files, messages, classes, meetings, notes, grades } = lastHome) {
+  function renderHome(next = lastHome) {
     lastHome = {
-      courses: courses || lastHome.courses || [],
-      assignments: assignments || lastHome.assignments || [],
-      files: files || lastHome.files || [],
-      messages: messages || lastHome.messages || [],
-      classes: classes || lastHome.classes || [],
-      meetings: meetings || lastHome.meetings || [],
-      notes: notes || lastHome.notes || [],
-      grades: grades || lastHome.grades || [],
+      ...lastHome,
+      courses: next.courses ?? lastHome.courses ?? [],
+      assignments: next.assignments ?? lastHome.assignments ?? [],
+      files: next.files ?? lastHome.files ?? [],
+      filesError: next.filesError != null ? next.filesError : lastHome.filesError || "",
+      messages: next.messages ?? lastHome.messages ?? [],
+      mailError: next.mailError != null ? next.mailError : lastHome.mailError || "",
+      events: next.events ?? lastHome.events ?? [],
+      classes: next.classes ?? lastHome.classes ?? [],
+      meetings: next.meetings ?? lastHome.meetings ?? [],
+      notes: next.notes ?? lastHome.notes ?? [],
+      grades: next.grades ?? lastHome.grades ?? [],
     };
     const open = (lastHome.assignments || []).filter((t) => !t.done);
     const done = (lastHome.assignments || []).filter((t) => t.done);
+    const mailTodos = mailTodoItems(lastHome.messages, lastHome.assignments);
+    const todoRows = [...open.map(todoRow), ...mailTodos.map(mailTodoRow)].join("");
     const fileTiles = (lastHome.files || []).map(fileTile).join("");
     const classItems = homeClasses();
 
@@ -1126,9 +1349,7 @@
     const classEmpty = classItems.length
       ? "No classes"
       : "Upload a term schedule PDF in settings";
-    const fileEmpty = me?.onedriveConnected
-      ? "No files in /EPSynapse yet"
-      : "Connect OneDrive in settings";
+    const fileEmpty = "Upload a file or add a OneDrive link in settings";
     const gradeItems = homeGradeItems();
     const gradeEmpty = me?.canvasConnected
       ? "No course grades yet"
@@ -1139,14 +1360,14 @@
       <p class="edu-home-mark">EPSynapse</p>
       <div class="edu-grid edu-grid--home">
         <div class="edu-col edu-col--main">
-          ${panelHtml("TODO", listOrEmpty(open.map(todoRow).join(""), todoEmpty), "lg-edu-todo", "", todoExpanded ? filterBarHtml("todo") : "", collapseTitle("TODO", todoExpanded))}
+          ${panelHtml("TODO", listOrEmpty(todoRows, todoEmpty), "lg-edu-todo", "", todoExpanded ? filterBarHtml("todo") : "", collapseTitle("TODO", todoExpanded))}
           ${panelHtml("Completed", listOrEmpty(done.map(todoRow).join(""), "Nothing completed yet"), "lg-edu-completed", "edu-panel--completed")}
           ${panelHtml("Notes", notesPanelHtml(), "lg-edu-notes", "edu-panel--notes")}
         </div>
         <div class="edu-col edu-col--side">
           ${panelHtml("Classes", listOrEmpty(classItems.map(classRow).join(""), classEmpty), "lg-edu-classes")}
           ${panelHtml("Grades", listOrEmpty(gradeItems.map(gradeRow).join(""), gradeEmpty), "lg-edu-grades")}
-          ${panelHtml("Files", fileTiles ? `<div class="edu-files">${fileTiles}</div>` : `<p class="edu-empty">${escapeHtml(fileEmpty)}</p>`, "lg-edu-files")}
+          ${panelHtml("Files", filesPanelBody(fileTiles, fileEmpty, lastHome.filesError), "lg-edu-files")}
           ${panelHtml("Mail", mailPanelHtml(lastHome.messages), "lg-edu-mail")}
         </div>
       </div>
@@ -1199,11 +1420,30 @@
     const open = work.filter((t) => !t.done);
     const done = work.filter((t) => t.done);
     const nameHint = String(klass.name || "").toLowerCase();
-    const files = (lastHome.files || []).filter((f) => {
+    const nameFiltered = (lastHome.files || []).filter((f) => {
       if (!nameHint) return false;
       return String(f.name || "").toLowerCase().includes(nameHint);
     });
-    const fileTiles = (files.length ? files : lastHome.files || []).map(fileTile).join("");
+    let qFiles = lastHome.classFilesFor === String(klass.name || "") ? lastHome.classFiles || [] : [];
+    if (
+      nameHint &&
+      qFiles.length &&
+      (lastHome.files || []).length &&
+      qFiles.length === lastHome.files.length
+    ) {
+      qFiles = qFiles.filter((f) => String(f.name || "").toLowerCase().includes(nameHint));
+    }
+    const seen = new Set();
+    const files = [];
+    for (const f of [...qFiles, ...nameFiltered]) {
+      const key = String(f.id || f.name || "");
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      files.push(f);
+    }
+    const fileTiles = files.map(fileTile).join("");
+    const fileError = lastHome.classFilesError || lastHome.filesError || "";
+    refreshClassFiles(klass);
     const notes = (lastHome.notes || []).filter((n) => {
       if (n.classId && n.classId === klass.id) return true;
       if (klass.subject && n.subject === klass.subject) return true;
@@ -1246,7 +1486,8 @@
           ${panelHtml("Completed", listOrEmpty(done.map(todoRow).join(""), "Nothing completed yet"), "lg-edu-completed", "edu-panel--completed")}
         </div>
         <div class="edu-col edu-col--side">
-          ${panelHtml("Files", fileTiles ? `<div class="edu-files">${fileTiles}</div>` : `<p class="edu-empty">No files for this class</p>`, "lg-edu-files")}
+          ${panelHtml("Files", filesPanelBody(fileTiles, "No files for this class", fileError), "lg-edu-files")}
+          ${panelHtml("Mail", classMailHtml(klass), "lg-edu-mail")}
           ${panelHtml("Notes", listOrEmpty(noteRows, "No notes for this class yet"), "lg-edu-class-notes")}
         </div>
       </div>
@@ -1467,12 +1708,15 @@
     const assignments = me?.canvasConnected
       ? api("/v1/me/canvas/assignments").then((r) => r.assignments || []).catch(() => [])
       : Promise.resolve([]);
-    const files = me?.onedriveConnected
-      ? api("/v1/me/onedrive/files", { timeoutMs: 20000 }).then((r) => r.files || []).catch(() => [])
-      : Promise.resolve([]);
-    const messages = me?.outlookConnected
-      ? api("/v1/me/outlook/messages?limit=12", { timeoutMs: 20000 }).then((r) => r.messages || []).catch(() => [])
-      : Promise.resolve([]);
+    const files = api("/v1/me/onedrive/files", { timeoutMs: 20000 })
+      .then((r) => ({ files: r.files || [], error: r.error || "" }))
+      .catch((err) => ({ files: [], error: err.message || "" }));
+    const messages = api("/v1/me/outlook/messages?limit=12", { timeoutMs: 20000 })
+      .then((r) => ({ messages: r.messages || [], error: r.error || "" }))
+      .catch((err) => ({ messages: [], error: err.message || "" }));
+    const events = api("/v1/me/outlook/events", { timeoutMs: 15000 })
+      .then((r) => r.events || [])
+      .catch(() => []);
     const schedule = api("/v1/me/schedule")
       .then((r) => r)
       .catch(() => ({ classes: [], meetings: [] }));
@@ -1498,126 +1742,86 @@
         htmlUrl: c.htmlUrl || g.htmlUrl,
       };
     });
+    const filesPayload = await files;
+    const mailPayload = await messages;
+    const remoteEvents = await events;
     lastHome = {
       courses: mergedCourses,
       assignments: await assignments,
-      files: await files,
-      messages: await messages,
+      files: mergeById(localFiles(), filesPayload.files || []),
+      filesError: uselessMsError(filesPayload.error) ? "" : filesPayload.error || "",
+      messages: mergeById(localMail(), mailPayload.messages || []),
+      mailError: uselessMsError(mailPayload.error) ? "" : mailPayload.error || "",
+      events: mergeById(localEvents(), remoteEvents),
       classes: sched.classes || [],
       meetings: sched.meetings || [],
       notes: await notes,
       grades: (gradeRows.length ? gradeRows : mergedCourses).map((c) => ({ ...c, work: undefined })),
+      classFiles: [],
+      classFilesFor: "",
+      classFilesError: "",
     };
     routeAndRender();
   }
 
-  function showOnedriveCode(code, uri) {
-    const codeEl = document.getElementById("onedrive-code");
-    const openEl = document.getElementById("onedrive-open");
-    if (!codeEl || !openEl) return;
-    if (code) {
-      codeEl.hidden = false;
-      codeEl.textContent = code;
-    } else {
-      codeEl.hidden = true;
-      codeEl.textContent = "";
+  async function refreshClassFiles(klass) {
+    const name = String(klass?.name || "").trim();
+    if (!name) return;
+    if (lastHome.classFilesFor === name || classFilesInFlight === name) return;
+    classFilesInFlight = name;
+    try {
+      const r = await api(`/v1/me/onedrive/files?q=${encodeURIComponent(name)}`, { timeoutMs: 20000 });
+      lastHome.classFiles = Array.isArray(r.files) ? r.files : [];
+      lastHome.classFilesError = r.error || "";
+      lastHome.classFilesFor = name;
+    } catch (err) {
+      lastHome.classFiles = [];
+      lastHome.classFilesError = err.message || "Could not load files.";
+      lastHome.classFilesFor = name;
+    } finally {
+      classFilesInFlight = "";
     }
-    if (uri) {
-      openEl.hidden = false;
-      openEl.href = uri;
-    } else {
-      openEl.hidden = true;
+    const route = currentRoute();
+    if (route.page === "class" && String(route.id) === String(klass.id)) {
+      renderClass(klass.id);
     }
   }
 
   function paintOnedrive() {
     if (!signedInViaGoogle()) {
       setStatus(odStatus, NEED_GOOGLE);
-      showOnedriveCode("", "");
       paintNavSummaries();
       return;
     }
-    if (!me) {
-      setStatus(odStatus, "OneDrive");
-      showOnedriveCode("", "");
-      paintNavSummaries();
-      return;
-    }
-    const odBtn = document.getElementById("onedrive-start");
-    if (odBtn) odBtn.hidden = Boolean(me.onedriveConnected);
-    if (me.onedriveConnected) {
-      setStatus(odStatus, me.onedriveEmail ? `OneDrive · ${me.onedriveEmail}` : "OneDrive connected");
-      showOnedriveCode("", "");
-      paintNavSummaries();
-      return;
-    }
-    const p = me.onedrivePending;
-    if (p && (p.user_code || p.verification_uri)) {
-      setStatus(odStatus, "Microsoft should open with this code. Allow access, then come back.");
-      showOnedriveCode(
-        p.user_code,
-        p.verification_uri_complete || microsoftDeviceUrl(p.user_code, p.verification_uri)
-      );
-      paintNavSummaries();
-      return;
-    }
-    setStatus(odStatus, "OneDrive");
-    showOnedriveCode("", "");
+    const n = localFiles().length;
+    setStatus(
+      odStatus,
+      lastOdError ||
+        (n
+          ? `${n} file${n === 1 ? "" : "s"} on Home. Open OneDrive or upload more.`
+          : "School IT blocks app sign-in. Open OneDrive, or upload files here.")
+    );
     paintNavSummaries();
-  }
-
-  function showOutlookCode(code, uri) {
-    const codeEl = document.getElementById("outlook-code");
-    const openEl = document.getElementById("outlook-open");
-    if (!codeEl || !openEl) return;
-    if (code) {
-      codeEl.hidden = false;
-      codeEl.textContent = code;
-    } else {
-      codeEl.hidden = true;
-      codeEl.textContent = "";
-    }
-    if (uri) {
-      openEl.hidden = false;
-      openEl.href = uri;
-    } else {
-      openEl.hidden = true;
-    }
   }
 
   function paintOutlook() {
     if (!signedInViaGoogle()) {
       setStatus(olStatus, NEED_GOOGLE);
-      showOutlookCode("", "");
       paintNavSummaries();
       return;
     }
-    if (!me) {
-      setStatus(olStatus, "Outlook");
-      showOutlookCode("", "");
-      paintNavSummaries();
-      return;
-    }
-    const olBtn = document.getElementById("outlook-start");
-    if (olBtn) olBtn.hidden = Boolean(me.outlookConnected);
-    if (me.outlookConnected) {
-      setStatus(olStatus, me.outlookEmail ? `Outlook · ${me.outlookEmail}` : "Outlook connected");
-      showOutlookCode("", "");
-      paintNavSummaries();
-      return;
-    }
-    const p = me.outlookPending;
-    if (p && (p.user_code || p.verification_uri)) {
-      setStatus(olStatus, "Microsoft should open with this code. Allow access, then come back.");
-      showOutlookCode(
-        p.user_code,
-        p.verification_uri_complete || microsoftDeviceUrl(p.user_code, p.verification_uri)
-      );
-      paintNavSummaries();
-      return;
-    }
-    setStatus(olStatus, "Outlook");
-    showOutlookCode("", "");
+    const mail = localMail().length;
+    const ev = localEvents().length;
+    const bits = [];
+    if (mail) bits.push(`${mail} saved`);
+    if (ev) bits.push(`${ev} calendar`);
+    setStatus(
+      olStatus,
+      lastOlError ||
+        (bits.length
+          ? `${bits.join(", ")} on Home. Open Outlook to read the rest.`
+          : "School IT blocks app sign-in. Open Outlook. Send uses your mail app.")
+    );
     paintNavSummaries();
   }
 
@@ -1723,8 +1927,6 @@
     paintCanvasToken();
     paintOnedrive();
     paintOutlook();
-    if (me?.onedrivePending && !me.onedriveConnected) watchOnedrive();
-    if (me?.outlookPending && !me.outlookConnected) watchOutlook();
     await initGoogle();
   }
 
@@ -1949,6 +2151,7 @@
     odPollInFlight = true;
     try {
       const st = await api("/v1/me/onedrive/status", { timeoutMs: 15000 });
+      lastOdError = st.error || "";
       if (st.connected) {
         stopOdPoll();
         me = Object.assign({}, me, {
@@ -1991,6 +2194,7 @@
     olPollInFlight = true;
     try {
       const st = await api("/v1/me/outlook/status", { timeoutMs: 15000 });
+      lastOlError = st.error || "";
       if (st.connected) {
         stopOlPoll();
         me = Object.assign({}, me, {
@@ -2040,87 +2244,174 @@
     olPollTimer = setInterval(tickOutlook, 4000);
   }
 
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState !== "visible") return;
-    if (me?.onedrivePending && !me.onedriveConnected) tickOnedrive();
-    if (me?.outlookPending && !me.outlookConnected) tickOutlook();
-  });
-
-  async function beginMicrosoftConnect(kind) {
-    const popup = window.open("https://login.microsoft.com/device", `eps-ms-${kind}`);
-    const started = await api(`/v1/me/${kind}/start`, {
-      method: "POST",
-      body: "{}",
-      timeoutMs: 20000,
-    });
-    if (!started.user_code) {
-      if (popup && !popup.closed) popup.close();
-      return started;
-    }
-    const openAt =
-      started.verification_uri_complete ||
-      microsoftDeviceUrl(started.user_code, started.verification_uri);
+  function linkNameFromUrl(url) {
     try {
-      await navigator.clipboard.writeText(started.user_code);
+      const u = new URL(url);
+      const last = decodeURIComponent(u.pathname.split("/").filter(Boolean).pop() || "");
+      return last || u.hostname;
     } catch {
-      /* clipboard is optional */
+      return "OneDrive link";
     }
-    if (popup && !popup.closed) popup.location.replace(openAt);
-    else window.open(openAt, `eps-ms-${kind}`);
-    return started;
   }
 
-  document.getElementById("onedrive-start").addEventListener("click", async () => {
+  function addLocalLink(url) {
+    const href = String(url || "").trim();
+    if (!/^https:\/\//i.test(href)) throw new Error("Paste a https link from OneDrive.");
+    const rec = {
+      id: `local:${Date.now()}`,
+      name: linkNameFromUrl(href),
+      webUrl: href,
+      source: "link",
+    };
+    writeJson(LS_LINKS, [rec, ...readJson(LS_LINKS, [])].slice(0, 40));
+    return rec;
+  }
+
+  async function saveLocalUpload(file) {
+    const rec = {
+      id: `local:${Date.now()}-${file.name}`,
+      name: file.name || "upload",
+      webUrl: "",
+      source: "upload",
+      dataUrl: "",
+    };
+    if (file.size <= 1_500_000) {
+      rec.dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("Could not read that file."));
+        reader.readAsDataURL(file);
+      });
+      rec.webUrl = rec.dataUrl;
+    }
+    writeJson(LS_FILES, [rec, ...readJson(LS_FILES, [])].slice(0, 40));
+    return rec;
+  }
+
+  document.getElementById("onedrive-upload-btn")?.addEventListener("click", () => {
+    document.getElementById("onedrive-upload")?.click();
+  });
+
+  document.getElementById("onedrive-link-add")?.addEventListener("click", () => {
+    const input = document.getElementById("onedrive-link");
     try {
-      if (!signedInViaGoogle()) {
-        setStatus(odStatus, NEED_GOOGLE);
-        return;
-      }
-      const started = await beginMicrosoftConnect("onedrive");
-      if (started.user_code) {
-        me = Object.assign({}, me, {
-          onedrivePending: {
-            user_code: started.user_code,
-            verification_uri: started.verification_uri,
-            verification_uri_complete: started.verification_uri_complete,
-            message: started.message,
-          },
-        });
-        paintOnedrive();
-        watchOnedrive();
-      } else {
-        setStatus(odStatus, started.message || "Microsoft would not start school sign-in.");
-        showOnedriveCode("", "");
-      }
+      addLocalLink(input && input.value);
+      if (input) input.value = "";
+      lastOdError = "";
+      paintOnedrive();
+      loadDashboard();
     } catch (err) {
-      setStatus(odStatus, err.message || "Could not start OneDrive.");
+      lastOdError = err.message || "Could not add that link.";
+      paintOnedrive();
     }
   });
 
-  document.getElementById("outlook-start").addEventListener("click", async () => {
+  document.getElementById("outlook-ics-btn")?.addEventListener("click", () => {
+    document.getElementById("outlook-ics")?.click();
+  });
+
+  document.getElementById("outlook-ics")?.addEventListener("change", async () => {
+    const input = document.getElementById("outlook-ics");
+    const file = input && input.files && input.files[0];
+    if (!file) return;
     try {
-      if (!signedInViaGoogle()) {
-        setStatus(olStatus, NEED_GOOGLE);
-        return;
-      }
-      const started = await beginMicrosoftConnect("outlook");
-      if (started.user_code) {
-        me = Object.assign({}, me, {
-          outlookPending: {
-            user_code: started.user_code,
-            verification_uri: started.verification_uri,
-            verification_uri_complete: started.verification_uri_complete,
-            message: started.message,
-          },
-        });
-        paintOutlook();
-        watchOutlook();
-      } else {
-        setStatus(olStatus, started.message || "Microsoft would not start Outlook sign-in.");
-        showOutlookCode("", "");
-      }
+      const events = parseIcs(await file.text());
+      if (!events.length) throw new Error("No events in that calendar file.");
+      writeJson(LS_EVENTS, events.slice(0, 80));
+      lastOlError = "";
+      if (input) input.value = "";
+      paintOutlook();
+      await loadDashboard();
     } catch (err) {
-      setStatus(olStatus, err.message || "Could not start Outlook.");
+      lastOlError = err.message || "Could not read that calendar.";
+      paintOutlook();
+    }
+  });
+
+  document.getElementById("outlook-save-msg")?.addEventListener("click", () => {
+    const from = String(document.getElementById("outlook-save-from")?.value || "").trim();
+    const subject = String(document.getElementById("outlook-save-subject")?.value || "").trim();
+    const body = String(document.getElementById("outlook-save-body")?.value || "").trim();
+    if (!subject && !body) {
+      lastOlError = "Add a subject or message first.";
+      paintOutlook();
+      return;
+    }
+    const rec = {
+      id: `local:${Date.now()}`,
+      subject: subject || "(no subject)",
+      from,
+      fromAddress: from,
+      preview: body.slice(0, 400),
+      body,
+      received: new Date().toISOString(),
+      unread: true,
+      webLink: "",
+    };
+    writeJson(LS_MAIL, [rec, ...readJson(LS_MAIL, [])].slice(0, 40));
+    const fromEl = document.getElementById("outlook-save-from");
+    const subEl = document.getElementById("outlook-save-subject");
+    const bodyEl = document.getElementById("outlook-save-body");
+    if (fromEl) fromEl.value = "";
+    if (subEl) subEl.value = "";
+    if (bodyEl) bodyEl.value = "";
+    lastOlError = "";
+    paintOutlook();
+    loadDashboard();
+  });
+
+  async function readUploadPayload(file) {
+    const name = file.name || "upload";
+    const contentType = file.type || "application/octet-stream";
+    const textLike =
+      /^text\/|^application\/(json|xml|javascript|x-javascript)/i.test(contentType) ||
+      /\.(txt|md|csv|json|html|css|js|xml)$/i.test(name);
+    if (textLike && file.size <= 1_500_000) {
+      return { name, content: await file.text(), contentType };
+    }
+    const buf = await file.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    const chunk = 0x8000;
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+    }
+    return { name, content: btoa(binary), contentType, encoding: "base64" };
+  }
+
+  async function uploadSchoolFile(file) {
+    const payload = await readUploadPayload(file);
+    return api("/v1/me/onedrive/file", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+      timeoutMs: 30000,
+    });
+  }
+
+  document.getElementById("onedrive-upload")?.addEventListener("change", async () => {
+    const input = document.getElementById("onedrive-upload");
+    const file = input && input.files && input.files[0];
+    if (!file) return;
+    const status = document.getElementById("onedrive-upload-status");
+    if (!signedInViaGoogle()) {
+      if (status) status.textContent = NEED_GOOGLE;
+      return;
+    }
+    if (status) status.textContent = `Saving ${file.name}…`;
+    try {
+      await saveLocalUpload(file);
+      try {
+        await uploadSchoolFile(file);
+      } catch {
+        /* API vault is optional until the Mac API restarts */
+      }
+      input.value = "";
+      if (status) status.textContent = "";
+      lastOdError = "";
+      paintOnedrive();
+      await loadDashboard();
+    } catch (err) {
+      if (status) status.textContent = err.message || "Upload failed.";
     }
   });
 
@@ -2132,6 +2423,43 @@
       todoExpanded = !todoExpanded;
       routeAndRender();
     }
+    const uploadBtn = t.closest?.("[data-file-upload]");
+    if (uploadBtn) {
+      ev.preventDefault();
+      document.getElementById("onedrive-upload")?.click();
+    }
+  });
+
+  appEl.addEventListener("click", async (ev) => {
+    const a = ev.target.closest("[data-vault-id]");
+    if (!a) return;
+    ev.preventDefault();
+    const id = a.getAttribute("data-vault-id");
+    if (!id) return;
+    try {
+      const headers = { Accept: "*/*" };
+      const session = sid();
+      if (session) headers["X-EPSynapse-Session"] = session;
+      const res = await fetch(`${apiBase}/v1/me/onedrive/file?id=${encodeURIComponent(id)}`, {
+        credentials: "include",
+        headers,
+      });
+      if (!res.ok) throw new Error("Download failed.");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const go = document.createElement("a");
+      go.href = url;
+      go.target = "_blank";
+      go.rel = "noopener";
+      go.download = String(id).replace(/^vault:/, "") || "file";
+      document.body.appendChild(go);
+      go.click();
+      go.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (err) {
+      const status = document.getElementById("onedrive-upload-status");
+      if (status) status.textContent = err.message || "Download failed.";
+    }
   });
 
   appEl.addEventListener("click", async (ev) => {
@@ -2139,6 +2467,11 @@
     if (!btn) return;
     const id = btn.getAttribute("data-mail-id");
     if (!id) return;
+    if (String(id).startsWith("local:")) {
+      openMail = (lastHome.messages || []).find((m) => m.id === id) || null;
+      routeAndRender();
+      return;
+    }
     try {
       const data = await api(`/v1/me/outlook/message?id=${encodeURIComponent(id)}`, { timeoutMs: 20000 });
       openMail = data.message || null;
@@ -2223,6 +2556,16 @@
     const status = document.getElementById("outlook-send-status");
     if (!to || !subject || !body) {
       if (status) status.textContent = "To, subject, and body are required.";
+      return;
+    }
+    if (compose.dataset.mailMode === "mailto") {
+      const addrs = to
+        .split(/[,;]/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .join(",");
+      window.location.href = `mailto:${addrs}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      if (status) status.textContent = "Opened your mail app.";
       return;
     }
     if (!window.confirm(`Send this email to ${to}?`)) return;

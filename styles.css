@@ -906,6 +906,37 @@ html[data-resolved-theme="dark"] .edu-back-shadow feGaussianBlur {
   margin-top: 1rem;
 }
 
+.edu-files-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem 0.85rem;
+  margin-top: 0.75rem;
+}
+
+.edu-files-tools .edu-sheet-btn {
+  flex: 0 0 auto;
+  min-width: 0;
+  padding: 0.42rem 0.85rem;
+  font-size: var(--text-footnote);
+}
+
+.edu-mail-week {
+  margin: 0 0 0.55rem;
+}
+
+.edu-mail-week p {
+  margin: 0;
+  padding: 0.12rem 0;
+  color: var(--muted);
+  font-size: var(--text-footnote);
+}
+
+.edu-mail-open-web {
+  flex-shrink: 0;
+  margin: 0.15rem 0 0;
+}
+
 .edu-file-tile {
   position: relative;
   isolation: isolate;
