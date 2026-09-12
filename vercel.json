@@ -11,6 +11,16 @@
   ],
   "redirects": [
     {
+      "source": "/epschedule",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/EPSchedule",
+      "destination": "/",
+      "permanent": true
+    },
+    {
       "source": "/:path*",
       "has": [{ "type": "host", "value": "www.epsynapse.com" }],
       "destination": "https://epsynapse.com/:path*",

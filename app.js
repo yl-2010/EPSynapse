@@ -889,7 +889,13 @@
     if (input) input.tabIndex = -1;
   }
 
+  function dropStaleHomePath() {
+    const path = (location.pathname || "/").replace(/\/+$/, "") || "/";
+    if (/^\/epschedule$/i.test(path)) history.replaceState({}, "", "/");
+  }
+
   function currentRoute() {
+    dropStaleHomePath();
     const path = (location.pathname || "/").replace(/\/+$/, "") || "/";
     const classMatch = path.match(/^\/class\/([^/]+)$/);
     if (classMatch) return { page: "class", id: decodeURIComponent(classMatch[1]) };
@@ -2631,6 +2637,7 @@
   }
 
   async function boot() {
+    dropStaleHomePath();
     try {
       const runtime = await fetch("/runtime-config.json", { cache: "no-store" }).then((r) => r.json());
       const host = location.hostname;
