@@ -4,6 +4,7 @@ import UIKit
 struct ChatOverlay: View {
     @EnvironmentObject private var session: SessionStore
     @EnvironmentObject private var chat: ChatStore
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var isOpen = false
     @State private var draft = ""
@@ -213,16 +214,22 @@ struct ChatOverlay: View {
                     .epsGlassRounded(cornerRadius: 16, interactive: false)
             }
             if !turn.content.isEmpty || isUser {
-                Text(turn.content)
-                    .font(.body)
-                    .foregroundStyle(EPSTheme.fg)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .epsGlassRounded(
-                        cornerRadius: 16,
-                        tint: isUser ? EPSTheme.accent.opacity(0.18) : nil,
-                        interactive: false
-                    )
+                Group {
+                    if isUser {
+                        Text(turn.content)
+                            .font(.body)
+                            .foregroundStyle(EPSTheme.fg)
+                    } else {
+                        EPSMarkdownText(source: turn.content, scheme: colorScheme)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .epsGlassRounded(
+                    cornerRadius: 16,
+                    tint: isUser ? EPSTheme.accent.opacity(0.18) : nil,
+                    interactive: false
+                )
             }
         }
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
