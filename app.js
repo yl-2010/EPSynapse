@@ -78,6 +78,8 @@
 
   function openSheet() {
     sheet.hidden = false;
+    document.querySelector(".edu-sheet-body")?.scrollTo(0, 0);
+    form.scrollTop = 0;
     if (me) {
       form.school.value = me.school || "Eastside Prep";
       form.studentId.value = me.studentId || "";
@@ -464,7 +466,6 @@
       loading.hidden = true;
       stage.hidden = false;
       renderHome({ courses: [], assignments: [], files: [], messages: [] });
-      openSheet();
     }
   }
 
