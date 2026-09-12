@@ -531,18 +531,7 @@ struct EPSTagChip: View {
         Text(resolved)
             .font(.system(size: 11, weight: .bold))
             .tracking(0.4)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .foregroundStyle(fg)
-            .background(bg, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-    }
-
-    private var fg: Color {
-        Color(red: 11 / 255, green: 31 / 255, blue: 58 / 255)
-    }
-
-    private var bg: Color {
-        EPSTheme.accent
+            .foregroundStyle(EPSTheme.accent)
     }
 }
 
