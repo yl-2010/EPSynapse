@@ -16,6 +16,9 @@
   let apiBase = "";
   let me = null;
   let pollTimer = 0;
+  const TAGS = ["CW", "HW", "QA", "MA"];
+  const typeFilter = new Set(TAGS);
+  let lastHome = { courses: [], assignments: [], files: [] };
 
   function escapeHtml(s) {
     return String(s || "")
@@ -69,17 +72,46 @@
     }
     refreshKeyStatus();
     paintOnedrive();
+    queueMicrotask(() => window.reinitLiquidGlass?.());
   }
 
   function closeSheet() {
     sheet.hidden = true;
   }
 
-  function panelHtml(title, body, filterId, extraClass) {
+  function panelHtml(title, body, filterId, extraClass, filtersHtml) {
     return `<section class="edu-panel${extraClass ? " " + extraClass : ""}" data-liquid-glass="rounded" data-filter-id="${escapeHtml(filterId)}">
-      <div class="edu-panel-head"><h2 class="edu-panel-title">${escapeHtml(title)}</h2></div>
+      <div class="edu-panel-head"><h2 class="edu-panel-title">${escapeHtml(title)}</h2>${filtersHtml || ""}</div>
       ${body}
     </section>`;
+  }
+
+  function filterBarHtml(kind) {
+    return `<div class="edu-filters" role="group" aria-label="${escapeHtml(kind)} filters">${TAGS.map((tag) => {
+      const on = typeFilter.has(tag);
+      return `<label class="edu-filter circle${on ? " is-on" : ""}" data-liquid-glass="circle" data-filter-id="lg-edu-filter-${escapeHtml(kind)}-${escapeHtml(tag)}" title="${escapeHtml(tag)}" aria-label="${escapeHtml(tag)}"><input type="checkbox" data-filter="${escapeHtml(tag)}" ${on ? "checked" : ""} /><span>${escapeHtml(tag)}</span></label>`;
+    }).join("")}</div>`;
+  }
+
+  function currentPeriod() {
+    const now = new Date();
+    if (now.getDay() === 0 || now.getDay() === 6) return null;
+    const minutes = now.getHours() * 60 + now.getMinutes();
+    const bells = [
+      [8 * 60, 8 * 60 + 50, "1", "A"],
+      [8 * 60 + 55, 9 * 60 + 45, "2", "B"],
+      [9 * 60 + 50, 10 * 60 + 40, "3", "C"],
+      [10 * 60 + 45, 11 * 60 + 35, "4", "D"],
+      [12 * 60 + 15, 13 * 60 + 5, "5", "E"],
+      [13 * 60 + 10, 14 * 60, "6", "F"],
+      [14 * 60 + 5, 14 * 60 + 55, "7", "G"],
+      [15 * 60, 15 * 60 + 50, "8", "H"],
+    ];
+    return bells.find(([start, end]) => minutes >= start && minutes < end) || null;
+  }
+
+  function matchesTag(item) {
+    return typeFilter.has(item.tag || "HW");
   }
 
   function listOrEmpty(itemsHtml, empty) {
@@ -118,7 +150,10 @@
     const period = c.period
       ? `<span class="edu-tag edu-period">${escapeHtml(c.period)}</span>`
       : "";
-    return `<li class="edu-row edu-class-row">
+    const cur = currentPeriod();
+    const p = String(c.period || "").toUpperCase();
+    const highlight = Boolean(cur && p && (p === cur[2] || p === cur[3]));
+    return `<li class="edu-row edu-class-row${highlight ? " is-current" : ""}">
       <span class="edu-name">${period}<span class="edu-hero-class-name">${escapeHtml(c.name)}</span></span>
       <span class="edu-meta">${escapeHtml(c.courseCode || "")}</span>
     </li>`;
@@ -138,10 +173,11 @@
   }
 
   function renderHome({ courses, assignments, files }) {
-    const open = (assignments || []).filter((t) => !t.done);
-    const done = (assignments || []).filter((t) => t.done);
+    lastHome = { courses, assignments, files };
+    const open = (assignments || []).filter((t) => !t.done && matchesTag(t));
+    const done = (assignments || []).filter((t) => t.done && matchesTag(t));
     const dates = (assignments || [])
-      .filter((t) => t.due)
+      .filter((t) => t.due && matchesTag(t))
       .sort((a, b) => String(a.due).localeCompare(String(b.due)))
       .slice(0, 12);
     const fileTiles = (files || []).map(fileTile).join("");
@@ -154,16 +190,18 @@
       ? "No files in /EPSynapse yet"
       : "Connect OneDrive in settings";
 
+    const school = me?.school || "Eastside Prep";
     appEl.classList.add("is-settled");
     appEl.innerHTML = `
+      <p class="edu-home-mark">${escapeHtml(school)}</p>
       <div class="edu-grid edu-grid--home">
         <div class="edu-col edu-col--main">
-          ${panelHtml("TODO", listOrEmpty(open.map(todoRow).join(""), todoEmpty), "lg-edu-todo")}
+          ${panelHtml("TODO", listOrEmpty(open.map(todoRow).join(""), todoEmpty), "lg-edu-todo", "", filterBarHtml("todo"))}
           ${panelHtml("Completed", listOrEmpty(done.map(todoRow).join(""), "Nothing completed yet"), "lg-edu-completed", "edu-panel--completed")}
         </div>
         <div class="edu-col edu-col--side">
           ${panelHtml("Classes", listOrEmpty((courses || []).map(classRow).join(""), classEmpty), "lg-edu-classes")}
-          ${panelHtml("Dates", listOrEmpty(dates.map(dateRow).join(""), "No upcoming dates"), "lg-edu-dates")}
+          ${panelHtml("Dates", listOrEmpty(dates.map(dateRow).join(""), "No upcoming dates"), "lg-edu-dates", "", filterBarHtml("dates"))}
           ${panelHtml("Files", fileTiles ? `<div class="edu-files">${fileTiles}</div>` : `<p class="edu-empty">${escapeHtml(fileEmpty)}</p>`, "lg-edu-files")}
         </div>
       </div>
@@ -190,24 +228,47 @@
     });
   }
 
+  function showOnedriveCode(code, uri) {
+    const codeEl = document.getElementById("onedrive-code");
+    const openEl = document.getElementById("onedrive-open");
+    if (!codeEl || !openEl) return;
+    if (code) {
+      codeEl.hidden = false;
+      codeEl.textContent = code;
+    } else {
+      codeEl.hidden = true;
+      codeEl.textContent = "";
+    }
+    if (uri) {
+      openEl.hidden = false;
+      openEl.href = uri;
+    } else {
+      openEl.hidden = true;
+    }
+  }
+
   function paintOnedrive() {
     if (!me) {
-      setStatus(odStatus, "");
+      setStatus(odStatus, "School OneDrive. Tap Connect, then sign in with @eastsideprep.org.");
+      showOnedriveCode("", "");
       return;
     }
     if (me.onedriveConnected) {
       setStatus(odStatus, me.onedriveEmail ? `OneDrive · ${me.onedriveEmail}` : "OneDrive connected");
+      showOnedriveCode("", "");
       return;
     }
     const p = me.onedrivePending;
     if (p && (p.user_code || p.verification_uri)) {
       setStatus(
         odStatus,
-        `${p.message || "Sign in with your school account."} Code ${p.user_code || ""} ${p.verification_uri || ""}`.trim()
+        "Enter this code on the Microsoft page, then sign in with your school email. Allow files access."
       );
+      showOnedriveCode(p.user_code, p.verification_uri || "https://login.microsoft.com/device");
       return;
     }
-    setStatus(odStatus, "OneDrive not connected.");
+    setStatus(odStatus, "School OneDrive. Tap Connect, then sign in with @eastsideprep.org.");
+    showOnedriveCode("", "");
   }
 
   function refreshKeyStatus() {
@@ -278,6 +339,19 @@
   sheet.addEventListener("click", (ev) => {
     if (ev.target === sheet) closeSheet();
   });
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape" && !sheet.hidden) closeSheet();
+  });
+  appEl.addEventListener("change", (ev) => {
+    const input = ev.target.closest("input[data-filter]");
+    if (!input) return;
+    const tag = input.getAttribute("data-filter");
+    if (!tag) return;
+    if (input.checked) typeFilter.add(tag);
+    else typeFilter.delete(tag);
+    if (typeFilter.size === 0) TAGS.forEach((t) => typeFilter.add(t));
+    renderHome(lastHome);
+  });
 
   form.addEventListener("submit", async (ev) => {
     ev.preventDefault();
@@ -318,11 +392,14 @@
       }
       const started = await api("/v1/me/onedrive/start", { method: "POST", body: "{}" });
       if (started.user_code) {
-        setStatus(
-          odStatus,
-          `${started.message || "Open the Microsoft page and enter this code."} ${started.user_code} ${started.verification_uri || ""}`
-        );
-        if (started.verification_uri) window.open(started.verification_uri, "_blank", "noopener");
+        me = Object.assign({}, me, {
+          onedrivePending: {
+            user_code: started.user_code,
+            verification_uri: started.verification_uri,
+            message: started.message,
+          },
+        });
+        paintOnedrive();
         clearInterval(pollTimer);
         pollTimer = setInterval(async () => {
           try {
@@ -342,39 +419,11 @@
           }
         }, 4000);
       } else {
-        setStatus(
-          odStatus,
-          started.message ||
-            "Device code blocked. Sign in at Outlook, then paste the access_token from the URL hash."
-        );
-        if (started.authorizeUrl) window.open(started.authorizeUrl, "_blank", "noopener");
+        setStatus(odStatus, started.message || "Microsoft would not start school sign-in.");
+        showOnedriveCode("", "");
       }
     } catch (err) {
       setStatus(odStatus, err.message || "Could not start OneDrive.");
-    }
-  });
-
-  document.getElementById("onedrive-paste").addEventListener("click", async () => {
-    const token = document.getElementById("onedriveToken").value.trim();
-    if (!token) {
-      setStatus(odStatus, "Paste a Graph access token first.");
-      return;
-    }
-    try {
-      const st = await api("/v1/me/onedrive/token", {
-        method: "POST",
-        body: JSON.stringify({ accessToken: token }),
-      });
-      document.getElementById("onedriveToken").value = "";
-      me = Object.assign({}, me || {}, {
-        onedriveConnected: Boolean(st.connected),
-        onedriveEmail: st.email || "",
-        onedrivePending: null,
-      });
-      paintOnedrive();
-      await loadDashboard();
-    } catch (err) {
-      setStatus(odStatus, err.message || "Token rejected.");
     }
   });
 

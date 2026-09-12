@@ -19,6 +19,15 @@
     <meta name="description" content="student dashboard for Eastside Prep" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/styles.css" />
+    <style>
+      .od-code {
+        margin: 0.35rem 0 0.5rem;
+        font-size: 1.55rem;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        color: var(--accent);
+      }
+    </style>
   </head>
   <body>
     <button
@@ -155,37 +164,66 @@
       <form class="edu-sheet" data-liquid-glass="rounded" data-filter-id="lg-edu-sheet" autocomplete="off">
         <div class="edu-sheet-head">
           <h2 class="edu-panel-title">Settings</h2>
-          <button type="button" id="settings-close">Close</button>
+          <button
+            type="button"
+            id="settings-close"
+            class="edu-sheet-close circle"
+            data-liquid-glass="circle"
+            data-filter-id="lg-edu-sheet-x"
+            aria-label="Close settings"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <g fill="currentColor">
+                <rect x="4.5" y="10.35" width="15" height="3.3" rx="1.65" transform="rotate(45 12 12)" />
+                <rect x="4.5" y="10.35" width="15" height="3.3" rx="1.65" transform="rotate(-45 12 12)" />
+              </g>
+            </svg>
+          </button>
         </div>
         <p class="edu-empty" id="settings-status">School + student ID is your record. Honor system for the hackathon.</p>
 
         <label for="school">School</label>
-        <input id="school" name="school" value="Eastside Prep" maxlength="80" />
+        <div class="edu-sheet-field" data-liquid-glass="rounded" data-filter-id="lg-edu-school">
+          <input id="school" name="school" value="Eastside Prep" maxlength="80" />
+        </div>
 
         <label for="studentId">Student ID</label>
-        <input id="studentId" name="studentId" required maxlength="80" />
+        <div class="edu-sheet-field" data-liquid-glass="rounded" data-filter-id="lg-edu-sid">
+          <input id="studentId" name="studentId" required maxlength="80" />
+        </div>
 
         <label for="canvasHost">Canvas URL</label>
-        <input id="canvasHost" name="canvasHost" value="https://eastsideprep.instructure.com" />
+        <div class="edu-sheet-field" data-liquid-glass="rounded" data-filter-id="lg-edu-canvas-host">
+          <input id="canvasHost" name="canvasHost" value="https://eastsideprep.instructure.com" />
+        </div>
 
         <label for="canvasToken">Canvas access token</label>
-        <input id="canvasToken" name="canvasToken" type="password" autocomplete="off" />
+        <div class="edu-sheet-field" data-liquid-glass="rounded" data-filter-id="lg-edu-canvas-token">
+          <input id="canvasToken" name="canvasToken" type="password" autocomplete="off" />
+        </div>
         <p class="edu-empty">Account → Settings → New Access Token</p>
 
-        <button type="submit" id="settings-save">Save</button>
-        <button type="button" id="onedrive-start">Connect OneDrive</button>
-        <p class="edu-empty" id="onedrive-status"></p>
-        <label for="onedriveToken">Paste Graph token if device code is blocked</label>
-        <input id="onedriveToken" name="onedriveToken" autocomplete="off" />
-        <button type="button" id="onedrive-paste">Save OneDrive token</button>
+        <div class="edu-sheet-actions">
+          <button type="submit" id="settings-save" class="edu-sheet-btn edu-sheet-btn--gold" data-liquid-glass="rounded" data-filter-id="lg-edu-save">Save</button>
+          <button type="button" id="onedrive-start" class="edu-sheet-btn" data-liquid-glass="rounded" data-filter-id="lg-edu-od-start">Connect OneDrive</button>
+        </div>
+        <p class="edu-empty" id="onedrive-status">School OneDrive. Tap Connect, then sign in with @eastsideprep.org.</p>
+        <p id="onedrive-code" class="od-code" hidden></p>
+        <a id="onedrive-open" class="edu-empty" href="https://login.microsoft.com/device" target="_blank" rel="noopener" hidden>Open Microsoft sign-in</a>
 
         <label for="provider">Model</label>
-        <select id="provider" name="provider"></select>
+        <div class="edu-sheet-field" data-liquid-glass="rounded" data-filter-id="lg-edu-provider">
+          <select id="provider" name="provider"></select>
+        </div>
 
         <label for="modelKey">Model key (stays in this browser)</label>
-        <input id="modelKey" name="modelKey" type="password" autocomplete="off" placeholder="Groq / Gemini / OpenRouter" />
-        <button type="button" id="key-save">Save key</button>
-        <button type="button" id="key-clear">Clear key</button>
+        <div class="edu-sheet-field" data-liquid-glass="rounded" data-filter-id="lg-edu-model-key">
+          <input id="modelKey" name="modelKey" type="password" autocomplete="off" placeholder="Groq / Gemini / OpenRouter" />
+        </div>
+        <div class="edu-sheet-actions">
+          <button type="button" id="key-save" class="edu-sheet-btn edu-sheet-btn--gold" data-liquid-glass="rounded" data-filter-id="lg-edu-key-save">Save key</button>
+          <button type="button" id="key-clear" class="edu-sheet-btn" data-liquid-glass="rounded" data-filter-id="lg-edu-key-clear">Clear key</button>
+        </div>
         <p class="edu-empty" id="key-status"></p>
       </form>
     </div>

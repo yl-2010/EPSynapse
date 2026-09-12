@@ -1,18 +1,23 @@
 /**
- * School OneDrive via Microsoft Graph. Outlook Web first-party client.
- * No Entra app. Device-code first; paste a Graph token if Microsoft blocks it.
+ * School OneDrive via Microsoft Graph.
+ * Students sign in with @eastsideprep.org. No token fishing.
+ * Default public client is Graph Explorer, which Graph already preauthorizes
+ * for Files. Outlook on the web is not, and returns AADSTS65002.
+ * Override with MICROSOFT_CLIENT_ID if we later register EPSynapse itself.
  */
 
-export const OUTLOOK_WEB_CLIENT_ID = "9199bf20-a13f-4107-85dc-02114787ef48";
+export const GRAPH_EXPLORER_CLIENT_ID = "de8bc8b5-d9f9-48b1-a8ad-b748da725064";
 export const EPS_TENANT_ID = "b2681e8b-dd20-46cf-b163-371a2d7c6014";
 export const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
 export const WRITE_FOLDER = "EPSynapse";
 
-const OWA_URL = "https://outlook.office.com/mail/";
 const LOGIN = `https://login.microsoftonline.com/${EPS_TENANT_ID}/oauth2/v2.0`;
 const DEVICE_SCOPE =
   "https://graph.microsoft.com/Files.ReadWrite offline_access openid profile";
-const IMPLICIT_SCOPE = "https://graph.microsoft.com/Files.ReadWrite openid profile";
+
+export function graphClientId() {
+  return String(process.env.MICROSOFT_CLIENT_ID || "").trim() || GRAPH_EXPLORER_CLIENT_ID;
+}
 const TOKEN_SKEW_S = 90;
 const GRAPH_APP_ID = "00000003-0000-0000-c000-000000000000";
 const DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code";
@@ -72,9 +77,8 @@ function oauthError(data, fallback) {
 function pasteFallback(error) {
   return {
     ok: false,
-    error: String(error || "device code unavailable"),
-    authorizeUrl: implicitAuthorizeUrl(),
-    pasteToken: true,
+    error: String(error || "Microsoft blocked this sign-in. Tap Connect OneDrive again."),
+    pasteToken: false,
   };
 }
 
@@ -132,24 +136,14 @@ async function readOauthJson(res) {
   }
 }
 
-export function implicitAuthorizeUrl() {
-  const params = new URLSearchParams({
-    client_id: OUTLOOK_WEB_CLIENT_ID,
-    response_type: "token",
-    redirect_uri: OWA_URL,
-    scope: IMPLICIT_SCOPE,
-    nonce: "epsynapse",
-  });
-  return `${LOGIN}/authorize?${params}`;
-}
-
 export async function startDeviceCode() {
+  const clientId = graphClientId();
   try {
     const res = await fetch(`${LOGIN}/devicecode`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
-        client_id: OUTLOOK_WEB_CLIENT_ID,
+        client_id: clientId,
         scope: DEVICE_SCOPE,
       }),
     });
@@ -164,6 +158,7 @@ export async function startDeviceCode() {
       verification_uri: String(data.verification_uri || ""),
       verification_uri_complete: String(data.verification_uri_complete || ""),
       device_code: String(data.device_code),
+      clientId,
       interval: Number(data.interval) || 5,
       expiresAt: Date.now() + expiresIn * 1000,
       message: String(data.message || "").trim(),
@@ -182,7 +177,7 @@ export async function pollDeviceCode(deviceCode) {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
-        client_id: OUTLOOK_WEB_CLIENT_ID,
+        client_id: graphClientId(),
         grant_type: DEVICE_GRANT,
         device_code: code,
       }),
@@ -220,7 +215,7 @@ export async function refreshAccessToken(refreshToken) {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
-        client_id: OUTLOOK_WEB_CLIENT_ID,
+        client_id: graphClientId(),
         grant_type: "refresh_token",
         refresh_token: rt,
         scope: DEVICE_SCOPE,

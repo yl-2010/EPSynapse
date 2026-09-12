@@ -27,7 +27,6 @@ import {
   acceptPastedToken,
   downloadFile,
   ensureFreshToken,
-  implicitAuthorizeUrl,
   isConnected,
   listFiles,
   pollDeviceCode,
@@ -271,14 +270,13 @@ app.post("/v1/me/onedrive/start", async (req, res) => {
       return res.json({
         user_code: "",
         verification_uri: "",
-        message: started.error || "Device code blocked.",
-        authorizeUrl: started.authorizeUrl || implicitAuthorizeUrl(),
-        pasteToken: true,
+        message: started.error || "Microsoft would not start school sign-in.",
       });
     }
     await persistGraph(student, {
       pending: {
         device_code: started.device_code,
+        clientId: started.clientId,
         interval: started.interval,
         expiresAt: started.expiresAt,
         user_code: started.user_code,
@@ -292,8 +290,6 @@ app.post("/v1/me/onedrive/start", async (req, res) => {
       verification_uri_complete: started.verification_uri_complete || "",
       message: started.message,
       interval: started.interval,
-      authorizeUrl: implicitAuthorizeUrl(),
-      pasteToken: true,
     });
   } catch (err) {
     return fail(res, err);
@@ -323,8 +319,6 @@ app.get("/v1/me/onedrive/status", async (req, res) => {
       connected: isConnected(student.graph),
       pending: publicPending(student.graph),
       email: student.graph?.email || "",
-      authorizeUrl: implicitAuthorizeUrl(),
-      pasteToken: true,
     });
   } catch (err) {
     return fail(res, err);
