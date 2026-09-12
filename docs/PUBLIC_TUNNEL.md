@@ -18,7 +18,7 @@ Browser
 | Cloudflare account | `7147db2985dd609d51db0d7d2eb66378` |
 | Zone id | `262bd841c3001e4a0519c6bda3f12f5f` |
 | Nameservers | `hayes.ns.cloudflare.com`, `mallory.ns.cloudflare.com` |
-| Tunnel | `jype-api` → `24e3b12c-5191-46b5-84d2-d0c808be0ba9` |
+| Tunnel | `jype-api` → `484f13c6-2593-4b02-ae61-0dc724bab9a1` |
 | Config | `~/.cloudflared/config-jype.yml` |
 | DNS | Proxied CNAME `api` → `<tunnel-uuid>.cfargotunnel.com` |
 | Apex / www | Proxied A records to Vercel so the static site stays on Vercel |

@@ -9,21 +9,22 @@ Do **not** put LM Studio (`:1234`) on this tunnel.
 | Piece | Value |
 |-------|--------|
 | Tunnel name | `jype-api` |
-| Tunnel UUID | `24e3b12c-5191-46b5-84d2-d0c808be0ba9` |
+| Tunnel UUID | `484f13c6-2593-4b02-ae61-0dc724bab9a1` |
 | Local config | `~/.cloudflared/config-jype.yml` |
-| Credentials | `~/.cloudflared/24e3b12c-5191-46b5-84d2-d0c808be0ba9.json` |
-| Origin cert (create) | NoteLMs-account cert `~/.cloudflared/cert.pem.notelms.bak` |
+| Credentials | `~/.cloudflared/484f13c6-2593-4b02-ae61-0dc724bab9a1.json` |
+| Cloudflare account | JYPE (`7147db2985dd609d51db0d7d2eb66378`) |
 | Hostname | `api.epsynapse.com` → `http://127.0.0.1:3006` |
 
-The tunnel was created in the NoteLMs Cloudflare account because that cert was already on this Mac. DNS for `api` is a proxied CNAME on the JYPE Cloudflare zone to `<uuid>.cfargotunnel.com`. Do not attach `api.epsynapse.com` as a Vercel project domain.
+The tunnel lives in the JYPE Cloudflare account, same as the zone. DNS for `api` is a proxied CNAME to `<uuid>.cfargotunnel.com`. Do not attach `api.epsynapse.com` as a Vercel project domain.
 
 ## Recreate (if needed)
 
 ```bash
-cp ~/.cloudflared/cert.pem.notelms.bak ~/.cloudflared/cert.pem
 bash deploy/cloudflared/setup-path-a.sh
-# Then DNS: CNAME api → 24e3b12c-5191-46b5-84d2-d0c808be0ba9.cfargotunnel.com
+# Then DNS: proxied CNAME api → 484f13c6-2593-4b02-ae61-0dc724bab9a1.cfargotunnel.com
 ```
+
+`setup-path-a.sh` looks up `jype-api` with whatever origin cert `cloudflared` is using. The live tunnel is in the JYPE account, not NoteLMs.
 
 ## Every session / LaunchAgents
 
