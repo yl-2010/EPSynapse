@@ -353,7 +353,8 @@
         list.contains("edu-sheet-head") ||
         list.contains("edu-panel") ||
         list.contains("edu-file-tile") ||
-        list.contains("yan-chat-panel"))
+        list.contains("yan-chat-panel") ||
+        list.contains("yan-chat-bubble"))
     );
   }
 

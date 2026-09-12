@@ -12,11 +12,17 @@ struct ChatOverlay: View {
     @State private var overlayFrame: CGRect = .zero
     @FocusState private var composerFocused: Bool
 
-    private var showPanel: Bool { isOpen && !chat.turns.isEmpty }
+    private var showPanel: Bool { isOpen }
     private var pillSide: CGFloat { 56 }
 
     private var openWidth: CGFloat {
         AdaptiveLayout.isPad ? min(420, AdaptiveLayout.chatMaxWidth) : .infinity
+    }
+
+    private var panelMaxHeight: CGFloat {
+        let screen = UIScreen.main.bounds.height
+        if AdaptiveLayout.isPad { return min(440, screen * 0.45) }
+        return min(300, max(200, screen * 0.34))
     }
 
     var body: some View {
@@ -67,6 +73,7 @@ struct ChatOverlay: View {
         .onChange(of: chat.wantsChatOpen) { _, want in
             if want {
                 isOpen = true
+                composerFocused = true
                 Task { @MainActor in
                     chat.wantsChatOpen = false
                 }
@@ -137,6 +144,7 @@ struct ChatOverlay: View {
                 Button {
                     EPSHaptics.tap()
                     isOpen = true
+                    composerFocused = true
                 } label: {
                     Image(systemName: "ellipsis.bubble.fill")
                         .font(.system(size: 22, weight: .semibold))
@@ -153,7 +161,7 @@ struct ChatOverlay: View {
         .frame(minHeight: pillSide)
         .frame(maxWidth: isOpen ? .infinity : pillSide)
         .fixedSize(horizontal: false, vertical: true)
-        .glassCapsule(interactive: true)
+        .epsGlassRounded(cornerRadius: isOpen ? 28 : pillSide / 2, interactive: true)
     }
 
     private var messagePanel: some View {
@@ -164,76 +172,102 @@ struct ChatOverlay: View {
                     clearChat()
                 } label: {
                     Image(systemName: "plus")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.system(size: 14, weight: .bold))
                         .rotationEffect(.degrees(45))
                         .foregroundStyle(EPSTheme.fg)
-                        .frame(width: 28, height: 28)
+                        .frame(width: 36, height: 36)
                 }
                 .buttonStyle(.plain)
-                .epsSizedGlassCircle(side: 28)
+                .epsSizedGlassCircle(side: 36)
                 .accessibilityLabel("New chat")
             }
             .padding(.bottom, 8)
 
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 10) {
-                        ForEach(chat.turns) { turn in
-                            chatBubble(turn)
-                                .id(turn.id)
+            if chat.turns.isEmpty {
+                Text("Ask about classes, Canvas, or your day.")
+                    .font(.body)
+                    .foregroundStyle(EPSTheme.muted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 8)
+            } else {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 10) {
+                            ForEach(chat.turns) { turn in
+                                chatBubble(turn)
+                                    .id(turn.id)
+                            }
                         }
+                        .padding(.bottom, 4)
                     }
-                    .padding(.bottom, 4)
-                }
-                .scrollDismissesKeyboard(.never)
-                .onChange(of: chat.turns.last?.content) { _, _ in
-                    if let last = chat.turns.last {
-                        withAnimation(.easeOut(duration: 0.2)) {
-                            proxy.scrollTo(last.id, anchor: .bottom)
-                        }
+                    .scrollDismissesKeyboard(.never)
+                    .onAppear { scrollToLatest(proxy) }
+                    .onChange(of: chat.turns.count) { _, _ in
+                        scrollToLatest(proxy)
+                    }
+                    .onChange(of: chat.turns.last?.content) { _, _ in
+                        scrollToLatest(proxy)
+                    }
+                    .onChange(of: chat.turns.last?.thinking) { _, _ in
+                        scrollToLatest(proxy)
                     }
                 }
             }
         }
         .padding(16)
         .frame(maxWidth: .infinity)
-        .frame(maxHeight: 360)
+        .frame(maxHeight: panelMaxHeight)
         .epsGlassRounded(cornerRadius: 22, interactive: true)
+    }
+
+    private func scrollToLatest(_ proxy: ScrollViewProxy) {
+        guard let last = chat.turns.last else { return }
+        withAnimation(.easeOut(duration: 0.2)) {
+            proxy.scrollTo(last.id, anchor: .bottom)
+        }
     }
 
     @ViewBuilder
     private func chatBubble(_ turn: ChatTurn) -> some View {
         let isUser = turn.role == "user"
-        VStack(alignment: isUser ? .trailing : .leading, spacing: 6) {
-            if !turn.thinking.isEmpty, !isUser {
-                Text(turn.thinking)
-                    .font(.footnote)
-                    .foregroundStyle(EPSTheme.muted)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .epsGlassRounded(cornerRadius: 16, interactive: false)
-            }
-            if !turn.content.isEmpty || isUser {
-                Group {
-                    if isUser {
-                        Text(turn.content)
-                            .font(.body)
-                            .foregroundStyle(EPSTheme.fg)
-                    } else {
-                        EPSMarkdownText(source: turn.content, scheme: colorScheme)
-                    }
+        HStack(alignment: .top, spacing: 0) {
+            if isUser { Spacer(minLength: 36) }
+            VStack(alignment: isUser ? .trailing : .leading, spacing: 6) {
+                if !turn.thinking.isEmpty, !isUser {
+                    Text(turn.thinking)
+                        .font(.body)
+                        .foregroundStyle(EPSTheme.muted)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .epsGlassRounded(cornerRadius: 16, interactive: false)
+                        .accessibilityLabel("Thinking")
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .epsGlassRounded(
-                    cornerRadius: 16,
-                    tint: isUser ? EPSTheme.accent.opacity(0.18) : nil,
-                    interactive: false
-                )
+                if !turn.content.isEmpty {
+                    Group {
+                        if isUser {
+                            Text(turn.content)
+                                .font(.body)
+                                .foregroundStyle(EPSTheme.fg)
+                                .multilineTextAlignment(.leading)
+                        } else {
+                            EPSMarkdownText(source: turn.content, scheme: colorScheme)
+                        }
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .epsGlassRounded(
+                        cornerRadius: 16,
+                        tint: isUser ? EPSTheme.accent.opacity(0.18) : nil,
+                        interactive: false
+                    )
+                }
             }
+            if !isUser { Spacer(minLength: 36) }
         }
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
-        .padding(isUser ? .leading : .trailing, 28)
     }
 
     private var minusGlyph: some View {
@@ -270,7 +304,6 @@ struct ChatOverlay: View {
 
     private func minimize() {
         composerFocused = false
-        draft = ""
         isOpen = false
         dragY = 0
         chat.keyboardScrubLift = 0
@@ -637,17 +670,19 @@ final class AgentDismissInstaller: UIView, UIGestureRecognizerDelegate {
             keyboard = window.convert(keyboard, from: nil)
         }
 
-        let barHeight = max(overlayFrame.height, 56)
-        var minY = overlayFrame.minY
+        let barHeight: CGFloat = 72
         var minX = overlayFrame.minX
         var width = overlayFrame.width
+        var minY = overlayFrame.maxY - barHeight
+
+        if overlayFrame.height < 8 {
+            minY = overlayFrame.minY
+        }
 
         if AgentKeyboardScrub.isKeyboardUp {
             let liftedTop = keyboard.minY - barHeight
-            if minY < 8 || overlayFrame.height < 8 || minY > keyboard.minY - 8 {
+            if overlayFrame.height < 8 || overlayFrame.maxY < keyboard.minY - 40 {
                 minY = liftedTop
-            } else {
-                minY = min(minY, liftedTop)
             }
         }
 
@@ -656,7 +691,7 @@ final class AgentDismissInstaller: UIView, UIGestureRecognizerDelegate {
             width = window.bounds.width
         }
 
-        return CGRect(x: minX - 36, y: minY, width: width + 72, height: 4000)
+        return CGRect(x: minX - 36, y: minY - 8, width: width + 72, height: barHeight + 28)
     }
 
     override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {

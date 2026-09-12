@@ -109,6 +109,7 @@
       input.style.height = "";
       input.style.overflowY = "hidden";
       root.classList.remove("is-composer-tall");
+      root.style.removeProperty("--pill-h");
       return;
     }
     const cs = getComputedStyle(input);
@@ -120,6 +121,8 @@
     input.style.height = `${next}px`;
     input.style.overflowY = lines * lineH > 120 ? "auto" : "hidden";
     root.classList.add("is-composer-tall");
+    const orb = parseFloat(getComputedStyle(root).getPropertyValue("--chat-circle")) || 80;
+    root.style.setProperty("--pill-h", `${Math.max(orb, next + 36)}px`);
   }
 
   function textFromModelField(value) {
@@ -196,13 +199,41 @@
       .replace(/"/g, "&quot;");
   }
 
+  function scrollChatToEnd(node) {
+    const el = node || messagesEl?.lastElementChild;
+    el?.scrollIntoView({ block: "end" });
+  }
+
+  function refreshGlassSoon() {
+    window.clearTimeout(refreshGlassSoon._t);
+    refreshGlassSoon._t = window.setTimeout(refreshGlass, 80);
+  }
+
+  function writeThinking(node, text) {
+    if (!node) return;
+    let inner = node.querySelector(".yan-chat-bubble-in");
+    if (!inner) {
+      inner = document.createElement("span");
+      inner.className = "yan-chat-bubble-in";
+      node.textContent = "";
+      node.appendChild(inner);
+    }
+    inner.textContent = text || "";
+    scrollChatToEnd(node.parentElement);
+    refreshGlassSoon();
+  }
+
   function writeBubble(el, role, text) {
     const value = text || "";
     if (role === "assistant") {
+      el.hidden = !value;
       el.classList.add("md-body");
       el.innerHTML = renderBubbleHtml(value);
+      scrollChatToEnd(el.parentElement);
+      refreshGlassSoon();
       return;
     }
+    el.hidden = false;
     let inner = el.querySelector(".yan-chat-bubble-in");
     if (!inner) {
       inner = document.createElement("span");
@@ -210,17 +241,19 @@
       el.appendChild(inner);
     }
     inner.textContent = value;
+    scrollChatToEnd(el.parentElement);
   }
 
   function appendTurn(role, text, thinking) {
     const turn = document.createElement("div");
     turn.className = "yan-chat-turn yan-chat-turn--" + role;
+    let think = null;
     if (thinking !== undefined) {
-      const think = document.createElement("div");
+      think = document.createElement("div");
       think.className = "yan-chat-bubble yan-chat-working";
       think.dataset.liquidGlass = "rounded";
       think.dataset.filterId = "lg-edu-chat-w-" + ++bubbleSeq;
-      think.textContent = thinking;
+      writeThinking(think, thinking);
       turn.appendChild(think);
     }
     const el = document.createElement("div");
@@ -230,11 +263,9 @@
     writeBubble(el, role, text || "");
     turn.appendChild(el);
     messagesEl.appendChild(turn);
-    el.scrollIntoView({ block: "end" });
+    scrollChatToEnd(turn);
     refreshGlass();
-    const body =
-      role === "assistant" ? el : el.querySelector(".yan-chat-bubble-in") || el;
-    return { body, think: thinking !== undefined ? turn.firstChild : null };
+    return { body: el, think };
   }
 
   function signedIn() {
@@ -750,7 +781,7 @@
         buf = parseSseChunk(buf, (delta) => {
           if (delta.reasoning) {
             thought += delta.reasoning;
-            if (slot.think) slot.think.textContent = thought;
+            writeThinking(slot.think, thought);
           }
           if (delta.content) {
             answer += delta.content;
@@ -761,7 +792,7 @@
       buf = parseSseChunk(buf + "\n\n", (delta) => {
         if (delta.reasoning) {
           thought += delta.reasoning;
-          if (slot.think) slot.think.textContent = thought;
+          writeThinking(slot.think, thought);
         }
         if (delta.content) {
           answer += delta.content;
