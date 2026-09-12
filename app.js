@@ -461,7 +461,7 @@
     if (chat) {
       const id = providerSel.value || (me && me.modelProvider) || localStorage.getItem(LS_PROV) || "groq";
       if (accountHasKey()) {
-        chat.textContent = me.modelKeyHint ? `${id} · ends ${me.modelKeyHint}` : id;
+        chat.textContent = id;
       } else {
         chat.textContent = "Add a Groq key";
       }
@@ -933,9 +933,7 @@
     if (entry) entry.hidden = hasKey && !replacing;
     if (ready) ready.hidden = !hasKey;
     if (readyLabel) {
-      readyLabel.textContent = hasKey
-        ? `${id}${me.modelKeyHint ? ` · ends ${me.modelKeyHint}` : ""}`
-        : "";
+      readyLabel.textContent = hasKey ? id : "";
     }
     paintKeysSummary();
     if (hasKey && !replacing) {

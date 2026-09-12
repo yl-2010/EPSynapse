@@ -465,14 +465,11 @@ final class SessionStore: ObservableObject {
 
   private func refreshKeyStatus() {
     if profile?.modelKeySet == true {
-      let hint = profile?.modelKeyHint ?? ""
-      keyStatus = hint.isEmpty
-        ? "Using your \(provider) key on this account"
-        : "Using your \(provider) key · ends \(hint)"
+      keyStatus = "Using your \(provider) key on this account"
       return
     }
     if !modelKey.isEmpty {
-      keyStatus = "Using your \(provider) key · ends \(String(modelKey.suffix(4)))"
+      keyStatus = "Using your \(provider) key on this account"
       return
     }
     keyStatus = Self.keyIdle
