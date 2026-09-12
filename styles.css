@@ -2254,6 +2254,22 @@ a.yan-chat-widget {
   color: var(--fg);
 }
 
+.edu-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0 0 0.4rem;
+}
+
+.edu-sheet-head .edu-panel-title {
+  margin: 0;
+}
+
+.edu-sheet-head #settings-close {
+  margin: 0;
+}
+
 .edu-sheet label {
   display: block;
   font-size: var(--text-footnote);

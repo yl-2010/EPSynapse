@@ -153,7 +153,10 @@
 
     <div id="settings-sheet" class="edu-sheet-backdrop" hidden>
       <form class="edu-sheet" data-liquid-glass="rounded" data-filter-id="lg-edu-sheet" autocomplete="off">
-        <h2 class="edu-panel-title">Settings</h2>
+        <div class="edu-sheet-head">
+          <h2 class="edu-panel-title">Settings</h2>
+          <button type="button" id="settings-close">Close</button>
+        </div>
         <p class="edu-empty" id="settings-status">School + student ID is your record. Honor system for the hackathon.</p>
 
         <label for="school">School</label>
@@ -184,8 +187,6 @@
         <button type="button" id="key-save">Save key</button>
         <button type="button" id="key-clear">Clear key</button>
         <p class="edu-empty" id="key-status"></p>
-
-        <button type="button" id="settings-close">Close</button>
       </form>
     </div>
 
