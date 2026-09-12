@@ -77,17 +77,6 @@ import {
   ownerIdForStudent,
   persistChat,
 } from "./chat-history.js";
-import {
-  DEFAULT_SCHOOL,
-  castVote,
-  currentPulse,
-  exportResultsCsv,
-  loadPulse,
-  pulsePayload,
-  requireVoterKey,
-  resultsView,
-  voterKeyFromRequest,
-} from "./pulses.js";
 
 const PORT = Number(process.env.PORT || 3006);
 const HOST = process.env.HOST || "0.0.0.0";
@@ -844,78 +833,6 @@ app.post("/v1/agent/chats/:id/read", async (req, res) => {
     const ownerId = await requireChatOwner(req, res);
     if (!ownerId) return;
     return res.json(await markChatRead(ownerId, req.params.id));
-  } catch (err) {
-    return fail(res, err, err.status || 404);
-  }
-});
-
-app.get("/v1/pulses/current", async (req, res) => {
-  try {
-    const student = await studentFromRequest(req);
-    const voterKey = voterKeyFromRequest(req, student);
-    const pulse = await currentPulse(req.query.school || DEFAULT_SCHOOL);
-    return res.json(await pulsePayload(pulse, voterKey));
-  } catch (err) {
-    return fail(res, err, err.status || 404);
-  }
-});
-
-app.get("/v1/pulses/:id/results", async (req, res) => {
-  try {
-    const pulse = await loadPulse(req.params.id);
-    return res.json(resultsView(pulse));
-  } catch (err) {
-    return fail(res, err, err.status || 404);
-  }
-});
-
-app.get("/v1/pulses/:id/export.csv", async (req, res) => {
-  try {
-    const pulse = await loadPulse(req.params.id);
-    res.setHeader("Content-Type", "text/csv; charset=utf-8");
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="${pulse.id}-results.csv"`
-    );
-    return res.send(exportResultsCsv(pulse));
-  } catch (err) {
-    return fail(res, err, err.status || 404);
-  }
-});
-
-app.post("/v1/pulses/:id/vote", async (req, res) => {
-  try {
-    const student = await studentFromRequest(req);
-    const voterKey = requireVoterKey(req, student);
-    const out = await castVote(req.params.id, {
-      answers: req.body?.answers,
-      grade: req.body?.grade,
-      comment: req.body?.comment,
-      voterKey,
-    });
-    return res.json({
-      ok: true,
-      pulse: out.payload,
-      results: out.results,
-    });
-  } catch (err) {
-    if (err.status === 409) {
-      return res.status(409).json({
-        error: "Already voted.",
-        pulse: err.payload,
-        results: err.results,
-      });
-    }
-    return fail(res, err, err.status || 400);
-  }
-});
-
-app.get("/v1/pulses/:id", async (req, res) => {
-  try {
-    const student = await studentFromRequest(req);
-    const voterKey = voterKeyFromRequest(req, student);
-    const pulse = await loadPulse(req.params.id);
-    return res.json(await pulsePayload(pulse, voterKey));
   } catch (err) {
     return fail(res, err, err.status || 404);
   }

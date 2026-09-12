@@ -5,7 +5,6 @@ School polling for Eastside Prep first. Students answer short surveys. Adults ge
 JYPE is Jeffery Xu, Yan Levin, Prasham Dhruva, and Everette Deng. Frontier Cascadia, 12 September 2026, Founders Hall, UW.
 
 Live site: [epsynapse.com](https://epsynapse.com)
-Pulse: [epsynapse.com/pulse](https://epsynapse.com/pulse). Board: [epsynapse.com/board](https://epsynapse.com/board).
 API health: [api.epsynapse.com/health](https://api.epsynapse.com/health)
 iPhone / iPad app: [docs/IOS.md](docs/IOS.md)
 

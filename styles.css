@@ -632,66 +632,6 @@ html[data-resolved-theme="dark"] .edu-check.lg-refraction::after {
   font-size: var(--text-subhead);
 }
 
-.stage-out {
-  align-content: center;
-  padding-top: calc(var(--corner-orb) + var(--corner-pad) + 0.5rem);
-  padding-bottom: 4.5rem;
-}
-
-.stage-out-card {
-  max-width: 26rem;
-  text-align: center;
-}
-
-.stage-out-mark {
-  margin: 0;
-  font-family: var(--display);
-  font-size: var(--text-large-title);
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: var(--accent);
-}
-
-.stage-out-lead {
-  margin: 0.7rem 0 1.4rem;
-  font-size: var(--text-body);
-  color: var(--muted);
-}
-
-.stage-out-go {
-  display: inline-block;
-  padding: 0.62rem 1.15rem;
-  border-radius: 14px;
-  font-size: var(--text-subhead);
-  font-weight: 650;
-  text-decoration: none;
-  color: #0b1f3a;
-  background: var(--accent);
-}
-
-.stage-out-counts {
-  display: block;
-  margin-top: 0.85rem;
-  font-size: var(--text-subhead);
-  color: var(--muted);
-  text-decoration: underline;
-  text-underline-offset: 0.18em;
-}
-
-.stage-out-foot {
-  display: block;
-  margin-top: 2.4rem;
-  font-size: var(--text-caption);
-  color: var(--muted);
-  text-decoration: underline;
-  text-underline-offset: 0.16em;
-}
-
-.stage-pulse-links a {
-  text-decoration: underline;
-  text-underline-offset: 0.16em;
-}
-
 /* ---- Education app shell (electives-inspired panel grid) ---- */
 .stage-full {
   display: block;
@@ -2440,40 +2380,6 @@ a.yan-chat-widget {
   color: var(--accent);
 }
 
-.edu-pulse-strip {
-  margin: -0.35rem 0 1.1rem;
-}
-
-.edu-pulse-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.75rem 0.95rem;
-  border: 1px solid var(--hairline);
-  border-radius: 16px;
-  background: var(--panel-bg);
-}
-
-.edu-pulse-kicker {
-  margin: 0;
-  font-size: var(--text-footnote);
-  font-weight: 650;
-  color: var(--accent);
-}
-
-.edu-pulse-prompt {
-  margin: 0.2rem 0 0;
-  font-size: var(--text-subhead);
-  color: var(--fg);
-}
-
-.edu-pulse-go {
-  flex: 0 0 auto;
-  font-size: var(--text-footnote);
-  font-weight: 650;
-  color: var(--fg);
-}
 
 .edu-sheet-backdrop {
   position: fixed;
@@ -3112,6 +3018,3 @@ html[data-auth="out"] #settings-gated {
   display: none !important;
 }
 
-html[data-auth="in"] #stage-out {
-  display: none !important;
-}
