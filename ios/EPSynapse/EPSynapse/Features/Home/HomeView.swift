@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct HomeView: View {
     @EnvironmentObject private var session: SessionStore
@@ -7,6 +8,7 @@ struct HomeView: View {
     @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     @State private var showSettings = false
+    @State private var scrollToTopTick = 0
 
     private var isWide: Bool {
         AdaptiveLayout.isWideLayout(horizontal: horizontalSizeClass, vertical: verticalSizeClass)
@@ -17,35 +19,35 @@ struct HomeView: View {
     }
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("EPSynapse")
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundStyle(EPSTheme.accent)
-                        .tracking(0.8)
-                        .padding(.bottom, 2)
-                        .id("home-top")
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("EPSynapse")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(EPSTheme.accent)
+                    .tracking(0.8)
+                    .padding(.bottom, 2)
 
-                    if session.isSignedIn {
-                        dashboardContent
-                    } else {
-                        signedOutContent
-                    }
-                }
-                .padding(.horizontal, pagePad)
-                .padding(.top, AdaptiveLayout.isPad ? 96 : 88)
-                .padding(.bottom, 108)
-                .frame(maxWidth: AdaptiveLayout.pageMaxWidth)
-                .frame(maxWidth: .infinity)
-            }
-            .scrollIndicators(.hidden)
-            .scrollDismissesKeyboard(.never)
-            .onReceive(NotificationCenter.default.publisher(for: .epsScrollHomeToTop)) { _ in
-                withAnimation(.easeOut(duration: 0.35)) {
-                    proxy.scrollTo("home-top", anchor: .top)
+                if session.isSignedIn {
+                    dashboardContent
+                } else {
+                    signedOutContent
                 }
             }
+            .padding(.horizontal, pagePad)
+            .padding(.top, AdaptiveLayout.isPad ? 96 : 88)
+            .padding(.bottom, 108)
+            .frame(maxWidth: AdaptiveLayout.pageMaxWidth)
+            .frame(maxWidth: .infinity)
+            .background {
+                ScrollToTopBridge(tick: scrollToTopTick)
+                    .frame(width: 0, height: 0)
+                    .accessibilityHidden(true)
+            }
+        }
+        .scrollIndicators(.hidden)
+        .scrollDismissesKeyboard(.never)
+        .onReceive(NotificationCenter.default.publisher(for: .epsScrollHomeToTop)) { _ in
+            scrollToTopTick += 1
         }
         .refreshable {
             guard session.isSignedIn else { return }
@@ -122,5 +124,47 @@ struct HomeView: View {
                     .foregroundStyle(EPSTheme.muted)
             }
         }
+    }
+}
+
+/// Walks up to the real UIScrollView and sets contentOffset to the finger-rest top.
+private struct ScrollToTopBridge: UIViewRepresentable {
+    var tick: Int
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.isUserInteractionEnabled = false
+        view.backgroundColor = .clear
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        guard tick > 0, context.coordinator.lastTick != tick else { return }
+        context.coordinator.lastTick = tick
+        DispatchQueue.main.async {
+            var node: UIView? = uiView
+            while let current = node {
+                if let scroll = current as? UIScrollView {
+                    let top = CGPoint(x: scroll.contentOffset.x, y: -scroll.adjustedContentInset.top)
+                    UIView.animate(
+                        withDuration: 0.35,
+                        delay: 0,
+                        options: [.curveEaseOut, .allowUserInteraction]
+                    ) {
+                        scroll.contentOffset = top
+                    }
+                    return
+                }
+                node = current.superview
+            }
+        }
+    }
+
+    final class Coordinator {
+        var lastTick = 0
     }
 }
