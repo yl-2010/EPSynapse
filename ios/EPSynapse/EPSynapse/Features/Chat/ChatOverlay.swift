@@ -62,6 +62,15 @@ struct ChatOverlay: View {
                 chat.wantsChatOpen = false
             }
         }
+        .onChange(of: isOpen) { _, open in
+            chat.composerOpen = open
+        }
+        .onAppear {
+            chat.composerOpen = isOpen
+        }
+        .onDisappear {
+            chat.composerOpen = false
+        }
     }
 
     private var composer: some View {
@@ -323,17 +332,25 @@ final class KeyboardAnchorView: UIView {
 
     var keyboardHost: UIView? {
         var view: UIView? = superview ?? window
+        var fallback: UIView?
         while let current = view {
             let name = NSStringFromClass(type(of: current))
-            if name.contains("InputSetHost")
-                || name.contains("InputSetContainer")
-                || name.contains("UIKeyboard")
-                || (name.contains("Keyboard") && current is UIWindow) {
-                return current
+            if AgentKeyboardScrub.isKeyboardHostName(name) {
+                if name.contains("UIKeyboardItemContainer")
+                    || name.contains("UIInputSetHost")
+                    || name.contains("UIInputSetContainer")
+                    || name.contains("UITrackingWindow")
+                    || (current is UIWindow && AgentKeyboardScrub.isKeyboardChrome(current as! UIWindow)) {
+                    return current
+                }
+                fallback = current
             }
             view = current.superview
         }
-        return window
+        if let window, AgentKeyboardScrub.isKeyboardChrome(window) {
+            return window
+        }
+        return fallback
     }
 }
 
@@ -611,6 +628,8 @@ enum AgentKeyboardScrub {
     private(set) static var coverage: CGFloat = 0
     private static var lastKeyboardFrame: CGRect = .zero
     private static var observers: [NSObjectProtocol] = []
+    private static var displayLink: CADisplayLink?
+    private static var currentOffset: CGFloat = 0
 
     static var keyboardFrame: CGRect { lastKeyboardFrame }
 
@@ -630,24 +649,22 @@ enum AgentKeyboardScrub {
         if lastKeyboardFrame.height < 20 {
             lastKeyboardFrame = currentKeyboardFrame()
         }
+        currentOffset = 0
         resolveHosts()
         coverage = max(lastKeyboardFrame.height, hosts.first?.bounds.height ?? 0)
         if coverage < 20 { coverage = 0 }
+        startDisplayLink()
     }
 
     static func setOffset(_ dy: CGFloat) {
-        if hosts.isEmpty { resolveHosts() }
-        let transform = CGAffineTransform(translationX: 0, y: max(0, dy))
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        for host in hosts {
-            host.transform = transform
-        }
-        CATransaction.commit()
+        currentOffset = max(0, dy)
+        applyOffset()
     }
 
     static func snapBack() {
+        stopDisplayLink()
         let views = hosts
+        currentOffset = 0
         UIView.animate(
             withDuration: 0.32,
             delay: 0,
@@ -664,7 +681,10 @@ enum AgentKeyboardScrub {
     }
 
     static func finishOffscreen(from dy: CGFloat, extra: CGFloat, duration: TimeInterval, then: @escaping () -> Void) {
+        stopDisplayLink()
+        if hosts.isEmpty { resolveHosts() }
         let views = hosts
+        currentOffset = dy + extra
         UIView.animate(
             withDuration: duration,
             delay: 0,
@@ -681,6 +701,8 @@ enum AgentKeyboardScrub {
     }
 
     static func commitHide() {
+        stopDisplayLink()
+        currentOffset = 0
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         UIView.setAnimationsEnabled(false)
@@ -694,9 +716,61 @@ enum AgentKeyboardScrub {
     }
 
     static func cancel() {
+        stopDisplayLink()
+        currentOffset = 0
         resetHostTransforms()
         hosts = []
         coverage = 0
+    }
+
+    static func isKeyboardHostName(_ name: String) -> Bool {
+        name.contains("UIKeyboardItemContainer")
+            || name.contains("UIKeyboardItem")
+            || name.contains("UITrackingWindowView")
+            || name.contains("UIInputSetHost")
+            || name.contains("UIInputSetContainer")
+            || name.contains("UIRemoteKeyboard")
+            || name.contains("UIKeyboard")
+            || name.contains("InputSetHost")
+            || name.contains("InputSetContainer")
+    }
+
+    static func isKeyboardChrome(_ window: UIWindow) -> Bool {
+        let name = NSStringFromClass(type(of: window))
+        return name.contains("Keyboard")
+            || name.contains("TextEffects")
+            || name.contains("RemoteKeyboard")
+            || name.contains("InputSet")
+            || name.contains("UIEditingOverlay")
+            || name.contains("UITracking")
+    }
+
+    private static func applyOffset() {
+        if hosts.isEmpty { resolveHosts() }
+        let transform = CGAffineTransform(translationX: 0, y: currentOffset)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for host in hosts {
+            host.transform = transform
+        }
+        CATransaction.commit()
+    }
+
+    private static func startDisplayLink() {
+        guard displayLink == nil else { return }
+        let link = CADisplayLink(target: DisplayLinkProxy.shared, selector: #selector(DisplayLinkProxy.tick))
+        link.add(to: .main, forMode: .common)
+        displayLink = link
+    }
+
+    private static func stopDisplayLink() {
+        displayLink?.invalidate()
+        displayLink = nil
+    }
+
+    fileprivate static func tickDisplayLink() {
+        guard displayLink != nil, currentOffset > 0 else { return }
+        applyOffset()
     }
 
     private static func resetHostTransforms() {
@@ -741,35 +815,80 @@ enum AgentKeyboardScrub {
     }
 
     private static func resolveHosts() {
-        // Walk from the composer accessory first. That view lives in the
-        // keyboard window even when the app's window list hides it.
-        let host = KeyboardAnchorView.shared.keyboardHost
-            ?? firstSubview(named: "UIInputSetHostView")
-            ?? firstSubview(named: "UIInputSetContainerView")
-            ?? firstSubview(named: "UIKeyboard")
-            ?? frameMatchedHost()
-            ?? allWindows().first(where: isKeyboardChrome)
-            ?? overlappingKeyboardWindow()
-        hosts = host.map { [$0] } ?? []
+        var candidates: [UIView] = []
+        func append(_ view: UIView?) {
+            guard let view, isSafeHost(view) else { return }
+            if candidates.contains(where: { $0 === view }) { return }
+            candidates.append(view)
+        }
+
+        append(KeyboardAnchorView.shared.keyboardHost)
+        for window in allWindows() {
+            collectKeyboardViews(in: window, into: &candidates)
+        }
+        if candidates.isEmpty {
+            append(frameMatchedHost())
+            append(overlappingKeyboardWindow())
+        }
+
+        hosts = pickHosts(candidates)
         if coverage < 20 {
-            coverage = max(lastKeyboardFrame.height, host?.bounds.height ?? 0)
+            coverage = max(lastKeyboardFrame.height, hosts.first?.bounds.height ?? 0)
             if coverage < 20 { coverage = 0 }
         }
     }
 
-    private static func firstSubview(named snippet: String) -> UIView? {
-        for window in allWindows() {
-            if let match = firstSubview(in: window, named: snippet) { return match }
+    private static func collectKeyboardViews(in root: UIView, into candidates: inout [UIView]) {
+        let name = NSStringFromClass(type(of: root))
+        let isItem = name.contains("UIKeyboardItem") && !name.contains("Container")
+        if !isItem, isKeyboardHostName(name), root.bounds.height > 30, isSafeHost(root) {
+            if !candidates.contains(where: { $0 === root }) {
+                candidates.append(root)
+            }
         }
-        return nil
+        for sub in root.subviews {
+            collectKeyboardViews(in: sub, into: &candidates)
+        }
     }
 
-    private static func firstSubview(in root: UIView, named snippet: String) -> UIView? {
-        if NSStringFromClass(type(of: root)).contains(snippet) { return root }
-        for sub in root.subviews {
-            if let match = firstSubview(in: sub, named: snippet) { return match }
+    private static func pickHosts(_ views: [UIView]) -> [UIView] {
+        let target = lastKeyboardFrame
+        let ranked = views.sorted { lhs, rhs in
+            hostScore(lhs, target: target) < hostScore(rhs, target: target)
         }
-        return nil
+        var picked: [UIView] = []
+        for view in ranked {
+            if picked.contains(where: { $0 === view || view.isDescendant(of: $0) || $0.isDescendant(of: view) }) {
+                continue
+            }
+            picked.append(view)
+        }
+        return picked
+    }
+
+    private static func hostScore(_ view: UIView, target: CGRect) -> CGFloat {
+        let name = NSStringFromClass(type(of: view))
+        var bonus: CGFloat = 0
+        if name.contains("UIKeyboardItemContainer") { bonus -= 80 }
+        else if name.contains("UIInputSetHost") { bonus -= 40 }
+        else if name.contains("UITrackingWindow") { bonus -= 20 }
+        else if name.contains("UIKeyboardItem") { bonus += 120 }
+        guard target.height > 20 else { return view.bounds.height > 30 ? bonus : 400 }
+        let frame = view.convert(view.bounds, to: nil)
+        return abs(frame.minY - target.minY)
+            + abs(frame.height - target.height)
+            + bonus
+    }
+
+    private static func isSafeHost(_ view: UIView) -> Bool {
+        if let window = view as? UIWindow, window === keyWindow() {
+            return false
+        }
+        if let key = keyWindow() {
+            if view === key.rootViewController?.view { return false }
+            if view === key { return false }
+        }
+        return true
     }
 
     private static func frameMatchedHost() -> UIView? {
@@ -781,7 +900,9 @@ enum AgentKeyboardScrub {
         let key = keyWindow()
 
         func consider(_ view: UIView) {
-            if let key, view === key || view.isDescendant(of: key) { return }
+            guard isSafeHost(view) else { return }
+            let name = NSStringFromClass(type(of: view))
+            if let key, view.isDescendant(of: key), !isKeyboardHostName(name) { return }
             let frame = view.convert(view.bounds, to: nil)
             guard frame.height > 30, frame.height < target.height * 1.9 else { return }
             let score = abs(frame.minY - target.minY)
@@ -797,7 +918,7 @@ enum AgentKeyboardScrub {
             for sub in view.subviews { walk(sub) }
         }
 
-        for window in allWindows() where window !== key {
+        for window in allWindows() {
             walk(window)
         }
         return bestScore < 220 ? best : nil
@@ -815,15 +936,6 @@ enum AgentKeyboardScrub {
             }
         }
         return nil
-    }
-
-    private static func isKeyboardChrome(_ window: UIWindow) -> Bool {
-        let name = NSStringFromClass(type(of: window))
-        return name.contains("Keyboard")
-            || name.contains("TextEffects")
-            || name.contains("RemoteKeyboard")
-            || name.contains("InputSet")
-            || name.contains("UIEditingOverlay")
     }
 
     private static func allWindows() -> [UIWindow] {
@@ -871,5 +983,13 @@ enum AgentKeyboardScrub {
             if let key = windowScene.keyWindow { return key }
         }
         return nil
+    }
+}
+
+private final class DisplayLinkProxy: NSObject {
+    static let shared = DisplayLinkProxy()
+
+    @objc func tick() {
+        AgentKeyboardScrub.tickDisplayLink()
     }
 }

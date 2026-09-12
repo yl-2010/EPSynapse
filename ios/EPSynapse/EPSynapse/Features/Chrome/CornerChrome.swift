@@ -9,6 +9,7 @@ extension Notification.Name {
 struct CornerChrome: View {
     @EnvironmentObject private var theme: ThemeStore
     @EnvironmentObject private var session: SessionStore
+    @EnvironmentObject private var chat: ChatStore
 
     private var orbSide: CGFloat { AdaptiveLayout.isPad ? 60 : 52 }
     private var cornerPad: CGFloat { AdaptiveLayout.isPad ? 20 : 16 }
@@ -35,10 +36,14 @@ struct CornerChrome: View {
                     Spacer(minLength: 0)
                         .allowsHitTesting(false)
                     HStack(alignment: .bottom) {
-                        settingsButton
+                        if !chat.composerOpen {
+                            settingsButton
+                                .transition(.opacity.combined(with: .scale(scale: 0.86)))
+                        }
                         Spacer(minLength: 0)
                             .allowsHitTesting(false)
                     }
+                    .animation(.spring(response: 0.38, dampingFraction: 0.86), value: chat.composerOpen)
                 }
                 .padding(cornerPad)
                 .safeAreaPadding(.bottom)

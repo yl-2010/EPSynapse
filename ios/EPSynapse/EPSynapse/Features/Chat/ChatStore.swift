@@ -17,6 +17,7 @@ final class ChatStore: ObservableObject {
     @Published var historyLoading = false
     @Published var historyPanelWidth: CGFloat = 280
     @Published var wantsChatOpen = false
+    @Published var composerOpen = false
 
     private let api = APIClient.shared
     private let defaults = UserDefaults.standard
