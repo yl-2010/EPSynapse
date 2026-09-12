@@ -20,4 +20,6 @@ npm install --prefix server
 npm run server
 ```
 
-See also [`STARTUP.md`](./STARTUP.md) and [`PUBLIC_TUNNEL.md`](./PUBLIC_TUNNEL.md).
+Pushed `server/` changes do not go live until someone on the Mac Studio pulls and restarts. That sequence is at the top of [`STARTUP.md`](./STARTUP.md).
+
+See also [`PUBLIC_TUNNEL.md`](./PUBLIC_TUNNEL.md).

@@ -8,7 +8,7 @@ Live site: [epsynapse.com](https://epsynapse.com)
 API health: [api.epsynapse.com/health](https://api.epsynapse.com/health)
 iPhone / iPad app: [docs/IOS.md](docs/IOS.md)
 
-What we are building lives in [ideas.md](ideas.md). Agents follow [AGENTS.md](AGENTS.md). Mac API startup is [docs/STARTUP.md](docs/STARTUP.md).
+What we are building lives in [ideas.md](ideas.md). Agents follow [AGENTS.md](AGENTS.md). Mac API startup, including how to pull and restart Express on the Mac Studio after a server change, is [docs/STARTUP.md](docs/STARTUP.md).
 
 ## Run locally
 
