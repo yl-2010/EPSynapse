@@ -1,7 +1,7 @@
 /**
  * Google-account student profiles and session cookies.
  * File id is google__{sub}. School + student ID are optional settings.
- * Tokens stay on disk, never in publicProfile().
+ * Tokens and the model key stay on disk, never the raw secret in publicProfile().
  */
 
 import { randomBytes } from "node:crypto";
@@ -17,6 +17,8 @@ const MAX_LEN = 80;
 const SESSION_MAX_AGE = 2592000;
 const SKEW_SEC = 90;
 const ID_CHARS = /^[A-Za-z0-9._@+\- ]+$/;
+const PROVIDER_IDS = new Set(["groq", "gemini", "openrouter"]);
+const MODEL_KEY_MAX = 256;
 
 const sessions = new Map();
 const sessionsReady = loadSessions();
@@ -62,6 +64,24 @@ export function normalizeSchool(raw) {
   if (school.length > MAX_LEN) throw new Error("School is too long.");
   if (/[/\\\0]/.test(school)) throw new Error("Invalid school.");
   return school;
+}
+
+export function normalizeModelProvider(raw) {
+  const id = String(raw || "")
+    .trim()
+    .toLowerCase();
+  return PROVIDER_IDS.has(id) ? id : "groq";
+}
+
+export function normalizeModelKey(raw) {
+  const key = String(raw ?? "").trim();
+  if (key.length > MODEL_KEY_MAX) throw new Error("API key is too long.");
+  return key;
+}
+
+function modelKeyHint(key) {
+  const raw = String(key || "");
+  return raw.length >= 4 ? raw.slice(-4) : "";
 }
 
 export function normalizeStudentId(raw) {
@@ -127,6 +147,8 @@ function hydrate(raw) {
     studentId: String(src.studentId || ""),
     canvasHost: String(src.canvasHost || DEFAULT_CANVAS_HOST),
     canvasToken: String(src.canvasToken || ""),
+    modelKey: String(src.modelKey || ""),
+    modelProvider: normalizeModelProvider(src.modelProvider),
     displayName: String(src.displayName || ""),
     graph: {
       accessToken: String(graph.accessToken || ""),
@@ -177,6 +199,9 @@ export function publicProfile(student) {
     canvasHost: s.canvasHost,
     displayName: s.displayName,
     canvasConnected: Boolean(s.canvasToken),
+    modelKeySet: Boolean(s.modelKey),
+    modelProvider: s.modelProvider || "groq",
+    modelKeyHint: modelKeyHint(s.modelKey),
     onedriveConnected: graphConnected(s.graph),
     onedriveEmail: s.graph.email || "",
     onedrivePending: publicPending(s.graph.pending),
@@ -255,6 +280,8 @@ export async function upsertGoogleStudent({ googleSub, email, googleName, pictur
     studentId: "",
     canvasHost: DEFAULT_CANVAS_HOST,
     canvasToken: "",
+    modelKey: "",
+    modelProvider: "groq",
     displayName: "",
     graph: emptyGraph(),
     outlook: emptyOutlook(),
@@ -286,6 +313,8 @@ export async function updateStudentProfile(student, patch) {
     s.canvasHost = host || DEFAULT_CANVAS_HOST;
   }
   if (src.canvasToken !== undefined) s.canvasToken = String(src.canvasToken);
+  if (src.modelKey !== undefined) s.modelKey = normalizeModelKey(src.modelKey);
+  if (src.modelProvider !== undefined) s.modelProvider = normalizeModelProvider(src.modelProvider);
   if (src.displayName !== undefined) {
     const name = String(src.displayName).trim();
     if (name) s.displayName = name;

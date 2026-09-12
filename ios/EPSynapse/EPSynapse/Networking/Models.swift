@@ -39,6 +39,9 @@ struct Profile: Codable, Equatable {
   var outlookEmail: String
   var onedrivePending: DevicePending?
   var outlookPending: DevicePending?
+  var modelKeySet: Bool
+  var modelProvider: String
+  var modelKeyHint: String
   var sessionId: String?
 
   init(
@@ -58,6 +61,9 @@ struct Profile: Codable, Equatable {
     outlookEmail: String = "",
     onedrivePending: DevicePending? = nil,
     outlookPending: DevicePending? = nil,
+    modelKeySet: Bool = false,
+    modelProvider: String = "groq",
+    modelKeyHint: String = "",
     sessionId: String? = nil
   ) {
     self.school = school
@@ -76,6 +82,9 @@ struct Profile: Codable, Equatable {
     self.outlookEmail = outlookEmail
     self.onedrivePending = onedrivePending
     self.outlookPending = outlookPending
+    self.modelKeySet = modelKeySet
+    self.modelProvider = modelProvider
+    self.modelKeyHint = modelKeyHint
     self.sessionId = sessionId
   }
 
@@ -97,6 +106,10 @@ struct Profile: Codable, Equatable {
     outlookEmail = c.string(.outlookEmail)
     onedrivePending = try c.decodeIfPresent(DevicePending.self, forKey: .onedrivePending)
     outlookPending = try c.decodeIfPresent(DevicePending.self, forKey: .outlookPending)
+    modelKeySet = c.bool(.modelKeySet)
+    modelProvider = c.string(.modelProvider)
+    if modelProvider.isEmpty { modelProvider = "groq" }
+    modelKeyHint = c.string(.modelKeyHint)
     let sid = c.string(.sessionId)
     sessionId = sid.isEmpty ? nil : sid
   }
@@ -317,6 +330,29 @@ struct ChatTurn: Identifiable, Equatable {
 }
 
 struct EmptyJSON: Encodable {}
+
+struct SaveAgentBody: Encodable {
+  var provider: String?
+  var modelKey: String?
+  var clear: Bool?
+
+  enum CodingKeys: String, CodingKey {
+    case provider, modelKey, clear
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    if let provider, !provider.isEmpty {
+      try c.encode(provider, forKey: .provider)
+    }
+    if let modelKey, !modelKey.isEmpty {
+      try c.encode(modelKey, forKey: .modelKey)
+    }
+    if clear == true {
+      try c.encode(true, forKey: .clear)
+    }
+  }
+}
 
 struct SaveMeBody: Encodable {
   var school: String

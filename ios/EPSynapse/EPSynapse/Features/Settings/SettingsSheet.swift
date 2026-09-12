@@ -37,6 +37,10 @@ struct SettingsSheet: View {
         .presentationBackground(.ultraThinMaterial)
         .onAppear { hydrate() }
         .onChange(of: session.profile) { _, _ in hydrate() }
+        .onChange(of: session.provider) { old, new in
+            guard old != new, session.isSignedIn else { return }
+            Task { await session.saveProvider(new) }
+        }
         .task(id: school) {
             guard session.isSignedIn else { return }
             try? await Task.sleep(nanoseconds: 280_000_000)
@@ -189,21 +193,25 @@ struct SettingsSheet: View {
                 .tint(EPSTheme.fg)
             }
 
-            fieldLabel("Model key (stays on this device)")
+            fieldLabel("Model key (this account)")
             glassField {
                 SecureField("Groq / Gemini / OpenRouter", text: $draftKey)
             }
 
             HStack(spacing: 8) {
                 goldButton("Save key") {
-                    session.saveKey(draftKey)
-                    if !draftKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        draftKey = ""
+                    Task {
+                        await session.saveKey(draftKey)
+                        if session.profile?.modelKeySet == true {
+                            draftKey = ""
+                        }
                     }
                 }
                 glassAction("Clear key") {
-                    session.clearKey()
-                    draftKey = ""
+                    Task {
+                        await session.clearKey()
+                        draftKey = ""
+                    }
                 }
             }
             Text(session.keyStatus)

@@ -338,6 +338,41 @@ app.post("/v1/me", async (req, res) => {
   }
 });
 
+app.post("/v1/me/agent", async (req, res) => {
+  try {
+    const student = await requireStudent(req, res);
+    if (!student) return;
+
+    const patch = {};
+    if (req.body?.provider !== undefined) {
+      const providerId = String(req.body.provider || "").trim().toLowerCase();
+      if (providerId && !PROVIDERS[providerId]) {
+        return res.status(400).json({ error: "Unknown provider." });
+      }
+      if (providerId) patch.modelProvider = providerId;
+    }
+
+    if (req.body?.clear) {
+      patch.modelKey = "";
+    } else if (req.body?.modelKey !== undefined) {
+      const pasted = String(req.body.modelKey || "").trim();
+      if (!pasted) {
+        return res.status(400).json({ error: "Paste a key first." });
+      }
+      patch.modelKey = pasted;
+    }
+
+    if (!Object.keys(patch).length) {
+      return sessionJson(req, res, student, sessionIdFromRequest(req));
+    }
+
+    const updated = await updateStudentProfile(student, patch);
+    return sessionJson(req, res, updated, sessionIdFromRequest(req));
+  } catch (err) {
+    return fail(res, err, err.status || 400);
+  }
+});
+
 app.post("/v1/me/logout", async (req, res) => {
   const headerSid = String(req.get("x-epsynapse-session") || "").trim();
   const cookieHeader = String(req.headers.cookie || "");
@@ -700,7 +735,7 @@ app.post("/v1/agent/chat", async (req, res) => {
   const student = await requireStudent(req, res);
   if (!student) return;
 
-  const providerId = String(req.body?.provider || "groq");
+  const providerId = String(req.body?.provider || student.modelProvider || "groq");
   const provider = PROVIDERS[providerId];
   if (!provider) {
     return res.status(400).json({ error: "Unknown provider." });
@@ -711,7 +746,7 @@ app.post("/v1/agent/chat", async (req, res) => {
     return res.status(400).json({ error: "Send at least one user message." });
   }
 
-  const { key, source } = resolveApiKey(req, providerId);
+  const { key, source } = resolveApiKey(req, providerId, student);
   if (!key) {
     return res.status(401).json({
       error:

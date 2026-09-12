@@ -277,6 +277,7 @@
       paintAccount();
       paintOnedrive();
       paintOutlook();
+      await migrateLocalKey();
       await loadDashboard();
     } catch (err) {
       const msg =
@@ -401,13 +402,56 @@
     return sheet.classList.contains("is-keys");
   }
 
+  function accountHasKey() {
+    return Boolean(me && me.modelKeySet);
+  }
+
+  function applyAgentFromMe() {
+    const id = (me && me.modelProvider) || localStorage.getItem(LS_PROV) || "groq";
+    if (providerSel && [].some.call(providerSel.options, (o) => o.value === id)) {
+      providerSel.value = id;
+    }
+    localStorage.setItem(LS_PROV, providerSel.value || id);
+    document.documentElement.dataset.modelProvider = providerSel.value || id;
+    refreshKeyStatus();
+  }
+
+  async function migrateLocalKey() {
+    if (!signedInViaGoogle()) return;
+    if (accountHasKey()) {
+      localStorage.removeItem(LS_KEY);
+      applyAgentFromMe();
+      return;
+    }
+    const leftover = localStorage.getItem(LS_KEY) || "";
+    if (!leftover) {
+      applyAgentFromMe();
+      return;
+    }
+    try {
+      me = await api("/v1/me/agent", {
+        method: "POST",
+        body: JSON.stringify({
+          provider: providerSel.value || localStorage.getItem(LS_PROV) || "groq",
+          modelKey: leftover,
+        }),
+      });
+      localStorage.removeItem(LS_KEY);
+    } catch {
+      /* leftover stays until they save again */
+    }
+    applyAgentFromMe();
+  }
+
   function paintKeysSummary() {
     const el = document.getElementById("keys-summary");
     if (!el) return;
-    const key = localStorage.getItem(LS_KEY) || "";
-    const id = providerSel.value || localStorage.getItem(LS_PROV) || "groq";
+    const id = providerSel.value || (me && me.modelProvider) || localStorage.getItem(LS_PROV) || "groq";
     const bits = [];
-    if (key) bits.push(`${id} · ends ${key.slice(-4)}`);
+    if (accountHasKey()) {
+      const hint = me.modelKeyHint ? ` · ends ${me.modelKeyHint}` : "";
+      bits.push(`${id}${hint}`);
+    }
     if (me && me.canvasConnected) bits.push("Canvas");
     el.textContent = bits.length ? bits.join(" · ") : "Groq and Canvas";
   }
@@ -807,25 +851,29 @@
   }
 
   function refreshKeyStatus() {
-    const key = localStorage.getItem(LS_KEY) || "";
-    const id = providerSel.value || localStorage.getItem(LS_PROV) || "groq";
+    const hasKey = accountHasKey();
+    const id = providerSel.value || (me && me.modelProvider) || localStorage.getItem(LS_PROV) || "groq";
     const entry = document.getElementById("key-entry");
     const ready = document.getElementById("key-ready");
     const readyLabel = document.getElementById("key-ready-label");
     const replacing = entry && entry.dataset.replace === "1";
-    if (entry) entry.hidden = Boolean(key) && !replacing;
-    if (ready) ready.hidden = !key;
-    if (readyLabel) readyLabel.textContent = key ? `${id} · ends ${key.slice(-4)}` : "";
+    if (entry) entry.hidden = hasKey && !replacing;
+    if (ready) ready.hidden = !hasKey;
+    if (readyLabel) {
+      readyLabel.textContent = hasKey
+        ? `${id}${me.modelKeyHint ? ` · ends ${me.modelKeyHint}` : ""}`
+        : "";
+    }
     paintKeysSummary();
-    if (key && !replacing) {
+    if (hasKey && !replacing) {
       setStatus(keyStatus, "");
       return;
     }
-    if (key && replacing) {
-      setStatus(keyStatus, "Paste a new key to replace the one saved here.");
+    if (hasKey && replacing) {
+      setStatus(keyStatus, "Paste a new key to replace the one on this account.");
       return;
     }
-    setStatus(keyStatus, "");
+    setStatus(keyStatus, signedInViaGoogle() ? "One key for the website and iPhone." : "");
   }
 
   function fillProviders(list) {
@@ -836,10 +884,12 @@
       opt.textContent = p.label + (p.recommended ? " · recommended" : "");
       providerSel.appendChild(opt);
     });
-    const chosen = localStorage.getItem(LS_PROV) || "groq";
+    const chosen = (me && me.modelProvider) || localStorage.getItem(LS_PROV) || "groq";
     if ([].some.call(providerSel.options, (o) => o.value === chosen)) {
       providerSel.value = chosen;
     }
+    localStorage.setItem(LS_PROV, providerSel.value || chosen);
+    document.documentElement.dataset.modelProvider = providerSel.value || chosen;
   }
 
   async function boot() {
@@ -873,6 +923,7 @@
       try {
         me = await api("/v1/me");
         fillFormFromMe();
+        await migrateLocalKey();
         await loadDashboard();
       } catch {
         me = null;
@@ -998,6 +1049,7 @@
       paintCanvasToken();
       paintOnedrive();
       paintOutlook();
+      applyAgentFromMe();
       await loadDashboard();
     } catch (err) {
       if (err.status === 401) {
@@ -1154,7 +1206,7 @@
     }
   });
 
-  document.getElementById("key-save").addEventListener("click", () => {
+  document.getElementById("key-save").addEventListener("click", async () => {
     if (!signedInViaGoogle()) {
       setStatus(keyStatus, NEED_GOOGLE);
       return;
@@ -1164,12 +1216,24 @@
       setStatus(keyStatus, "Paste a key first.");
       return;
     }
-    localStorage.setItem(LS_KEY, key);
-    localStorage.setItem(LS_PROV, providerSel.value || "groq");
-    document.getElementById("modelKey").value = "";
-    const entry = document.getElementById("key-entry");
-    if (entry) delete entry.dataset.replace;
-    refreshKeyStatus();
+    setStatus(keyStatus, "Saving…");
+    try {
+      me = await api("/v1/me/agent", {
+        method: "POST",
+        body: JSON.stringify({
+          provider: providerSel.value || "groq",
+          modelKey: key,
+        }),
+      });
+      localStorage.removeItem(LS_KEY);
+      localStorage.setItem(LS_PROV, providerSel.value || "groq");
+      document.getElementById("modelKey").value = "";
+      const entry = document.getElementById("key-entry");
+      if (entry) delete entry.dataset.replace;
+      applyAgentFromMe();
+    } catch (err) {
+      setStatus(keyStatus, err.message || "Could not save the key.");
+    }
   });
 
   document.getElementById("key-replace")?.addEventListener("click", () => {
@@ -1188,22 +1252,42 @@
     form.canvasToken?.focus();
   });
 
-  document.getElementById("key-clear").addEventListener("click", () => {
+  document.getElementById("key-clear").addEventListener("click", async () => {
     if (!signedInViaGoogle()) {
       setStatus(keyStatus, NEED_GOOGLE);
       return;
     }
-    localStorage.removeItem(LS_KEY);
-    document.getElementById("modelKey").value = "";
-    const entry = document.getElementById("key-entry");
-    if (entry) delete entry.dataset.replace;
-    refreshKeyStatus();
+    setStatus(keyStatus, "Clearing…");
+    try {
+      me = await api("/v1/me/agent", {
+        method: "POST",
+        body: JSON.stringify({ clear: true }),
+      });
+      localStorage.removeItem(LS_KEY);
+      document.getElementById("modelKey").value = "";
+      const entry = document.getElementById("key-entry");
+      if (entry) delete entry.dataset.replace;
+      applyAgentFromMe();
+    } catch (err) {
+      setStatus(keyStatus, err.message || "Could not clear the key.");
+    }
   });
 
-  providerSel.addEventListener("change", () => {
+  providerSel.addEventListener("change", async () => {
     if (!signedInViaGoogle()) return;
-    localStorage.setItem(LS_PROV, providerSel.value || "groq");
+    const provider = providerSel.value || "groq";
+    localStorage.setItem(LS_PROV, provider);
+    document.documentElement.dataset.modelProvider = provider;
     refreshKeyStatus();
+    try {
+      me = await api("/v1/me/agent", {
+        method: "POST",
+        body: JSON.stringify({ provider }),
+      });
+      applyAgentFromMe();
+    } catch {
+      /* picker still works locally until they save again */
+    }
   });
 
   boot();

@@ -1,6 +1,6 @@
 /**
  * Student personal-agent proxy.
- * Students paste their own free key. We never store it.
+ * Students paste their own free key. It lives on the Google account.
  * Optional DEMO_GROQ_KEY covers the table if nobody has pasted one yet.
  */
 
@@ -71,10 +71,12 @@ export function publicAgentConfig() {
   };
 }
 
-export function resolveApiKey(req, providerId) {
+export function resolveApiKey(req, providerId, student) {
   const header = req.get("authorization") || "";
   const bearer = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
   if (bearer) return { key: bearer, source: "student" };
+  const stored = String(student?.modelKey || "").trim();
+  if (stored) return { key: stored, source: "account" };
   if (providerId === "groq" && process.env.DEMO_GROQ_KEY) {
     return { key: process.env.DEMO_GROQ_KEY, source: "demo" };
   }

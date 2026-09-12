@@ -1,6 +1,6 @@
 # Student API keys for the personal agent
 
-Students bring their own free key. EPSynapse forwards each chat turn and does not store the key. It lives in `localStorage` on that browser.
+Students bring their own free key. EPSynapse stores it on the Google account, so the same key works on the website and iPhone. Chat turns still go through that student's key.
 
 Live page: https://epsynapse.com (chat pill on the dashboard). `/agent.html` redirects there.
 
@@ -30,4 +30,4 @@ Never commit the demo key.
 
 - We do not host an LLM on this Mac.
 - We do not put LM Studio on the Cloudflare Tunnel.
-- We do not keep student keys on disk or in the database. There is no database.
+- Student keys sit in the gitignored account file under `server/data/students/`, next to the Canvas token.

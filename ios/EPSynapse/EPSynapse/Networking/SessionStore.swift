@@ -9,7 +9,7 @@ final class SessionStore: ObservableObject {
 
   static let onedriveIdle = "School OneDrive. Tap Connect, then sign in with @eastsideprep.org."
   static let outlookIdle = "School Outlook. Same Microsoft sign-in, mail only."
-  static let keyIdle = "No model key. Groq is the short path: console.groq.com/keys"
+  static let keyIdle = "No model key on this account. Groq is the short path: console.groq.com/keys"
   static let googleFirst = "Sign in with Google first."
   static let signedInHint = "Signed in with Google. School and student ID let us match you at school."
 
@@ -74,7 +74,7 @@ final class SessionStore: ObservableObject {
       _ = await restoreGoogleSessionIfNeeded()
       providers = await configTask
       paintConnections()
-      refreshKeyStatus()
+      await syncAgentFromAccount()
       return
     }
 
@@ -91,7 +91,7 @@ final class SessionStore: ObservableObject {
 
     providers = await configTask
     paintConnections()
-    refreshKeyStatus()
+    await syncAgentFromAccount()
   }
 
   func signInWithGoogle() async {
@@ -110,6 +110,7 @@ final class SessionStore: ObservableObject {
       try await exchangeGoogleUser(result.user)
       settingsStatus = Self.signedInHint
       paintConnections()
+      await syncAgentFromAccount()
     } catch {
       if Self.isGoogleCancel(error) {
         settingsStatus = ""
@@ -266,21 +267,30 @@ final class SessionStore: ObservableObject {
     paintConnections()
   }
 
-  func saveKey(_ key: String) {
+  func saveKey(_ key: String) async {
     guard isSignedIn else { return }
     let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
     if trimmed.isEmpty {
       keyStatus = "Paste a key first."
       return
     }
-    modelKey = trimmed
-    refreshKeyStatus()
+    keyStatus = "Saving…"
+    await persistAgent(modelKey: trimmed, provider: provider)
   }
 
-  func clearKey() {
+  func clearKey() async {
     guard isSignedIn else { return }
-    modelKey = ""
-    refreshKeyStatus()
+    keyStatus = "Clearing…"
+    await persistAgent(clear: true)
+  }
+
+  func saveProvider(_ id: String) async {
+    let next = id.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !next.isEmpty else { return }
+    provider = next
+    guard isSignedIn else { return }
+    if profile?.modelProvider == next { return }
+    await persistAgent(provider: next)
   }
 
   func logout() async {
@@ -355,6 +365,46 @@ final class SessionStore: ObservableObject {
     sessionId = sid
   }
 
+  private func syncAgentFromAccount() async {
+    if let me = profile, !me.modelProvider.isEmpty {
+      provider = me.modelProvider
+    }
+    if profile?.modelKeySet == true {
+      if !modelKey.isEmpty { modelKey = "" }
+      refreshKeyStatus()
+      return
+    }
+    let leftover = modelKey.trimmingCharacters(in: .whitespacesAndNewlines)
+    if isSignedIn, !leftover.isEmpty {
+      await persistAgent(modelKey: leftover, provider: provider)
+      modelKey = ""
+      return
+    }
+    refreshKeyStatus()
+  }
+
+  private func persistAgent(modelKey: String? = nil, provider: String? = nil, clear: Bool = false) async {
+    guard !sessionId.isEmpty else { return }
+    do {
+      let me: Profile = try await api.request(
+        "/v1/me/agent",
+        method: "POST",
+        body: SaveAgentBody(provider: provider, modelKey: modelKey, clear: clear),
+        sessionId: sessionId
+      )
+      profile = me
+      if !me.modelProvider.isEmpty {
+        self.provider = me.modelProvider
+      }
+      if me.modelKeySet || clear {
+        self.modelKey = ""
+      }
+      refreshKeyStatus()
+    } catch {
+      keyStatus = (error as? APIError)?.message ?? "Could not save the key."
+    }
+  }
+
   private func loadProviders() async -> [AgentProvider] {
     do {
       let cfg: AgentConfigResponse = try await api.request("/v1/agent/config", sessionId: sessionId)
@@ -414,11 +464,18 @@ final class SessionStore: ObservableObject {
   }
 
   private func refreshKeyStatus() {
-    if modelKey.isEmpty {
-      keyStatus = Self.keyIdle
+    if profile?.modelKeySet == true {
+      let hint = profile?.modelKeyHint ?? ""
+      keyStatus = hint.isEmpty
+        ? "Using your \(provider) key on this account"
+        : "Using your \(provider) key · ends \(hint)"
       return
     }
-    keyStatus = "Using your \(provider) key · ends \(String(modelKey.suffix(4)))"
+    if !modelKey.isEmpty {
+      keyStatus = "Using your \(provider) key · ends \(String(modelKey.suffix(4)))"
+      return
+    }
+    keyStatus = Self.keyIdle
   }
 
   private static func presentingViewController() -> UIViewController? {

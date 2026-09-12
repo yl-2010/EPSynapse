@@ -592,7 +592,10 @@
         credentials: "include",
         headers,
         body: JSON.stringify({
-          provider: localStorage.getItem(LS_PROV) || "groq",
+          provider:
+            document.documentElement.dataset.modelProvider ||
+            localStorage.getItem(LS_PROV) ||
+            "groq",
           messages,
         }),
       });
