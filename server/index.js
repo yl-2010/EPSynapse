@@ -20,7 +20,9 @@ import {
   upstreamHeaders,
 } from "./agent.js";
 import {
+  applyScheduleToGrades,
   dashboardPayload,
+  isNonGradeCourse,
   listAssignments,
   listCourses,
   listGrades,
@@ -90,7 +92,7 @@ import multer from "multer";
 import { probeBertService } from "./bert.js";
 import { mountNotes } from "./notes.js";
 import { mountResearch } from "./research-metrics.js";
-import { mountSchedule } from "./schedule.js";
+import { loadSchedule, mountSchedule } from "./schedule.js";
 
 const PORT = Number(process.env.PORT || 3006);
 const HOST = process.env.HOST || "0.0.0.0";
@@ -280,7 +282,7 @@ async function liveSnapshot(student) {
           return `${a.tag} ${a.title} (${a.courseName || "class"}) ${due}`;
         });
       const grades = (dash.courses || [])
-        .filter((c) => c.currentGrade || c.currentScore != null)
+        .filter((c) => !isNonGradeCourse(c) && (c.currentGrade || c.currentScore != null))
         .slice(0, 12)
         .map((c) => {
           const pct = c.currentScore != null ? `${c.currentScore}%` : "";
@@ -564,7 +566,9 @@ app.get("/v1/me/canvas/grades", async (req, res) => {
     }
     const work = /^(1|true|yes)$/i.test(String(req.query.work || ""));
     const grades = await listGrades(student.canvasHost, student.canvasToken, { work });
-    return res.json({ grades });
+    const ownerId = ownerIdForStudent(student);
+    const stored = ownerId ? await loadSchedule(ownerId).catch(() => ({ classes: [] })) : { classes: [] };
+    return res.json({ grades: applyScheduleToGrades(grades, stored.classes || []) });
   } catch (err) {
     return fail(res, err, err.status || 502);
   }

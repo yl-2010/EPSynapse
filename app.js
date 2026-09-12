@@ -822,9 +822,71 @@
     return "F";
   }
 
+  function normalizeCourseName(raw) {
+    return String(raw || "")
+      .toLowerCase()
+      .replace(/\./g, "")
+      .replace(/\([^)]*\)/g, " ")
+      .replace(/\b(fall|winter|spring|year)\b/g, " ")
+      .replace(/\d{4}-\d{2}\S*/g, " ")
+      .replace(/:[a-z][a-z0-9_-]*$/i, " ")
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function periodLetter(period) {
+    const p = String(period || "").trim().toUpperCase();
+    return /^[A-H]$/.test(p) ? p : "";
+  }
+
+  function isLetterGrade(raw) {
+    return /^[ABCDF][+-]?$/i.test(String(raw || "").trim());
+  }
+
+  function courseBlob(course) {
+    return normalizeCourseName(`${course?.name || ""} ${course?.courseCode || ""}`);
+  }
+
+  function isNonGradeCourse(course) {
+    const n = courseBlob(course);
+    if (!n) return false;
+    if (/\bpeer\s*mentor(s|ing)?\b/.test(n)) return true;
+    if (/\b(eps\s+)?library\b/.test(n)) return true;
+    if (/\b(advisor|advisory)\b/.test(n)) return true;
+    if (/\bclass of \d{4}\b/.test(n)) return true;
+    return false;
+  }
+
+  function isHiddenClassCourse(course) {
+    const n = courseBlob(course);
+    if (!n) return false;
+    if (/\b(eps\s+)?library\b/.test(n)) return true;
+    if (/\b(advisor|advisory)\b/.test(n)) return true;
+    if (/\bclass of \d{4}\b/.test(n)) return true;
+    return false;
+  }
+
+  function courseNamesMatch(className, courseName) {
+    const dash = normalizeCourseName(className);
+    const canvas = normalizeCourseName(courseName);
+    if (!dash || !canvas) return false;
+    if (dash === canvas) return true;
+    if (!canvas.includes(dash) && !dash.includes(canvas)) return false;
+    const numA = dash.match(/\b(\d+)\s*$/);
+    const numB = canvas.match(/\b(\d+)\s*$/);
+    if (numA || numB) return Boolean(numA && numB && numA[1] === numB[1]);
+    return true;
+  }
+
+  function periodTagHtml(period) {
+    const letter = periodLetter(period);
+    return letter ? `<span class="edu-tag edu-period">${escapeHtml(letter)}</span>` : "";
+  }
+
   function formatCourseGrade(row) {
     let score = scoreNumber(row?.currentScore);
-    let letter = String(row?.currentGrade || "").trim();
+    let letter = isLetterGrade(row?.currentGrade) ? String(row.currentGrade).trim() : "";
     // Canvas final scores treat missing work as 0. That is not the grade page.
     if (score === 0 && !letter) score = null;
     if (score != null && !letter) letter = letterFromPercent(score);
@@ -852,22 +914,37 @@
     const rows = [...(lastHome.grades || []), ...(lastHome.courses || [])];
     return (
       rows.find((c) => ids.includes(String(c.id || ""))) ||
-      rows.find((c) => {
-        const a = String(klass?.name || "").toLowerCase();
-        const b = String(c.name || "").toLowerCase();
-        return a && b && (a === b || a.includes(b) || b.includes(a));
-      }) ||
+      rows.find((c) => courseNamesMatch(klass?.name, c.name)) ||
       null
     );
   }
 
+  function homeGradeItems() {
+    const raw = (lastHome.grades || []).length ? lastHome.grades : lastHome.courses || [];
+    const scheduled = (lastHome.classes || []).filter((c) => !c.freePeriod && !isNonGradeCourse(c));
+    if (scheduled.length) {
+      return scheduled.map((klass) => {
+        const g = gradeForClass(klass) || {};
+        return {
+          ...g,
+          id: g.id || klass.id,
+          name: klass.name || g.name,
+          period: periodLetter(klass.period),
+          currentScore: g.currentScore,
+          currentGrade: g.currentGrade,
+          work: g.work,
+        };
+      });
+    }
+    return raw
+      .filter((c) => !isNonGradeCourse(c))
+      .map((c) => ({ ...c, period: periodLetter(c.period) }));
+  }
+
   function gradeRow(c) {
-    const period = c.period
-      ? `<span class="edu-tag edu-period">${escapeHtml(c.period)}</span>`
-      : "";
     return `<li class="edu-row edu-class-row">
       <a class="edu-row-link" data-route href="/grades">
-        <span class="edu-name">${period}<span class="edu-hero-class-name">${escapeHtml(c.name)}</span></span>
+        <span class="edu-name">${periodTagHtml(c.period)}<span class="edu-hero-class-name">${escapeHtml(c.name)}</span></span>
         <span class="edu-meta edu-grade">${escapeHtml(formatCourseGrade(c))}</span>
       </a>
     </li>`;
@@ -930,15 +1007,12 @@
   }
 
   function classRow(c) {
-    const period = c.period
-      ? `<span class="edu-tag edu-period">${escapeHtml(c.period)}</span>`
-      : "";
     const highlight = isCurrentClass(c);
     const href = classHref(c);
     const meta = c.courseCode || (c.term ? c.term : "");
     return `<li class="edu-row edu-class-row${highlight ? " is-current" : ""}">
       <a class="edu-row-link" data-route href="${escapeHtml(href)}">
-        <span class="edu-name">${period}<span class="edu-hero-class-name">${escapeHtml(c.name)}</span></span>
+        <span class="edu-name">${periodTagHtml(c.period)}<span class="edu-hero-class-name">${escapeHtml(c.name)}</span></span>
         <span class="edu-meta">${escapeHtml(meta)}</span>
       </a>
     </li>`;
@@ -1000,9 +1074,9 @@
   }
 
   function homeClasses() {
-    const scheduled = (lastHome.classes || []).filter((c) => !c.freePeriod);
+    const scheduled = (lastHome.classes || []).filter((c) => !c.freePeriod && !isHiddenClassCourse(c));
     if (scheduled.length) return scheduled;
-    return lastHome.courses || [];
+    return (lastHome.courses || []).filter((c) => !isHiddenClassCourse(c));
   }
 
   function notesPanelHtml() {
@@ -1057,9 +1131,7 @@
     const fileEmpty = me?.onedriveConnected
       ? "No files in /EPSynapse yet"
       : "Connect OneDrive in settings";
-    const gradeItems = (lastHome.grades || []).length
-      ? lastHome.grades
-      : lastHome.courses || [];
+    const gradeItems = homeGradeItems();
     const gradeEmpty = me?.canvasConnected
       ? "No course grades yet"
       : "Connect Canvas in settings";
@@ -1090,10 +1162,7 @@
     if (!klass || !item) return false;
     const courseId = String(klass.canvasCourseId || klass.courseId || "");
     if (courseId && String(item.courseId || "") === courseId) return true;
-    const a = String(klass.name || "").toLowerCase();
-    const b = String(item.courseName || "").toLowerCase();
-    if (!a || !b) return false;
-    return a === b || a.includes(b) || b.includes(a);
+    return courseNamesMatch(klass.name, item.courseName);
   }
 
   function findClass(id) {
@@ -1159,8 +1228,8 @@
       })
       .join("");
 
-    const period = klass.period
-      ? `<span class="edu-tag edu-period edu-period--hero">${escapeHtml(klass.period)}</span>`
+    const period = periodLetter(klass.period)
+      ? `<span class="edu-tag edu-period edu-period--hero">${escapeHtml(periodLetter(klass.period))}</span>`
       : "";
     const next = nextMeetingLine(klass);
     const courseGrade = gradeForClass(klass);
@@ -1310,14 +1379,35 @@
     }
   }
 
+  function decorateGradeRows(grades) {
+    const incoming = grades || [];
+    const haveWork = incoming.some((g) => Array.isArray(g.work));
+    const source = haveWork || !homeGradeItems().length ? incoming : homeGradeItems();
+    return source
+      .filter((c) => !isNonGradeCourse(c))
+      .map((c) => {
+        const scheduled = (lastHome.classes || []).find(
+          (k) =>
+            !k.freePeriod &&
+            !isNonGradeCourse(k) &&
+            (String(k.id) === String(c.id) || courseNamesMatch(k.name, c.name))
+        );
+        return {
+          ...c,
+          name: scheduled?.name || c.name,
+          period: periodLetter(scheduled?.period || c.period),
+        };
+      });
+  }
+
   function renderGradesView(grades) {
-    const rows = grades || [];
+    const rows = decorateGradeRows(grades);
     const empty = me?.canvasConnected
       ? "Canvas has not posted grades for these classes yet."
       : "Connect Canvas in settings";
     const panels = rows
       .map((g) => {
-        const title = [g.period, g.name].filter(Boolean).join(" · ");
+        const title = [periodLetter(g.period), g.name].filter(Boolean).join(" · ");
         const mark = `<span class="edu-grade-mark">${escapeHtml(formatCourseGrade(g))}</span>`;
         const body = g.work === undefined
           ? `<p class="edu-empty">Loading graded work…</p>`

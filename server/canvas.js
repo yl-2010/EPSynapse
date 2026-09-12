@@ -122,8 +122,85 @@ export async function validateToken(host, token) {
 
 function periodFromCode(code) {
   const s = String(code || "").trim();
-  const m = s.match(/(?:^|[\s\-])([A-H]|\d{1,2})$/i);
+  // EPS periods are A-H. Trailing digits are course levels (Spanish 4).
+  const m = s.match(/(?:^|[\s\-])([A-H])$/i);
   return m ? m[1].toUpperCase() : "";
+}
+
+export function normalizeCourseName(raw) {
+  return String(raw || "")
+    .toLowerCase()
+    .replace(/\./g, "")
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/\b(fall|winter|spring|year)\b/g, " ")
+    .replace(/\d{4}-\d{2}\S*/g, " ")
+    .replace(/:[a-z][a-z0-9_-]*$/i, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function periodLetter(period) {
+  const p = String(period || "").trim().toUpperCase();
+  return /^[A-H]$/.test(p) ? p : "";
+}
+
+export function isLetterGrade(raw) {
+  return /^[ABCDF][+-]?$/i.test(String(raw || "").trim());
+}
+
+function courseBlob(course) {
+  return normalizeCourseName(`${course?.name || ""} ${course?.courseCode || ""}`);
+}
+
+/** Library / peer mentors / advisory / class-of shells are not graded classes. */
+export function isNonGradeCourse(course) {
+  const n = courseBlob(course);
+  if (!n) return false;
+  if (/\bpeer\s*mentor(s|ing)?\b/.test(n)) return true;
+  if (/\b(eps\s+)?library\b/.test(n)) return true;
+  if (/\b(advisor|advisory)\b/.test(n)) return true;
+  if (/\bclass of \d{4}\b/.test(n)) return true;
+  return false;
+}
+
+/** Hide library / advisory / class-of from the class list. Keep peer mentors. */
+export function isHiddenClassCourse(course) {
+  const n = courseBlob(course);
+  if (!n) return false;
+  if (/\b(eps\s+)?library\b/.test(n)) return true;
+  if (/\b(advisor|advisory)\b/.test(n)) return true;
+  if (/\bclass of \d{4}\b/.test(n)) return true;
+  return false;
+}
+
+export function courseNamesMatch(className, courseName) {
+  const dash = normalizeCourseName(className);
+  const canvas = normalizeCourseName(courseName);
+  if (!dash || !canvas) return false;
+  if (dash === canvas) return true;
+  if (!canvas.includes(dash) && !dash.includes(canvas)) return false;
+  const numA = dash.match(/\b(\d+)\s*$/);
+  const numB = canvas.match(/\b(\d+)\s*$/);
+  if (numA || numB) return Boolean(numA && numB && numA[1] === numB[1]);
+  return true;
+}
+
+export function applyScheduleToGrades(grades, classes) {
+  const rows = (grades || []).filter((c) => !isNonGradeCourse(c));
+  const scheduled = (classes || []).filter((c) => !c.freePeriod && !isNonGradeCourse(c));
+  return rows.map((g) => {
+    const match = scheduled.find(
+      (c) =>
+        (g.id && (c.canvasCourseId === g.id || c.courseId === g.id || c.id === g.id)) ||
+        courseNamesMatch(c.name, g.name)
+    );
+    return {
+      ...g,
+      currentGrade: isLetterGrade(g.currentGrade) ? g.currentGrade : "",
+      period: periodLetter(match?.period || g.period),
+    };
+  });
 }
 
 function numOrNull(v) {
@@ -148,7 +225,7 @@ function pickNum(...vals) {
 function pickLetter(...vals) {
   for (const v of vals) {
     const s = String(v || "").trim();
-    if (s && s !== "—" && s !== "-") return s;
+    if (isLetterGrade(s)) return s;
   }
   return "";
 }
@@ -363,7 +440,7 @@ async function listCourseWork(host, token, courseId) {
 }
 
 export async function listGrades(host, token, { work = false } = {}) {
-  const courses = await listCourses(host, token);
+  const courses = (await listCourses(host, token)).filter((c) => !isNonGradeCourse(c));
   if (!work) return courses.map((c) => ({ ...c, work: [] }));
   const head = await Promise.all(
     courses.slice(0, 12).map(async (c) => ({
