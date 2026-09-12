@@ -301,13 +301,13 @@ a {
   text-decoration: none;
 }
 
-/* ---- Home liquid-glass squircle (matches main site .c-tl) ---- */
+/* Liquid glass corner orbs. Lens is ::after, tint is ::before. */
 .corner,
 .yan-chat-close,
 .yan-chat-send {
-  appearance: none !important;
-  -webkit-appearance: none !important;
-  background: transparent !important;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
   border: 0;
   padding: 0;
 }
@@ -320,7 +320,6 @@ a {
   display: grid;
   place-items: center;
   color: var(--fg);
-  background: transparent;
   box-shadow: 0 6px var(--lg-outer-shadow-blur) var(--lg-outer-shadow);
   transition: transform 0.3s var(--ease), box-shadow 0.4s var(--ease);
   will-change: transform;
@@ -347,44 +346,6 @@ a {
   box-shadow: inset 0 0 var(--lg-shadow-blur) var(--lg-shadow-spread) var(--lg-shadow-color);
   background-color: rgba(var(--lg-tint-rgb), var(--lg-tint-opacity));
   pointer-events: none;
-}
-
-.corner::before,
-.yan-chat-close::before,
-.yan-chat-send::before {
-  background-image: radial-gradient(
-    140% 100% at 28% 14%,
-    rgba(255, 255, 255, 0.5) 0%,
-    rgba(255, 255, 255, 0.1) 32%,
-    transparent 58%
-  );
-  box-shadow:
-    inset 0 0 var(--lg-shadow-blur) var(--lg-shadow-spread) var(--lg-shadow-color),
-    inset 0 1px 0 rgba(255, 255, 255, 0.38);
-}
-
-html[data-resolved-theme="dark"] .corner::before,
-html[data-resolved-theme="dark"] .yan-chat-close::before,
-html[data-resolved-theme="dark"] .yan-chat-send::before {
-  background-image: radial-gradient(
-    140% 100% at 28% 14%,
-    rgba(255, 255, 255, 0.4) 0%,
-    rgba(255, 255, 255, 0.08) 34%,
-    transparent 58%
-  );
-}
-
-@media (prefers-color-scheme: dark) {
-  html:not([data-resolved-theme="light"]) .corner::before,
-  html:not([data-resolved-theme="light"]) .yan-chat-close::before,
-  html:not([data-resolved-theme="light"]) .yan-chat-send::before {
-    background-image: radial-gradient(
-      140% 100% at 28% 14%,
-      rgba(255, 255, 255, 0.4) 0%,
-      rgba(255, 255, 255, 0.08) 34%,
-      transparent 58%
-    );
-  }
 }
 
 .edu-panel::before,
@@ -417,22 +378,6 @@ html[data-resolved-theme="dark"] .yan-chat-send::before {
   -webkit-backdrop-filter: var(--lg-filter);
   isolation: isolate;
   pointer-events: none;
-}
-
-/* Lens lives on the orb, not a ::after trapped behind the button fill. */
-.corner.lg-refraction,
-.yan-chat-close.lg-refraction,
-.yan-chat-send.lg-refraction {
-  backdrop-filter: var(--lg-filter) !important;
-  -webkit-backdrop-filter: var(--lg-filter) !important;
-}
-
-.corner.lg-refraction::after,
-.yan-chat-close.lg-refraction::after,
-.yan-chat-send.lg-refraction::after {
-  z-index: 0;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
 }
 
 .corner.lg-fallback,
@@ -475,36 +420,11 @@ html[data-resolved-theme="dark"] .yan-chat-send::before {
     backdrop-filter: var(--lg-filter) brightness(0.92) saturate(1.15);
     -webkit-backdrop-filter: var(--lg-filter) brightness(0.92) saturate(1.15);
   }
-
-  html:not([data-resolved-theme="light"]) .corner.lg-refraction,
-  html:not([data-resolved-theme="light"]) .yan-chat-close.lg-refraction,
-  html:not([data-resolved-theme="light"]) .yan-chat-send.lg-refraction {
-    backdrop-filter: var(--lg-filter) !important;
-    -webkit-backdrop-filter: var(--lg-filter) !important;
-  }
-
-  html:not([data-resolved-theme="light"]) .corner.lg-refraction::after,
-  html:not([data-resolved-theme="light"]) .yan-chat-close.lg-refraction::after,
-  html:not([data-resolved-theme="light"]) .yan-chat-send.lg-refraction::after {
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
-  }
-}
-
-html[data-resolved-theme="dark"] .corner.lg-refraction,
-html[data-resolved-theme="dark"] .yan-chat-close.lg-refraction,
-html[data-resolved-theme="dark"] .yan-chat-send.lg-refraction {
-  backdrop-filter: var(--lg-filter) !important;
-  -webkit-backdrop-filter: var(--lg-filter) !important;
 }
 
 html[data-resolved-theme="dark"] .corner.lg-refraction::after,
 html[data-resolved-theme="dark"] .yan-chat-close.lg-refraction::after,
-html[data-resolved-theme="dark"] .yan-chat-send.lg-refraction::after {
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
-
+html[data-resolved-theme="dark"] .yan-chat-send.lg-refraction::after,
 html[data-resolved-theme="dark"] .edu-panel.lg-refraction::after,
 html[data-resolved-theme="dark"] .edu-file-tile.lg-refraction::after,
 html[data-resolved-theme="dark"] .edu-sheet.lg-refraction::after,
@@ -524,10 +444,22 @@ html[data-resolved-theme="dark"] .edu-check.lg-refraction::after {
 .yan-chat-send svg {
   position: relative;
   z-index: 2;
-  width: 46%;
-  height: 46%;
+  width: 52%;
+  height: 52%;
   overflow: visible;
   shape-rendering: geometricPrecision;
+}
+
+.corner-mark {
+  position: relative;
+  z-index: 2;
+  font-family: var(--display);
+  font-size: 3.35rem;
+  font-weight: 700;
+  font-synthesis: none;
+  letter-spacing: -0.06em;
+  line-height: 1;
+  color: var(--accent);
 }
 
 .corner.squircle {
@@ -1748,31 +1680,19 @@ html[data-resolved-theme="light"] .yan-chat {
     0 6px var(--lg-outer-shadow-blur) var(--lg-outer-shadow),
     0 0 0 1.5px color-mix(in srgb, var(--accent) 45%, transparent);
 }
-.yan-chat-pill.corner.lg-refraction {
-  backdrop-filter: blur(var(--lg-read-blur)) var(--lg-filter) !important;
-  -webkit-backdrop-filter: blur(var(--lg-read-blur)) var(--lg-filter) !important;
-}
 .yan-chat-pill.corner.lg-refraction::after {
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
+  backdrop-filter: blur(var(--lg-read-blur)) var(--lg-filter);
+  -webkit-backdrop-filter: blur(var(--lg-read-blur)) var(--lg-filter);
 }
 @media (prefers-color-scheme: dark) {
-  html:not([data-resolved-theme="light"]) .yan-chat-pill.corner.lg-refraction {
-    backdrop-filter: blur(var(--lg-read-blur)) var(--lg-filter) !important;
-    -webkit-backdrop-filter: blur(var(--lg-read-blur)) var(--lg-filter) !important;
-  }
   html:not([data-resolved-theme="light"]) .yan-chat-pill.corner.lg-refraction::after {
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
+    backdrop-filter: blur(var(--lg-read-blur)) var(--lg-filter) brightness(0.92) saturate(1.15);
+    -webkit-backdrop-filter: blur(var(--lg-read-blur)) var(--lg-filter) brightness(0.92) saturate(1.15);
   }
-}
-html[data-resolved-theme="dark"] .yan-chat-pill.corner.lg-refraction {
-  backdrop-filter: blur(var(--lg-read-blur)) var(--lg-filter) !important;
-  -webkit-backdrop-filter: blur(var(--lg-read-blur)) var(--lg-filter) !important;
 }
 html[data-resolved-theme="dark"] .yan-chat-pill.corner.lg-refraction::after {
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
+  backdrop-filter: blur(var(--lg-read-blur)) var(--lg-filter) brightness(0.92) saturate(1.15);
+  -webkit-backdrop-filter: blur(var(--lg-read-blur)) var(--lg-filter) brightness(0.92) saturate(1.15);
 }
 .yan-chat-pill.lg-fallback {
   backdrop-filter: blur(10px) saturate(1.5);
@@ -2859,11 +2779,24 @@ html.lg-chrome[data-resolved-theme="dark"] .edu-file-tile.lg-static.lg-refractio
   left: calc(var(--corner-pad) + var(--corner-orb) + 0.65rem);
   bottom: var(--corner-pad);
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
-  gap: 0.28rem;
   min-height: var(--corner-orb);
+}
+
+.home-google-card {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 8px 5px 5px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid rgba(11, 31, 58, 0.08);
+  box-shadow: 0 8px 24px rgba(11, 31, 58, 0.16);
+}
+
+.home-google.is-gis .home-google-card {
+  display: flex;
 }
 
 .home-google-fallback {
@@ -2881,23 +2814,17 @@ html.lg-chrome[data-resolved-theme="dark"] .edu-file-tile.lg-static.lg-refractio
   cursor: pointer;
 }
 
-.home-google-fallback--text {
-  --lg-filter: none;
-  padding: 0.1rem 0.15rem;
-  border: 0;
-  border-radius: 0;
-  font-weight: 550;
-  color: var(--fg);
-  background: none;
-  box-shadow: none;
-  text-decoration: underline;
-  text-underline-offset: 0.15em;
+.home-google.is-gis .home-google-fallback,
+.home-google.is-in .home-google-fallback,
+.home-google.is-in .home-google-card {
+  display: none !important;
 }
 
 .home-google-btn {
   display: flex;
   align-items: center;
   min-height: 40px;
+  line-height: 0;
 }
 
 .home-google-btn[hidden],

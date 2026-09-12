@@ -38,9 +38,9 @@
 
   // iOS dark Liquid Glass: deeper frost, softer specular luminance
   const DARK_GLASS = {
-    blurAmt: 0.32,
-    specOpacityMul: 1,
-    specSat: 3.2,
+    blurAmt: 0.55,
+    specOpacityMul: 0.72,
+    specSat: 2.5,
   };
 
   // WebGL path defaults (archis webgl.html control panel)

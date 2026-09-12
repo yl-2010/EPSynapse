@@ -114,6 +114,7 @@
 
   function paintAccount() {
     const slot = document.getElementById("google-signin-slot");
+    const homeWrap = document.getElementById("home-google");
     const homeSlot = document.getElementById("home-google-btn");
     const profile = document.getElementById("google-profile");
     const outRow = document.getElementById("google-signout-row");
@@ -167,19 +168,22 @@
       const showGis = Boolean(gisInitialized && googleClientId);
       if (slot) slot.hidden = !showGis;
       if (homeSlot) homeSlot.hidden = !showGis;
-      const redirectLabel = showGis ? "Use Google redirect" : "Sign in with Google";
       if (fallback) {
-        fallback.hidden = false;
-        fallback.textContent = redirectLabel;
-        fallback.classList.toggle("home-google-fallback--text", showGis);
+        fallback.hidden = showGis;
+        fallback.textContent = "Sign in with Google";
+        fallback.classList.remove("home-google-fallback--text");
         if (showGis) fallback.removeAttribute("data-liquid-glass");
         else fallback.setAttribute("data-liquid-glass", "rounded");
       }
       if (redirectBtn) {
-        redirectBtn.hidden = false;
-        redirectBtn.style.display = "";
-        redirectBtn.textContent = redirectLabel;
+        redirectBtn.hidden = showGis;
+        redirectBtn.style.display = showGis ? "none" : "";
+        redirectBtn.textContent = "Sign in with Google";
       }
+    }
+    if (homeWrap) {
+      homeWrap.classList.toggle("is-in", inGoogle);
+      homeWrap.classList.toggle("is-gis", !inGoogle && Boolean(gisInitialized && googleClientId));
     }
     setStatus(statusEl, accountStatusText());
     renderGoogleButtons();
