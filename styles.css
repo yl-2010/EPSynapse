@@ -42,7 +42,7 @@
   --pointer-y: 30%;
   --pointer-glow-strength: 0.75;
   --corner-pad: clamp(1rem, 2.5vw, 1.6rem);
-  --corner-orb: 120px;
+  --corner-orb: 108px;
   --corner-orb-gap: 0.75rem;
   --google-size: 270px;
   --tone-rose: #c45b6a;
@@ -486,7 +486,7 @@ html[data-resolved-theme="dark"] .edu-check.lg-refraction::after {
   position: relative;
   z-index: 2;
   font-family: var(--display);
-  font-size: 3.35rem;
+  font-size: 3rem;
   font-weight: 700;
   font-synthesis: none;
   letter-spacing: -0.06em;
@@ -495,7 +495,7 @@ html[data-resolved-theme="dark"] .edu-check.lg-refraction::after {
 }
 
 .corner.squircle {
-  --lg-radius: 21px;
+  --lg-radius: 19px;
   border-radius: var(--lg-radius);
 }
 
@@ -632,14 +632,14 @@ html[data-resolved-theme="dark"] .edu-check.lg-refraction::after {
 
 @media (max-width: 900px) {
   :root {
-    --corner-orb: 96px;
+    --corner-orb: 88px;
     --google-size: 216px;
   }
 }
 
 @media (max-width: 560px) {
   :root {
-    --corner-orb: 80px;
+    --corner-orb: 72px;
     --google-size: 180px;
   }
 }
