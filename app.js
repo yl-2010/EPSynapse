@@ -3311,8 +3311,6 @@
     fileMenu.className = "edu-file-menu";
     fileMenu.hidden = true;
     fileMenu.setAttribute("role", "menu");
-    fileMenu.dataset.liquidGlass = "rounded";
-    fileMenu.dataset.filterId = "lg-edu-file-menu";
     fileMenu.innerHTML =
       '<button type="button" class="edu-file-menu-item" role="menuitem" data-file-menu-delete>Delete</button>';
     document.body.appendChild(fileMenu);
@@ -3340,7 +3338,6 @@
     if (y + h + pad > window.innerHeight) y = window.innerHeight - h - pad;
     menu.style.left = `${Math.max(pad, x)}px`;
     menu.style.top = `${Math.max(pad, y)}px`;
-    window.reinitLiquidGlass?.();
   }
 
   async function deleteOwnedFile(id) {
