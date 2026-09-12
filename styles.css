@@ -3541,12 +3541,14 @@ html[data-auth="in"] #stage-out {
 .edu-notes-form {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 0.5rem;
   margin-top: 0.65rem;
 }
 
 .edu-notes-form textarea,
 .edu-notes-form select {
+  align-self: stretch;
   width: 100%;
   box-sizing: border-box;
   border: 0;
@@ -3555,6 +3557,14 @@ html[data-auth="in"] #stage-out {
   background: color-mix(in srgb, var(--fg) 6%, transparent);
   color: var(--fg);
   font: inherit;
+  font-size: var(--text-footnote);
+}
+
+.edu-notes-form .edu-sheet-btn {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 0;
+  padding: 0.42rem 0.9rem;
   font-size: var(--text-footnote);
 }
 
