@@ -99,21 +99,21 @@ struct HomeView: View {
             HStack(alignment: .top, spacing: 16) {
                 VStack(spacing: 16) {
                     TodoPanel()
-                    NotesPanel(path: $path)
                     CompletedPanel()
                 }
                 .frame(maxWidth: .infinity, alignment: .top)
                 VStack(spacing: 16) {
                     ClassesPanel()
+                    NotesPanel(path: $path)
                 }
                 .frame(maxWidth: .infinity, alignment: .top)
             }
         } else {
             VStack(spacing: 16) {
                 TodoPanel()
-                NotesPanel(path: $path)
-                ClassesPanel()
                 CompletedPanel()
+                ClassesPanel()
+                NotesPanel(path: $path)
             }
         }
     }
