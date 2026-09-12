@@ -734,3 +734,507 @@ struct SchoolsResponse: Codable {
     schools = (try? c.decodeIfPresent([SchoolHit].self, forKey: .schools)) ?? []
   }
 }
+
+enum NoteSubject {
+  static let all = [
+    "Mathematics",
+    "Physics",
+    "Chemistry",
+    "Biology",
+    "Computer Science",
+    "History",
+    "Literature",
+    "Economics",
+    "Other",
+  ]
+}
+
+enum EPSLinks {
+  static let research = URL(string: "https://epsynapse.com/research")!
+}
+
+struct SchoolClass: Codable, Identifiable, Hashable, Equatable {
+  var id: String
+  var name: String
+  var period: String
+  var trimester: String
+  var freePeriod: Bool
+  var canvasLink: String
+  var courseCode: String
+  var subject: String
+
+  init(
+    id: String = "",
+    name: String = "",
+    period: String = "",
+    trimester: String = "",
+    freePeriod: Bool = false,
+    canvasLink: String = "",
+    courseCode: String = "",
+    subject: String = ""
+  ) {
+    self.id = id
+    self.name = name
+    self.period = period
+    self.trimester = trimester
+    self.freePeriod = freePeriod
+    self.canvasLink = canvasLink
+    self.courseCode = courseCode
+    self.subject = subject
+  }
+
+  init(course: Course) {
+    let fallback = course.id.isEmpty ? course.name : course.id
+    self.init(
+      id: fallback,
+      name: course.name,
+      period: course.period,
+      trimester: "",
+      freePeriod: false,
+      canvasLink: "",
+      courseCode: course.courseCode
+    )
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    let rawId = c.string(.id)
+    name = c.string(.name)
+    period = c.string(.period)
+    let tri = c.string(.trimester)
+    trimester = tri.isEmpty ? c.string(.term) : tri
+    freePeriod = c.bool(.freePeriod)
+    canvasLink = c.string(.canvasLink)
+    courseCode = c.string(.courseCode)
+    subject = c.string(.subject)
+    id = rawId.isEmpty ? name : rawId
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    try c.encode(id, forKey: .id)
+    try c.encode(name, forKey: .name)
+    try c.encode(period, forKey: .period)
+    try c.encode(trimester, forKey: .trimester)
+    try c.encode(freePeriod, forKey: .freePeriod)
+    try c.encode(canvasLink, forKey: .canvasLink)
+    try c.encode(courseCode, forKey: .courseCode)
+    try c.encode(subject, forKey: .subject)
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case id, name, period, trimester, term, freePeriod, canvasLink, courseCode, subject
+  }
+}
+
+struct ScheduleMeeting: Codable, Identifiable, Equatable {
+  var id: String
+  var title: String
+  var day: String
+  var start: String
+  var end: String
+  var period: String
+  var classId: String
+
+  init(
+    id: String = "",
+    title: String = "",
+    day: String = "",
+    start: String = "",
+    end: String = "",
+    period: String = "",
+    classId: String = ""
+  ) {
+    self.id = id
+    self.title = title
+    self.day = day
+    self.start = start
+    self.end = end
+    self.period = period
+    self.classId = classId
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    let rawId = c.string(.id)
+    title = {
+      let named = c.string(.title)
+      return named.isEmpty ? c.string(.name) : named
+    }()
+    day = c.string(.day)
+    start = c.string(.start)
+    end = c.string(.end)
+    period = c.string(.period)
+    classId = c.string(.classId)
+    id = rawId.isEmpty ? "\(title)-\(day)-\(start)" : rawId
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    try c.encode(id, forKey: .id)
+    try c.encode(title, forKey: .title)
+    try c.encode(day, forKey: .day)
+    try c.encode(start, forKey: .start)
+    try c.encode(end, forKey: .end)
+    try c.encode(period, forKey: .period)
+    try c.encode(classId, forKey: .classId)
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case id, title, name, day, start, end, period, classId
+  }
+}
+
+struct ScheduleResponse: Codable {
+  var classes: [SchoolClass]
+  var meetings: [ScheduleMeeting]
+
+  init(classes: [SchoolClass] = [], meetings: [ScheduleMeeting] = []) {
+    self.classes = classes
+    self.meetings = meetings
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    if let nested = try? c.decodeIfPresent(ScheduleResponse.self, forKey: .schedule) {
+      classes = nested.classes
+      meetings = nested.meetings
+      return
+    }
+    classes = (try? c.decodeIfPresent([SchoolClass].self, forKey: .classes)) ?? []
+    meetings = (try? c.decodeIfPresent([ScheduleMeeting].self, forKey: .meetings)) ?? []
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case classes, meetings, schedule
+  }
+}
+
+struct NoteVote: Equatable {
+  var subject: String
+  var confidence: Double?
+  var rationale: String
+
+  init(subject: String = "", confidence: Double? = nil, rationale: String = "") {
+    self.subject = subject
+    self.confidence = confidence
+    self.rationale = rationale
+  }
+
+  var confidenceLabel: String {
+    guard let confidence else { return "" }
+    if confidence <= 1 {
+      return "\(Int((confidence * 100).rounded()))%"
+    }
+    return String(format: "%.0f", confidence)
+  }
+}
+
+extension NoteVote: Codable {
+  init(from decoder: Decoder) throws {
+    if let text = try? decoder.singleValueContainer().decode(String.self) {
+      subject = text
+      confidence = nil
+      rationale = ""
+      return
+    }
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    subject = c.string(.subject)
+    rationale = c.string(.rationale)
+    if let value = try? c.decodeIfPresent(Double.self, forKey: .confidence) {
+      confidence = value
+    } else if let raw = try? c.decodeIfPresent(String.self, forKey: .confidence),
+              let value = Double(raw) {
+      confidence = value
+    } else {
+      confidence = nil
+    }
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    try c.encode(subject, forKey: .subject)
+    try c.encodeIfPresent(confidence, forKey: .confidence)
+    if !rationale.isEmpty {
+      try c.encode(rationale, forKey: .rationale)
+    }
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case subject, confidence, rationale
+  }
+}
+
+struct NoteVotes: Equatable {
+  var zeroShot: NoteVote?
+  var fineTuned: NoteVote?
+  var studentKey: NoteVote?
+
+  init(zeroShot: NoteVote? = nil, fineTuned: NoteVote? = nil, studentKey: NoteVote? = nil) {
+    self.zeroShot = zeroShot
+    self.fineTuned = fineTuned
+    self.studentKey = studentKey
+  }
+}
+
+private struct FlexibleJSONKey: CodingKey {
+  var stringValue: String
+  var intValue: Int?
+
+  init(_ value: String) {
+    stringValue = value
+    intValue = nil
+  }
+
+  init?(stringValue: String) {
+    self.stringValue = stringValue
+    self.intValue = nil
+  }
+
+  init?(intValue: Int) {
+    self.stringValue = String(intValue)
+    self.intValue = intValue
+  }
+}
+
+extension NoteVotes: Codable {
+  init(from decoder: Decoder) throws {
+    if var arr = try? decoder.unkeyedContainer() {
+      var zero: NoteVote?
+      var fine: NoteVote?
+      var key: NoteVote?
+      while !arr.isAtEnd {
+        if let vote = try? arr.decode(LabeledNoteVote.self) {
+          switch vote.bucket {
+          case .zeroShot: zero = vote.vote
+          case .fineTuned: fine = vote.vote
+          case .studentKey: key = vote.vote
+          }
+        } else {
+          _ = try? arr.decode(NoteVote.self)
+        }
+      }
+      self.init(zeroShot: zero, fineTuned: fine, studentKey: key)
+      return
+    }
+
+    let c = try decoder.container(keyedBy: FlexibleJSONKey.self)
+    self.init(
+      zeroShot: Self.pick(c, [
+        "zeroShot", "zero_shot", "zeroShotBert", "zeroShotBERT", "baseBert", "zero-shot BERT",
+      ]),
+      fineTuned: Self.pick(c, [
+        "fineTuned", "fine_tuned", "fineTunedBert", "fineTunedBERT", "fine-tuned BERT",
+      ]),
+      studentKey: Self.pick(c, [
+        "studentKey", "student_key", "studentKeyModel", "student-key", "gptOss", "apiKey",
+      ])
+    )
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: FlexibleJSONKey.self)
+    try c.encodeIfPresent(zeroShot, forKey: FlexibleJSONKey("zeroShot"))
+    try c.encodeIfPresent(fineTuned, forKey: FlexibleJSONKey("fineTuned"))
+    try c.encodeIfPresent(studentKey, forKey: FlexibleJSONKey("studentKey"))
+  }
+
+  private static func pick(
+    _ c: KeyedDecodingContainer<FlexibleJSONKey>,
+    _ names: [String]
+  ) -> NoteVote? {
+    for name in names {
+      if let vote = try? c.decodeIfPresent(NoteVote.self, forKey: FlexibleJSONKey(name)) {
+        return vote
+      }
+    }
+    return nil
+  }
+}
+
+private struct LabeledNoteVote: Decodable {
+  enum Bucket { case zeroShot, fineTuned, studentKey }
+
+  var vote: NoteVote
+  var bucket: Bucket
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    let label = [c.string(.name), c.string(.label), c.string(.source), c.string(.arm)]
+      .first { !$0.isEmpty } ?? ""
+    let folded = label.lowercased()
+    if folded.contains("fine") {
+      bucket = .fineTuned
+    } else if folded.contains("student") || folded.contains("key") || folded.contains("gpt") {
+      bucket = .studentKey
+    } else {
+      bucket = .zeroShot
+    }
+    if let nested = try? c.decodeIfPresent(NoteVote.self, forKey: .vote) {
+      vote = nested
+    } else {
+      vote = try NoteVote(from: decoder)
+    }
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case name, label, source, arm, vote
+  }
+}
+
+struct NoteOrchestrator: Equatable {
+  var subject: String
+  var confidence: Double?
+  var rationale: String
+
+  init(subject: String = "", confidence: Double? = nil, rationale: String = "") {
+    self.subject = subject
+    self.confidence = confidence
+    self.rationale = rationale
+  }
+}
+
+extension NoteOrchestrator: Codable {
+  init(from decoder: Decoder) throws {
+    if let text = try? decoder.singleValueContainer().decode(String.self) {
+      subject = text
+      confidence = nil
+      rationale = ""
+      return
+    }
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    subject = c.string(.subject)
+    rationale = c.string(.rationale)
+    if let value = try? c.decodeIfPresent(Double.self, forKey: .confidence) {
+      confidence = value
+    } else if let raw = try? c.decodeIfPresent(String.self, forKey: .confidence),
+              let value = Double(raw) {
+      confidence = value
+    } else {
+      confidence = nil
+    }
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    try c.encode(subject, forKey: .subject)
+    try c.encodeIfPresent(confidence, forKey: .confidence)
+    if !rationale.isEmpty {
+      try c.encode(rationale, forKey: .rationale)
+    }
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case subject, confidence, rationale
+  }
+}
+
+struct ClassifiedNote: Codable, Identifiable, Equatable {
+  var id: String
+  var text: String
+  var subject: String
+  var votes: NoteVotes
+  var orchestrator: NoteOrchestrator
+  var classId: String
+  var researchEventId: String
+
+  init(
+    id: String = "",
+    text: String = "",
+    subject: String = "",
+    votes: NoteVotes = NoteVotes(),
+    orchestrator: NoteOrchestrator = NoteOrchestrator(),
+    classId: String = "",
+    researchEventId: String = ""
+  ) {
+    self.id = id
+    self.text = text
+    self.subject = subject
+    self.votes = votes
+    self.orchestrator = orchestrator
+    self.classId = classId
+    self.researchEventId = researchEventId
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    id = c.string(.id)
+    let body = c.string(.text)
+    let preview = c.string(.textPreview)
+    if !body.isEmpty {
+      text = body
+    } else if !preview.isEmpty {
+      text = preview
+    } else {
+      let content = c.string(.content)
+      text = content.isEmpty ? c.string(.body) : content
+    }
+    subject = c.string(.subject)
+    votes = (try? c.decodeIfPresent(NoteVotes.self, forKey: .votes)) ?? NoteVotes()
+    if let orch = try? c.decodeIfPresent(NoteOrchestrator.self, forKey: .orchestrator) {
+      orchestrator = orch
+    } else {
+      orchestrator = NoteOrchestrator(subject: subject)
+    }
+    classId = c.string(.classId)
+    let event = c.string(.researchEventId)
+    researchEventId = event.isEmpty ? c.string(.eventId) : event
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    try c.encode(id, forKey: .id)
+    try c.encode(text, forKey: .text)
+    try c.encode(subject, forKey: .subject)
+    try c.encode(votes, forKey: .votes)
+    try c.encode(orchestrator, forKey: .orchestrator)
+    try c.encode(classId, forKey: .classId)
+    try c.encode(researchEventId, forKey: .researchEventId)
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case id, text, textPreview, content, body, subject, votes, orchestrator, classId, researchEventId, eventId
+  }
+}
+
+struct NotesResponse: Codable {
+  var notes: [ClassifiedNote]
+
+  init(notes: [ClassifiedNote] = []) {
+    self.notes = notes
+  }
+
+  init(from decoder: Decoder) throws {
+    if let arr = try? decoder.singleValueContainer().decode([ClassifiedNote].self) {
+      notes = arr
+      return
+    }
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    notes = (try? c.decodeIfPresent([ClassifiedNote].self, forKey: .notes)) ?? []
+  }
+}
+
+struct NoteResponse: Codable {
+  var note: ClassifiedNote
+
+  init(note: ClassifiedNote = ClassifiedNote()) {
+    self.note = note
+  }
+
+  init(from decoder: Decoder) throws {
+    if let direct = try? decoder.singleValueContainer().decode(ClassifiedNote.self), !direct.id.isEmpty {
+      note = direct
+      return
+    }
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    note = (try? c.decodeIfPresent(ClassifiedNote.self, forKey: .note)) ?? ClassifiedNote()
+  }
+}
+
+struct CreateNoteBody: Encodable {
+  var text: String
+}
+
+struct PatchNoteBody: Encodable {
+  var subject: String
+}

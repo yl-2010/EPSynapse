@@ -9,6 +9,7 @@ struct HomeView: View {
 
     @State private var showSettings = false
     @State private var scrollToTopTick = 0
+    @State private var path = NavigationPath()
 
     private var isWide: Bool {
         AdaptiveLayout.isWideLayout(horizontal: horizontalSizeClass, vertical: verticalSizeClass)
@@ -19,39 +20,53 @@ struct HomeView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("EPSynapse")
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(EPSTheme.accent)
-                    .tracking(0.8)
-                    .padding(.bottom, 2)
+        NavigationStack(path: $path) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("EPSynapse")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(EPSTheme.accent)
+                        .tracking(0.8)
+                        .padding(.bottom, 2)
 
-                if session.isSignedIn {
-                    dashboardContent
-                } else {
-                    signedOutContent
+                    if session.isSignedIn {
+                        dashboardContent
+                    } else {
+                        signedOutContent
+                    }
+                }
+                .padding(.horizontal, pagePad)
+                .padding(.top, AdaptiveLayout.isPad ? 96 : 88)
+                .padding(.bottom, 108)
+                .frame(maxWidth: AdaptiveLayout.pageMaxWidth)
+                .frame(maxWidth: .infinity)
+                .background {
+                    ScrollToTopBridge(tick: scrollToTopTick)
+                        .frame(width: 0, height: 0)
+                        .accessibilityHidden(true)
                 }
             }
-            .padding(.horizontal, pagePad)
-            .padding(.top, AdaptiveLayout.isPad ? 96 : 88)
-            .padding(.bottom, 108)
-            .frame(maxWidth: AdaptiveLayout.pageMaxWidth)
-            .frame(maxWidth: .infinity)
-            .background {
-                ScrollToTopBridge(tick: scrollToTopTick)
-                    .frame(width: 0, height: 0)
-                    .accessibilityHidden(true)
+            .scrollIndicators(.hidden)
+            .scrollDismissesKeyboard(.never)
+            .refreshable {
+                guard session.isSignedIn else { return }
+                await dashboard.load(from: session)
+            }
+            .toolbar(.hidden, for: .navigationBar)
+            .navigationDestination(for: HomeDestination.self) { destination in
+                switch destination {
+                case .schoolClass(let id):
+                    ClassView(classId: id)
+                case .note(let id):
+                    NoteView(noteId: id)
+                }
             }
         }
-        .scrollIndicators(.hidden)
-        .scrollDismissesKeyboard(.never)
         .onReceive(NotificationCenter.default.publisher(for: .epsScrollHomeToTop)) { _ in
+            if !path.isEmpty {
+                path = NavigationPath()
+            }
             scrollToTopTick += 1
-        }
-        .refreshable {
-            guard session.isSignedIn else { return }
-            await dashboard.load(from: session)
         }
         .task {
             await session.boot()
@@ -62,6 +77,8 @@ struct HomeView: View {
         .onChange(of: session.isSignedIn) { _, signedIn in
             if signedIn {
                 Task { await dashboard.load(from: session) }
+            } else {
+                path = NavigationPath()
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .epsOpenSettings)) { _ in
@@ -80,6 +97,7 @@ struct HomeView: View {
             HStack(alignment: .top, spacing: 16) {
                 VStack(spacing: 16) {
                     TodoPanel()
+                    NotesPanel(path: $path)
                     CompletedPanel()
                 }
                 .frame(maxWidth: .infinity, alignment: .top)
@@ -94,6 +112,7 @@ struct HomeView: View {
         } else {
             VStack(spacing: 16) {
                 TodoPanel()
+                NotesPanel(path: $path)
                 ClassesPanel()
                 DatesPanel()
                 FilesPanel()

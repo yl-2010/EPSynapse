@@ -222,32 +222,45 @@ struct ClassesPanel: View {
     @EnvironmentObject private var session: SessionStore
     @EnvironmentObject private var dashboard: DashboardStore
 
+    private var rows: [SchoolClass] { dashboard.displayedClasses }
+
     var body: some View {
         EPSPanel(title: "Classes") {
-            if dashboard.courses.isEmpty {
-                EmptyLine(
-                    session.profile?.canvasConnected == true
-                        ? "No classes"
-                        : "Connect Canvas in settings"
-                )
+            if rows.isEmpty {
+                EmptyLine(emptyCopy)
             } else {
                 VStack(alignment: .leading, spacing: 4) {
-                    ForEach(dashboard.courses) { course in
-                        ClassRow(course: course)
+                    ForEach(rows) { course in
+                        NavigationLink(value: HomeDestination.schoolClass(course.id)) {
+                            ClassRow(course: course)
+                        }
+                        .buttonStyle(.plain)
+                        .epsHapticNavigation()
                     }
                 }
             }
         }
     }
+
+    private var emptyCopy: String {
+        if !dashboard.scheduleClasses.isEmpty { return "No classes" }
+        if session.profile?.canvasConnected == true { return "No classes" }
+        return "Upload an EPS schedule PDF in settings"
+    }
 }
 
 struct ClassRow: View {
-    var course: Course
+    var course: SchoolClass
 
     private var isCurrent: Bool {
         guard let now = DashboardStore.currentPeriod() else { return false }
         let p = course.period.uppercased()
         return p == now.num || p == now.letter
+    }
+
+    private var trailing: String {
+        if !course.courseCode.isEmpty { return course.courseCode }
+        return course.trimester
     }
 
     var body: some View {
@@ -262,8 +275,13 @@ struct ClassRow: View {
                 .font(.body.weight(.semibold))
                 .foregroundStyle(EPSTheme.fg)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Text(course.courseCode)
-                .font(.caption)
+            if !trailing.isEmpty {
+                Text(trailing)
+                    .font(.caption)
+                    .foregroundStyle(EPSTheme.muted)
+            }
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
                 .foregroundStyle(EPSTheme.muted)
         }
         .padding(.vertical, 8)
@@ -274,6 +292,7 @@ struct ClassRow: View {
                     .fill(EPSTheme.accent.opacity(0.12))
             }
         }
+        .contentShape(Rectangle())
     }
 }
 

@@ -86,6 +86,68 @@ struct APIClient {
     )
   }
 
+  func fetchSchedule(sessionId: String) async throws -> ScheduleResponse {
+    try await request("/v1/me/schedule", sessionId: sessionId)
+  }
+
+  func uploadSchedulePDF(fileURL: URL, sessionId: String) async throws -> ScheduleResponse {
+    try await uploadMultipart(
+      "/v1/me/schedule/pdf",
+      fileURL: fileURL,
+      fieldName: "pdf",
+      sessionId: sessionId,
+      timeout: 90
+    )
+  }
+
+  func createNote(text: String, sessionId: String) async throws -> NoteResponse {
+    try await request(
+      "/v1/me/notes",
+      method: "POST",
+      body: CreateNoteBody(text: text),
+      sessionId: sessionId,
+      timeout: 90
+    )
+  }
+
+  func listNotes(sessionId: String) async throws -> NotesResponse {
+    try await request("/v1/me/notes", sessionId: sessionId)
+  }
+
+  func fetchNote(id: String, sessionId: String) async throws -> NoteResponse {
+    try await request("/v1/me/notes/\(Self.pathValue(id))", sessionId: sessionId)
+  }
+
+  func patchNote(id: String, subject: String, sessionId: String) async throws -> NoteResponse {
+    try await request(
+      "/v1/me/notes/\(Self.pathValue(id))",
+      method: "PATCH",
+      body: PatchNoteBody(subject: subject),
+      sessionId: sessionId
+    )
+  }
+
+  func uploadMultipart<T: Decodable>(
+    _ path: String,
+    fileURL: URL,
+    fieldName: String,
+    sessionId: String,
+    timeout: TimeInterval = 90
+  ) async throws -> T {
+    let data = try await performMultipart(
+      path,
+      fileURL: fileURL,
+      fieldName: fieldName,
+      sessionId: sessionId,
+      timeout: timeout
+    )
+    do {
+      return try decoder.decode(T.self, from: data)
+    } catch {
+      throw APIError(status: 0, message: "Could not read the server response.")
+    }
+  }
+
   func streamChat(
     provider: String,
     messages: [[String: String]],
@@ -123,6 +185,82 @@ struct APIClient {
       let chunk = trimmed.dropFirst(5).trimmingCharacters(in: .whitespaces)
       emitChatDelta(chunk, onDelta: onDelta)
     }
+  }
+
+  private func performMultipart(
+    _ path: String,
+    fileURL: URL,
+    fieldName: String,
+    sessionId: String,
+    timeout: TimeInterval
+  ) async throws -> Data {
+    guard let url = URL(string: path, relativeTo: baseURL) else {
+      throw APIError(status: 0, message: "Bad API path.")
+    }
+    let accessed = fileURL.startAccessingSecurityScopedResource()
+    defer {
+      if accessed { fileURL.stopAccessingSecurityScopedResource() }
+    }
+    let fileData: Data
+    do {
+      fileData = try Data(contentsOf: fileURL)
+    } catch {
+      throw APIError(status: 0, message: "Could not read that PDF.")
+    }
+    let boundary = "eps-\(UUID().uuidString)"
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.timeoutInterval = timeout
+    request.setValue("application/json", forHTTPHeaderField: "Accept")
+    request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+    if !sessionId.isEmpty {
+      request.setValue(sessionId, forHTTPHeaderField: "X-EPSynapse-Session")
+    }
+    let filename = fileURL.lastPathComponent.isEmpty ? "schedule.pdf" : fileURL.lastPathComponent
+    request.httpBody = Self.multipartBody(
+      fileData: fileData,
+      fileName: filename,
+      fieldNames: [fieldName, "pdf", "file"],
+      boundary: boundary
+    )
+
+    let data: Data
+    let response: URLResponse
+    do {
+      (data, response) = try await session.data(for: request)
+    } catch {
+      throw APIError(status: 0, message: "Could not reach api.epsynapse.com.")
+    }
+    let http = try httpResponse(response)
+    if !(200 ... 299).contains(http.statusCode) {
+      throw apiError(status: http.statusCode, data: data)
+    }
+    return data
+  }
+
+  private static func multipartBody(
+    fileData: Data,
+    fileName: String,
+    fieldNames: [String],
+    boundary: String
+  ) -> Data {
+    var body = Data()
+    var seen = Set<String>()
+    for fieldName in fieldNames {
+      if fieldName.isEmpty || !seen.insert(fieldName).inserted { continue }
+      let header = """
+      --\(boundary)\r
+      Content-Disposition: form-data; name="\(fieldName)"; filename="\(fileName)"\r
+      Content-Type: application/pdf\r
+      \r
+
+      """
+      body.append(Data(header.utf8))
+      body.append(fileData)
+      body.append(Data("\r\n".utf8))
+    }
+    body.append(Data("--\(boundary)--\r\n".utf8))
+    return body
   }
 
   private func perform(
@@ -227,6 +365,12 @@ struct APIClient {
       return textFromModelField(obj["reasoning"])
     }
     return ""
+  }
+
+  private static func pathValue(_ raw: String) -> String {
+    var allowed = CharacterSet.urlPathAllowed
+    allowed.remove(charactersIn: "/")
+    return raw.addingPercentEncoding(withAllowedCharacters: allowed) ?? raw
   }
 
   private static func plistString(_ key: String) -> String? {

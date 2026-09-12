@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SettingsSheet: View {
     @Binding var isPresented: Bool
@@ -13,6 +14,8 @@ struct SettingsSheet: View {
     @State private var canvasToken = ""
     @State private var draftKey = ""
     @State private var schoolHits: [SchoolHit] = []
+    @State private var pickingPDF = false
+    @State private var pickedPDF: URL?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -50,6 +53,21 @@ struct SettingsSheet: View {
                 schoolHits = []
             } else {
                 schoolHits = hits
+            }
+        }
+        .fileImporter(
+            isPresented: $pickingPDF,
+            allowedContentTypes: [.pdf],
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case .success(let urls):
+                pickedPDF = Self.copiedPDF(urls.first)
+                if pickedPDF != nil, dashboard.scheduleStatus.hasPrefix("Choose an EPS") {
+                    dashboard.scheduleStatus = ""
+                }
+            case .failure:
+                dashboard.scheduleStatus = "Could not open that PDF."
             }
         }
         .task(id: isPresented) {
@@ -129,6 +147,35 @@ struct SettingsSheet: View {
                 Text("Account → Settings → New Access Token")
                     .font(.footnote)
                     .foregroundStyle(EPSTheme.muted)
+
+                fieldLabel("EPS schedule PDF")
+                if let name = pickedPDF?.lastPathComponent, !name.isEmpty {
+                    Text(name)
+                        .font(.footnote)
+                        .foregroundStyle(EPSTheme.fg)
+                }
+                HStack(spacing: 8) {
+                    glassAction("Choose PDF") {
+                        pickingPDF = true
+                    }
+                    goldButton(dashboard.scheduleBusy ? "Uploading…" : "Upload schedule") {
+                        guard let url = pickedPDF else {
+                            dashboard.scheduleStatus = "Choose an EPS schedule PDF first."
+                            return
+                        }
+                        Task {
+                            await dashboard.uploadSchedule(fileURL: url, session: session)
+                            if dashboard.scheduleStatus.hasPrefix("Schedule uploaded") {
+                                await dashboard.load(from: session)
+                            }
+                        }
+                    }
+                }
+                if !dashboard.scheduleStatus.isEmpty {
+                    Text(dashboard.scheduleStatus)
+                        .font(.footnote)
+                        .foregroundStyle(EPSTheme.muted)
+                }
 
                 goldButton("Save") {
                     Task {
@@ -393,6 +440,26 @@ struct SettingsSheet: View {
             if !profile.canvasHost.isEmpty { canvasHost = profile.canvasHost }
         }
         draftKey = ""
+    }
+
+    private static func copiedPDF(_ url: URL?) -> URL? {
+        guard let url else { return nil }
+        let accessed = url.startAccessingSecurityScopedResource()
+        defer {
+            if accessed { url.stopAccessingSecurityScopedResource() }
+        }
+        let original = url.lastPathComponent.isEmpty ? "schedule.pdf" : url.lastPathComponent
+        let dest = FileManager.default.temporaryDirectory
+            .appendingPathComponent("eps-\(UUID().uuidString)-\(original)")
+        do {
+            if FileManager.default.fileExists(atPath: dest.path) {
+                try FileManager.default.removeItem(at: dest)
+            }
+            try FileManager.default.copyItem(at: url, to: dest)
+            return dest
+        } catch {
+            return url
+        }
     }
 
     private static func normalizedCanvasHost(_ raw: String) -> String {

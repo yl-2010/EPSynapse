@@ -6,14 +6,26 @@ final class DashboardStore: ObservableObject {
   static let tags = ["CW", "HW", "QA", "MA"]
 
   @Published var courses: [Course] = []
+  @Published var scheduleClasses: [SchoolClass] = []
+  @Published var meetings: [ScheduleMeeting] = []
   @Published var assignments: [Assignment] = []
   @Published var files: [DriveFile] = []
   @Published var messages: [MailMessage] = []
+  @Published var notes: [ClassifiedNote] = []
   @Published var openMail: MailMessage?
   @Published var mailBusy = false
   @Published var sendStatus = ""
+  @Published var notesBusy = false
+  @Published var notesStatus = ""
+  @Published var scheduleBusy = false
+  @Published var scheduleStatus = ""
   @Published var typeFilter: Set<String> = Set(DashboardStore.tags)
   @Published var isLoading = false
+
+  var displayedClasses: [SchoolClass] {
+    if !scheduleClasses.isEmpty { return scheduleClasses }
+    return courses.map(SchoolClass.init(course:))
+  }
 
   private let api = APIClient.shared
 
@@ -25,9 +37,12 @@ final class DashboardStore: ObservableObject {
     let me = session.profile
     guard !sid.isEmpty, let me else {
       courses = []
+      scheduleClasses = []
+      meetings = []
       assignments = []
       files = []
       messages = []
+      notes = []
       return
     }
 
@@ -47,11 +62,141 @@ final class DashboardStore: ObservableObject {
       guard me.outlookConnected else { return [] }
       return await self.loadMessages(sessionId: sid)
     }()
+    async let fetchedSchedule: (classes: [SchoolClass], meetings: [ScheduleMeeting]) = self.loadSchedule(
+      sessionId: sid
+    )
+    async let fetchedNotes: [ClassifiedNote] = self.loadNotes(sessionId: sid)
 
     courses = await fetchedCourses
     assignments = await fetchedAssignments
     files = await fetchedFiles
     messages = await fetchedMessages
+    let schedule = await fetchedSchedule
+    scheduleClasses = schedule.classes
+    meetings = schedule.meetings
+    notes = await fetchedNotes
+  }
+
+  func schoolClass(id: String) -> SchoolClass? {
+    displayedClasses.first { $0.id == id }
+  }
+
+  func note(id: String) -> ClassifiedNote? {
+    notes.first { $0.id == id }
+  }
+
+  func assignments(for schoolClass: SchoolClass) -> [Assignment] {
+    assignments.filter { Self.assignment($0, matches: schoolClass) }
+  }
+
+  func notes(for schoolClass: SchoolClass) -> [ClassifiedNote] {
+    notes.filter { note in
+      if !note.classId.isEmpty, note.classId == schoolClass.id { return true }
+      if Self.namesOverlap(note.subject, schoolClass.name) { return true }
+      return Self.namesOverlap(note.subject, schoolClass.subject)
+    }
+  }
+
+  func meetings(for schoolClass: SchoolClass) -> [ScheduleMeeting] {
+    meetings.filter { meeting in
+      if !meeting.classId.isEmpty, meeting.classId == schoolClass.id { return true }
+      if !meeting.period.isEmpty, meeting.period == schoolClass.period { return true }
+      return false
+    }
+  }
+
+  func uploadSchedule(fileURL: URL, session: SessionStore) async {
+    guard !session.sessionId.isEmpty else {
+      scheduleStatus = SessionStore.googleFirst
+      return
+    }
+    if scheduleBusy { return }
+    scheduleBusy = true
+    scheduleStatus = "Uploading schedule…"
+    defer { scheduleBusy = false }
+    do {
+      let wrapped = try await api.uploadSchedulePDF(fileURL: fileURL, sessionId: session.sessionId)
+      scheduleClasses = wrapped.classes
+      meetings = wrapped.meetings
+      let count = wrapped.classes.count
+      scheduleStatus = count == 1 ? "Schedule uploaded · 1 class" : "Schedule uploaded · \(count) classes"
+      await load(from: session)
+    } catch {
+      scheduleStatus = (error as? APIError)?.message ?? "Could not upload the schedule PDF."
+    }
+  }
+
+  func classifyNote(text: String, session: SessionStore) async -> ClassifiedNote? {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !session.sessionId.isEmpty else {
+      notesStatus = SessionStore.googleFirst
+      return nil
+    }
+    if trimmed.isEmpty {
+      notesStatus = "Paste a note first."
+      return nil
+    }
+    if notesBusy { return nil }
+    notesBusy = true
+    notesStatus = "Classifying…"
+    defer { notesBusy = false }
+    do {
+      let wrapped = try await api.createNote(text: trimmed, sessionId: session.sessionId)
+      let note = wrapped.note
+      if note.id.isEmpty {
+        notesStatus = "Could not classify that note."
+        return nil
+      }
+      if let index = notes.firstIndex(where: { $0.id == note.id }) {
+        notes[index] = note
+      } else {
+        notes.insert(note, at: 0)
+      }
+      notesStatus = note.subject.isEmpty ? "Classified." : "Classified · \(note.subject)"
+      return note
+    } catch {
+      notesStatus = (error as? APIError)?.message ?? "Could not classify that note."
+      return nil
+    }
+  }
+
+  func refreshNote(id: String, session: SessionStore) async {
+    let nid = id.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !nid.isEmpty, !session.sessionId.isEmpty else { return }
+    do {
+      let wrapped = try await api.fetchNote(id: nid, sessionId: session.sessionId)
+      let note = wrapped.note
+      guard !note.id.isEmpty else { return }
+      if let index = notes.firstIndex(where: { $0.id == note.id }) {
+        notes[index] = note
+      } else {
+        notes.insert(note, at: 0)
+      }
+    } catch {
+      /* list preview is enough if the detail route is down */
+    }
+  }
+
+  func updateNoteSubject(id: String, subject: String, session: SessionStore) async {
+    let nid = id.trimmingCharacters(in: .whitespacesAndNewlines)
+    let next = subject.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !nid.isEmpty, !next.isEmpty, !session.sessionId.isEmpty else { return }
+    if let current = note(id: nid), current.subject == next { return }
+    do {
+      let wrapped = try await api.patchNote(id: nid, subject: next, sessionId: session.sessionId)
+      let note = wrapped.note
+      if let index = notes.firstIndex(where: { $0.id == nid }) {
+        if note.id.isEmpty {
+          notes[index].subject = next
+        } else {
+          notes[index] = note
+        }
+      } else if !note.id.isEmpty {
+        notes.insert(note, at: 0)
+      }
+    } catch {
+      notesStatus = (error as? APIError)?.message ?? "Could not update the subject."
+    }
   }
 
   func toggleFilter(_ tag: String) {
@@ -123,6 +268,37 @@ final class DashboardStore: ObservableObject {
     ]
     guard let hit = bells.first(where: { minutes >= $0.0 && minutes < $0.1 }) else { return nil }
     return (hit.2, hit.3)
+  }
+
+  private func loadSchedule(sessionId: String) async -> (classes: [SchoolClass], meetings: [ScheduleMeeting]) {
+    do {
+      let wrapped = try await api.fetchSchedule(sessionId: sessionId)
+      return (wrapped.classes, wrapped.meetings)
+    } catch {
+      return ([], [])
+    }
+  }
+
+  private func loadNotes(sessionId: String) async -> [ClassifiedNote] {
+    do {
+      let wrapped = try await api.listNotes(sessionId: sessionId)
+      return wrapped.notes
+    } catch {
+      return []
+    }
+  }
+
+  private static func assignment(_ item: Assignment, matches schoolClass: SchoolClass) -> Bool {
+    if !item.courseId.isEmpty, item.courseId == schoolClass.id { return true }
+    return namesOverlap(item.courseName, schoolClass.name)
+  }
+
+  private static func namesOverlap(_ a: String, _ b: String) -> Bool {
+    let left = a.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    let right = b.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    if left.isEmpty || right.isEmpty { return false }
+    if left == right { return true }
+    return left.contains(right) || right.contains(left)
   }
 
   private func loadCourses(sessionId: String) async -> [Course] {
