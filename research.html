@@ -21,7 +21,7 @@
       content="Accuracy of the EPSynapse notes classifier across zero-shot BERT, fine-tuned BERT, and the student-key model."
     />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/styles.css?v=glass26" />
+    <link rel="stylesheet" href="/styles.css?v=research2" />
   </head>
   <body>
     <a
@@ -44,23 +44,27 @@
     ></button>
 
     <main class="research-page">
-      <p class="edu-home-mark">Research</p>
-      <p class="research-lead">
-        How the EPSynapse notes classifier votes. Three arms, eight subjects.
-      </p>
-      <form class="research-toggles" id="research-toggles">
-        <label class="edu-filter is-on">
-          <input type="checkbox" name="includeUser" checked />
-          <span>Include user tests</span>
-        </label>
-        <label class="edu-filter is-on">
-          <input type="checkbox" name="includeFrozen" checked />
-          <span>Include eval tests</span>
-        </label>
-      </form>
+      <header class="research-hero">
+        <p class="edu-home-mark">Research</p>
+        <form class="research-toggles" id="research-toggles">
+          <label class="research-switch">
+            <input type="checkbox" name="includeUser" />
+            <span class="research-switch-ui" aria-hidden="true"></span>
+            <span class="research-switch-label" id="research-user-label">Include user tests</span>
+          </label>
+          <label class="research-switch">
+            <input type="checkbox" name="includeFrozen" checked />
+            <span class="research-switch-ui" aria-hidden="true"></span>
+            <span class="research-switch-label">Include original eval tests</span>
+          </label>
+          <p class="research-hint" id="research-hint">
+            Charts show only the original offline eval run.
+          </p>
+        </form>
+      </header>
       <p class="edu-empty" id="research-status">Loading metrics…</p>
+      <div class="research-body" id="research-body" hidden></div>
       <p class="research-updated" id="research-updated" hidden></p>
-      <div class="research-charts" id="research-charts" hidden></div>
     </main>
 
     <svg class="lg-svg" aria-hidden="true">
@@ -68,6 +72,6 @@
     </svg>
     <script src="/liquid-glass.js?v=glass13"></script>
     <script src="/theme-orb.js?v=moon5"></script>
-    <script src="/research.js?v=glass23"></script>
+    <script src="/research.js?v=research2"></script>
   </body>
 </html>
