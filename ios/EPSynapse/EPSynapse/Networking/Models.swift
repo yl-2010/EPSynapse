@@ -455,9 +455,78 @@ struct CompleteAssignmentBody: Encodable {
   var plannableType: String
 }
 
+struct AgentUIContext: Codable, Equatable {
+  var client: String
+  var view: String
+  var path: String
+  var classId: String
+  var className: String
+  var period: String
+  var noteId: String
+  var noteTitle: String
+  var noteSubject: String
+  var noteText: String
+
+  init(
+    client: String = "ios",
+    view: String = "home",
+    path: String = "",
+    classId: String = "",
+    className: String = "",
+    period: String = "",
+    noteId: String = "",
+    noteTitle: String = "",
+    noteSubject: String = "",
+    noteText: String = ""
+  ) {
+    self.client = client
+    self.view = view
+    self.path = path
+    self.classId = classId
+    self.className = className
+    self.period = period
+    self.noteId = noteId
+    self.noteTitle = noteTitle
+    self.noteSubject = noteSubject
+    self.noteText = noteText
+  }
+
+  static func home() -> AgentUIContext {
+    AgentUIContext(view: "home", path: "/")
+  }
+
+  static func schoolClass(_ row: SchoolClass) -> AgentUIContext {
+    AgentUIContext(
+      view: "class",
+      path: "/class/\(row.id)",
+      classId: row.id,
+      className: row.name,
+      period: row.period
+    )
+  }
+
+  static func note(_ row: ClassifiedNote) -> AgentUIContext {
+    let title = row.text
+      .split(whereSeparator: \.isNewline)
+      .map { $0.trimmingCharacters(in: .whitespaces) }
+      .first(where: { !$0.isEmpty })
+      .map(String.init) ?? ""
+    return AgentUIContext(
+      view: "note",
+      path: "/note/\(row.id)",
+      classId: row.classId,
+      noteId: row.id,
+      noteTitle: String(title.prefix(200)),
+      noteSubject: row.subject,
+      noteText: String(row.text.prefix(1500))
+    )
+  }
+}
+
 struct ChatRequestBody: Encodable {
   var provider: String
   var messages: [[String: String]]
+  var uiContext: AgentUIContext?
 }
 
 struct ChatMessageBody: Codable, Equatable {

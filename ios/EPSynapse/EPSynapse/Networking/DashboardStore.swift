@@ -26,6 +26,7 @@ final class DashboardStore: ObservableObject {
   @Published var scheduleStatus = ""
   @Published var typeFilter: Set<String> = Set(DashboardStore.tags)
   @Published var isLoading = false
+  @Published var uiContext: AgentUIContext = .home()
 
   var displayedClasses: [SchoolClass] {
     if !scheduleClasses.isEmpty { return scheduleClasses }

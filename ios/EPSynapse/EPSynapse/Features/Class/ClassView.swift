@@ -74,6 +74,11 @@ struct ClassView: View {
         .sheet(item: $htmlFile) { file in
             ClassHTMLSheet(file: file)
         }
+        .onAppear {
+            if let schoolClass {
+                dashboard.uiContext = .schoolClass(schoolClass)
+            }
+        }
     }
 
     private var backRow: some View {

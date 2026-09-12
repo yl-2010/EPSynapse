@@ -55,8 +55,12 @@ struct NoteView: View {
         .task {
             await dashboard.refreshNote(id: noteId, session: session)
             hydrate()
+            if let note { dashboard.uiContext = .note(note) }
         }
-        .onAppear { hydrate() }
+        .onAppear {
+            hydrate()
+            if let note { dashboard.uiContext = .note(note) }
+        }
         .onChange(of: noteId) { _, _ in hydrate() }
         .onChange(of: subject) { _, next in
             guard let note, !next.isEmpty, next != note.subject else { return }

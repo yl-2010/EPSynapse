@@ -166,13 +166,14 @@ struct APIClient {
     messages: [[String: String]],
     sessionId: String,
     apiKey: String,
+    uiContext: AgentUIContext? = nil,
     onDelta: (_ content: String, _ reasoning: String) -> Void,
     onEvent: ((_ event: [String: Any]) -> Void)? = nil
   ) async throws {
     var request = try makeRequest(
       "/v1/agent/chat",
       method: "POST",
-      body: ChatRequestBody(provider: provider, messages: messages),
+      body: ChatRequestBody(provider: provider, messages: messages, uiContext: uiContext),
       sessionId: sessionId,
       timeout: 90
     )

@@ -835,6 +835,10 @@
             localStorage.getItem(LS_PROV) ||
             "groq",
           messages,
+          uiContext:
+            typeof window.__epsynapseUiContext === "function"
+              ? window.__epsynapseUiContext()
+              : undefined,
         }),
       });
       if (!res.ok) {

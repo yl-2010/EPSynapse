@@ -14,7 +14,9 @@ import {
   extractChatDelta,
   extractToolCalls,
   finishedToolCalls,
+  formatUiContextBlock,
   mergeToolCallDeltas,
+  normalizeUiContext,
   publicAgentConfig,
   MISSING_KEY_ERROR,
   resolveApiKey,
@@ -1264,6 +1266,10 @@ app.post("/v1/agent/chat", async (req, res) => {
     snapshot = await liveSnapshot(student);
   } catch {
     snapshot = "";
+  }
+  const uiBlock = formatUiContextBlock(normalizeUiContext(req.body?.uiContext));
+  if (uiBlock) {
+    snapshot = snapshot ? `${snapshot}\n\n${uiBlock}` : uiBlock;
   }
 
   const ownerId = ownerIdForStudent(student);

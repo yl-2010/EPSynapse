@@ -64,6 +64,9 @@ struct HomeView: View {
                 }
             }
         }
+        .onChange(of: path.count) { _, count in
+            if count == 0 { dashboard.uiContext = .home() }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .epsScrollHomeToTop)) { _ in
             if !path.isEmpty {
                 path = NavigationPath()

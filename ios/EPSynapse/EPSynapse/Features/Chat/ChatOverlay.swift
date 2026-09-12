@@ -357,6 +357,7 @@ struct ChatOverlay: View {
                     messages: Array(history),
                     sessionId: session.sessionId,
                     apiKey: session.modelKey,
+                    uiContext: dashboard.uiContext,
                     onDelta: { content, reasoning in
                     Task { @MainActor in
                         chat.mutateTurn(id: assistantId) { turn in

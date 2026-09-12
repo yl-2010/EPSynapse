@@ -11,6 +11,7 @@ export const SYSTEM_PROMPT = [
   "You can change the student's dashboard with tools: add/update/delete notes, add/update/check/uncheck/delete todos, add or replace class files including standalone HTML, delete class files, and rename classes.",
   "When they ask you to do one of those things, call the tool. Do not tell them to tap a button instead.",
   "If a live student snapshot is attached, use it. Do not invent courses, due dates, grades, files, or emails that are not in the snapshot or a tool result.",
+  "If an open screen is attached, that class or note is the default edit target unless they name something else. Skip open_page when they are already on that page.",
   "After a create, call open_page so the site or app lands on that class or note.",
   "If they want mail sent, tell them to use the Mail panel Send button. You cannot send from chat.",
   "If there is no snapshot, say you do not have live school data yet.",
@@ -107,6 +108,64 @@ export function upstreamHeaders(provider, key) {
     "Content-Type": "application/json",
     ...(provider.extraHeaders || {}),
   };
+}
+
+export function normalizeUiContext(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const src = raw;
+  const out = {};
+  const str = (key, max) => {
+    if (src[key] == null) return;
+    const v = String(src[key]).trim();
+    if (v) out[key] = v.slice(0, max);
+  };
+  str("client", 40);
+  str("path", 300);
+  str("view", 40);
+  str("classId", 120);
+  str("className", 160);
+  str("period", 8);
+  str("noteId", 120);
+  str("noteTitle", 200);
+  str("noteSubject", 160);
+  str("noteText", 1500);
+  return Object.keys(out).length ? out : null;
+}
+
+export function formatUiContextBlock(ui) {
+  if (!ui) return "";
+  const lines = ["Open screen (authoritative for this turn):"];
+  const view = String(ui.view || "").toLowerCase();
+  const client = String(ui.client || "unknown");
+  lines.push(`- client: ${client}`);
+  if (ui.path) lines.push(`- path: ${ui.path}`);
+  if (view === "home") {
+    lines.push("- Viewing Home (TODO, Classes, Grades, Notes).");
+  } else if (view === "class") {
+    lines.push(
+      `- Viewing CLASS: ${ui.className || ui.classId || "?"}` +
+        (ui.period ? ` (period ${ui.period})` : "") +
+        (ui.classId ? ` [id ${ui.classId}]` : "")
+    );
+    lines.push("- Prefer this class for creates and edits unless they name another.");
+  } else if (view === "note") {
+    lines.push(
+      `- Viewing NOTE: ${ui.noteTitle || ui.noteId || "?"}` +
+        (ui.noteSubject ? ` [${ui.noteSubject}]` : "") +
+        (ui.noteId ? ` [id ${ui.noteId}]` : "")
+    );
+    if (ui.classId || ui.className) {
+      const klass = [ui.className, ui.classId ? `[id ${ui.classId}]` : ""].filter(Boolean).join(" ");
+      lines.push(`- Note class: ${klass}`);
+    }
+    if (ui.noteText) lines.push(`- Note text:\n${ui.noteText}`);
+    lines.push("- Prefer this note for edits or delete unless they name another.");
+  } else if (view === "grades") {
+    lines.push("- Viewing Grades.");
+  } else if (view) {
+    lines.push(`- Viewing ${view}.`);
+  }
+  return lines.join("\n");
 }
 
 export function systemPromptWithSnapshot(snapshot = "") {

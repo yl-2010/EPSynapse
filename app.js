@@ -817,6 +817,31 @@
     return { page: "home" };
   }
 
+  function agentUiContext() {
+    const route = currentRoute();
+    const out = {
+      client: "web",
+      path: location.pathname || "/",
+      view: route.page || "home",
+    };
+    if (route.page === "class") {
+      const klass = findClass(route.id);
+      out.classId = route.id;
+      if (klass?.name) out.className = klass.name;
+      if (klass?.period) out.period = klass.period;
+    }
+    if (route.page === "note") {
+      const note = (lastHome.notes || []).find((n) => String(n.id) === String(route.id));
+      out.noteId = route.id;
+      if (note?.title) out.noteTitle = note.title;
+      if (note?.subject) out.noteSubject = note.subject;
+      if (note?.classId) out.classId = note.classId;
+      if (note?.text) out.noteText = String(note.text).slice(0, 1500);
+    }
+    return out;
+  }
+  window.__epsynapseUiContext = agentUiContext;
+
   function goTo(path) {
     const next = path || "/";
     if (location.pathname !== next) history.pushState({}, "", next);
