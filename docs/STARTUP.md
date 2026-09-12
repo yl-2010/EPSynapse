@@ -1,5 +1,7 @@
 # Start everything (Mac Studio + epsynapse.com API)
 
+Copy-paste card for the person at the Mac Studio: [`MAC_STUDIO.md`](MAC_STUDIO.md).
+
 Production site (**https://epsynapse.com**) is on Vercel. The Mac exposes the Express API on port **3006** through a dedicated Cloudflare Tunnel (**https://api.epsynapse.com**).
 
 ---
