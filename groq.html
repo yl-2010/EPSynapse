@@ -15,8 +15,11 @@
         } catch (e) {}
       })();
     </script>
-    <title>Not found · EPSynapse</title>
-    <meta name="description" content="This page is not in EPSynapse." />
+    <title>Groq key · EPSynapse</title>
+    <meta
+      name="description"
+      content="How to get a free Groq API key for EPSynapse chat."
+    />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/styles.css?v=glass13" />
     <style>
@@ -33,20 +36,32 @@
       .page-sheet {
         max-height: min(52rem, calc(100dvh - 8rem));
       }
+      .page-sheet .edu-sheet-body h2 {
+        margin: 1.1rem 0 0.4rem;
+        font-size: var(--text-headline);
+        font-weight: 650;
+      }
+      .page-sheet .edu-sheet-body h2:first-child {
+        margin-top: 0.15rem;
+      }
       .page-sheet .edu-sheet-body p {
         margin: 0 0 0.75rem;
         font-size: var(--text-subhead);
         line-height: 1.45;
         color: var(--fg);
       }
+      .page-sheet .edu-sheet-body ol {
+        margin: 0 0 0.75rem;
+        padding-left: 1.25rem;
+        font-size: var(--text-subhead);
+        line-height: 1.45;
+        color: var(--fg);
+      }
+      .page-sheet .edu-sheet-body li {
+        margin: 0 0 0.55rem;
+      }
       .page-sheet .edu-sheet-body a {
         color: var(--accent);
-      }
-      .page-links {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.75rem 1.1rem;
-        margin-top: 0.35rem;
       }
     </style>
   </head>
@@ -73,15 +88,46 @@
     <div class="page-wrap">
       <main class="edu-sheet page-sheet">
         <div class="edu-sheet-head">
-          <h1 class="edu-sheet-title">Not found</h1>
+          <h1 class="edu-sheet-title">Groq key</h1>
         </div>
         <div class="edu-sheet-body">
-          <p>This page is not in EPSynapse.</p>
-          <p class="page-links">
-            <a href="/">Home</a>
-            <a href="/privacy">Privacy</a>
-            <a href="/groq">Groq key</a>
+          <p>
+            Chat needs a free Groq API key. Get one, then paste it into EPSynapse Settings.
+            Settings is the gear on the home screen after you sign in with Google.
           </p>
+
+          <h2>How to get a key</h2>
+          <ol>
+            <li>
+              Open
+              <a href="https://console.groq.com" rel="noopener noreferrer">console.groq.com</a>
+              and sign up. Google, GitHub, or email works. The free tier does not ask for a card.
+            </li>
+            <li>
+              Open
+              <a href="https://console.groq.com/keys" rel="noopener noreferrer"
+                >console.groq.com/keys</a
+              >. That is API Keys in the left nav.
+            </li>
+            <li>Click Create API Key. Name it EPSynapse or whatever you will recognize. Submit.</li>
+            <li>
+              Copy the key now. It starts with gsk_. Groq shows the full value only once.
+            </li>
+            <li>
+              Come back to EPSynapse Settings, paste it in the model key field, and save.
+            </li>
+          </ol>
+
+          <h2>Where the key lives</h2>
+          <p>
+            The key stays in this browser. EPSynapse does not put it in the public site files.
+          </p>
+          <p>
+            If you lose it, make a new one on the same
+            <a href="https://console.groq.com/keys" rel="noopener noreferrer">Groq keys page</a>.
+          </p>
+
+          <p><a href="/">Back to EPSynapse</a></p>
         </div>
       </main>
     </div>
