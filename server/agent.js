@@ -12,6 +12,7 @@ export const SYSTEM_PROMPT = [
   "If they want mail sent, tell them to use the Mail panel Send button. You cannot send from chat.",
   "If there is no snapshot, say you do not have live school data yet.",
   "If they ask you to remember something, work only with what is already in this conversation.",
+  "Students can answer this week's LPC pulse at /pulse and adults see counts at /board. Do not invent vote totals.",
 ].join(" ");
 
 export const PROVIDERS = {
