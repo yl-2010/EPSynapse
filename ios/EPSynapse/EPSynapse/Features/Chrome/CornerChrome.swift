@@ -10,6 +10,7 @@ struct CornerChrome: View {
     @EnvironmentObject private var theme: ThemeStore
     @EnvironmentObject private var session: SessionStore
     @EnvironmentObject private var chat: ChatStore
+    @Environment(\.colorScheme) private var colorScheme
 
     private var orbSide: CGFloat { AdaptiveLayout.cornerOrbSide }
     private var cornerPad: CGFloat { AdaptiveLayout.cornerPad }
@@ -107,15 +108,11 @@ struct CornerChrome: View {
             EPSHaptics.medium()
             theme.cycle()
         } label: {
-            ZStack {
-                Image(systemName: "circle.fill")
-                    .foregroundStyle(Color(red: 242 / 255, green: 242 / 255, blue: 247 / 255))
-                Image(systemName: "circle.lefthalf.filled")
-                    .foregroundStyle(Color(red: 28 / 255, green: 28 / 255, blue: 30 / 255))
-            }
-            .font(.system(size: orbSide * 0.38, weight: .semibold))
-            .frame(width: orbSide, height: orbSide)
-            .contentShape(Circle())
+            Image(systemName: colorScheme == .dark ? "sun.max.fill" : "moon.fill")
+                .font(.system(size: orbSide * 0.42, weight: .semibold))
+                .foregroundStyle(EPSTheme.fg)
+                .frame(width: orbSide, height: orbSide)
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .epsSizedGlassCircle(side: orbSide)
