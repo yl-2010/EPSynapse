@@ -1456,6 +1456,8 @@
     const replacing = entry && entry.dataset.replace === "1";
     if (entry) entry.hidden = connected && !replacing;
     if (ready) ready.hidden = !connected;
+    const steps = document.getElementById("canvas-steps");
+    if (steps) steps.hidden = connected && !replacing;
     paintKeysSummary();
   }
 

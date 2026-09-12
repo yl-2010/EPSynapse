@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <script>
+      (function () {
+        try {
+          var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var r = document.documentElement;
+          r.dataset.theme = "system";
+          r.dataset.resolvedTheme = dark ? "dark" : "light";
+          r.style.colorScheme = dark ? "dark" : "light";
+        } catch (e) {}
+      })();
+    </script>
+    <title>Canvas token · EPSynapse</title>
+    <meta
+      name="description"
+      content="How to make a Canvas access token and save it in EPSynapse."
+    />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css?v=glass28" />
+    <style>
+      a.corner {
+        text-decoration: none;
+      }
+      .page-wrap {
+        display: flex;
+        justify-content: center;
+        box-sizing: border-box;
+        min-height: 100dvh;
+        padding: 6.5rem 1rem 2rem;
+      }
+      .page-sheet {
+        max-height: min(52rem, calc(100dvh - 8rem));
+      }
+      .page-sheet .edu-sheet-body .edu-sheet-title {
+        margin: 0 0 0.75rem;
+      }
+      .page-sheet .edu-sheet-body h2 {
+        margin: 1.1rem 0 0.4rem;
+        font-size: var(--text-headline);
+        font-weight: 650;
+      }
+      .page-sheet .edu-sheet-body p {
+        margin: 0 0 0.75rem;
+        font-size: var(--text-subhead);
+        line-height: 1.45;
+        color: var(--fg);
+      }
+      .page-sheet .edu-sheet-body ol {
+        margin: 0 0 0.75rem;
+        padding-left: 1.25rem;
+        font-size: var(--text-subhead);
+        line-height: 1.45;
+        color: var(--fg);
+      }
+      .page-sheet .edu-sheet-body li {
+        margin: 0 0 0.55rem;
+      }
+      .page-sheet .edu-sheet-body a {
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <a
+      href="/"
+      class="corner c-tl squircle"
+      data-liquid-glass="squircle"
+      data-filter-id="lg-tl"
+      aria-label="Home"
+    >
+      <span class="corner-mark" aria-hidden="true">E</span>
+    </a>
+
+    <button
+      type="button"
+      class="corner c-tr circle"
+      data-liquid-glass="circle"
+      data-filter-id="lg-tr"
+      aria-label="Toggle theme"
+      draggable="false"
+    ></button>
+
+    <div class="page-wrap">
+      <main class="edu-sheet page-sheet">
+        <div class="edu-sheet-body">
+          <h1 class="edu-sheet-title">Canvas token</h1>
+          <p>
+            Classes, homework, and grades come from Canvas. Chat does not take a token.
+            Make one in Canvas, then save it in Settings.
+          </p>
+
+          <h2>Log into Canvas</h2>
+          <ol>
+            <li>
+              Open
+              <a href="https://eastsideprep.instructure.com" rel="noopener noreferrer">eastsideprep.instructure.com</a>.
+              Another school? Use that school's Canvas URL instead.
+            </li>
+            <li>
+              Eastside Prep sends you to four11. Tap
+              <strong>@eastsideprep.org login</strong>.
+              That is Microsoft with your school email. Do not tap Parent/Guardian Login.
+              Do not tap Old Canvas Login Page.
+            </li>
+            <li>
+              Finish the Microsoft sign-in. You should land on your Canvas dashboard,
+              with classes on the left. Stay on that tab. You need it open.
+            </li>
+          </ol>
+
+          <h2>Find New Access Token</h2>
+          <ol>
+            <li>
+              On the left, click Account. That is your picture or the Account label
+              at the bottom of the global nav. A small tray slides out.
+            </li>
+            <li>Click Settings. Not Notifications. Not Profile. Settings.</li>
+            <li>
+              Scroll down the page. Past your picture, past the contact info,
+              until the heading <strong>Approved Integrations</strong>.
+            </li>
+            <li>
+              Click <strong>Add New Access Token</strong>. Some Canvas sites label
+              this <strong>+ New Access Token</strong>. Same button.
+            </li>
+          </ol>
+          <p>
+            If that button is greyed out, the school turned student tokens off.
+            Ask a Canvas admin. Do not open Developer Keys. That is a different,
+            admin-only page.
+          </p>
+
+          <h2>Purpose, expiration, permissions</h2>
+          <p>
+            There is no permissions list. No scopes. No checkboxes. Do not look
+            for Read, Write, or Courses. A Canvas token can do what you can do.
+            EPSynapse only reads courses, assignments, planner items, and grades.
+          </p>
+          <ol>
+            <li>Purpose. Type <strong>EPSynapse</strong>.</li>
+            <li>
+              Expiration. Students have to pick a date. Canvas often caps this
+              at about 30 days. Click the calendar, pick the last day it allows.
+              Leave the time as it is, or 11:59 PM.
+            </li>
+            <li>
+              Staff can sometimes leave expiration empty. If the field has a
+              star, pick a date.
+            </li>
+            <li>Click <strong>Generate Token</strong>.</li>
+            <li>
+              Copy the token now. It is a long string. It does not start with gsk_.
+              Canvas shows the full value once. If you close the box without
+              copying, make a new token.
+            </li>
+          </ol>
+
+          <h2>Where to paste it</h2>
+          <ol>
+            <li>Come back to <a href="/">epsynapse.com</a> and sign in with Google.</li>
+            <li>Tap the gear in the bottom-left corner.</li>
+            <li>Tap Canvas.</li>
+            <li>
+              Leave Canvas URL as
+              <code>https://eastsideprep.instructure.com</code>
+              unless you use another school. If you do, paste that host.
+            </li>
+            <li>Paste the token in Access token.</li>
+            <li>Tap Save. That is the gold Save on the Canvas pane.</li>
+            <li>
+              You should land back on the settings list. Canvas must say
+              Connected, not "URL and token".
+            </li>
+            <li>
+              Close settings. Classes and homework should load. Chat can use them too.
+            </li>
+          </ol>
+
+          <h2>Where the token lives</h2>
+          <p>
+            The token is stored on your Google account, on the Mac API. It is not
+            in the public site files, and it is not read from the chat box.
+          </p>
+          <p>
+            If it expires or you lose it, make a new one in the same Approved
+            Integrations section. In EPSynapse, tap Replace token, then Save.
+          </p>
+
+          <p><a href="/">Back to EPSynapse</a></p>
+        </div>
+      </main>
+    </div>
+
+    <svg
+      class="liquid-glass-svg"
+      xmlns="http://www.w3.org/2000/svg"
+      width="0"
+      height="0"
+      aria-hidden="true"
+      focusable="false"
+      color-interpolation-filters="sRGB"
+      style="position: absolute; width: 0; height: 0; overflow: hidden; pointer-events: none"
+    >
+      <defs id="liquid-glass-defs"></defs>
+    </svg>
+
+    <script src="/liquid-glass.js?v=glass11"></script>
+    <script src="/theme-orb.js?v=glass12"></script>
+  </body>
+</html>

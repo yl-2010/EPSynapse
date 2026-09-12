@@ -37,8 +37,21 @@
     "",
     "If you skip Save key, chat will send you back to these steps.",
   ].join("\n");
+  const CANVAS_GUIDE = [
+    "Chat is ready. Classes and homework still need a Canvas token. That token does not go in this box.",
+    "",
+    "1. Open [eastsideprep.instructure.com](https://eastsideprep.instructure.com). If you see four11, tap **@eastsideprep.org login**. Sign in with your school Microsoft account. Not Parent/Guardian.",
+    "2. In Canvas, click **Account** (your picture, left side), then **Settings**.",
+    "3. Scroll to **Approved Integrations**. Click **Add New Access Token**.",
+    "4. Purpose: EPSynapse. Students must pick an expiration date. There is no permissions list. Do not hunt for scopes or checkboxes.",
+    "5. Click **Generate Token**. Copy it now. Canvas shows the full value only once. It is a long string, not a gsk_ key.",
+    "6. Tap the gear, then **Canvas**. Leave the URL as `https://eastsideprep.instructure.com` unless you use another school. Paste the token. Tap **Save**.",
+    "7. Canvas on the settings list must say Connected. Then ask here about a class or the day.",
+    "",
+    "Full click-by-click is on [epsynapse.com/canvas](/canvas).",
+  ].join("\n");
   const READY_GUIDE =
-    "Your Groq key is saved on this account. Ask about a class, Canvas, or the day.";
+    "Your Groq key and Canvas token are saved on this account. Ask about a class, homework, or the day.";
 
   let messages = [];
   let sessionId = "";
@@ -295,6 +308,11 @@
     );
   }
 
+  function hasCanvas() {
+    const ready = document.getElementById("canvas-ready");
+    return Boolean(ready && !ready.hidden);
+  }
+
   function syncPlaceholder() {
     if (!input) return;
     input.placeholder = hasChatKey()
@@ -315,7 +333,11 @@
     el.className = "yan-chat-bubble yan-chat-bubble--assistant";
     el.dataset.liquidGlass = "rounded";
     el.dataset.filterId = "lg-edu-chat-guide";
-    writeBubble(el, "assistant", hasChatKey() ? READY_GUIDE : SETUP_GUIDE);
+    writeBubble(
+      el,
+      "assistant",
+      !hasChatKey() ? SETUP_GUIDE : hasCanvas() ? READY_GUIDE : CANVAS_GUIDE
+    );
     turn.appendChild(el);
     messagesEl.appendChild(turn);
     scrollChatToEnd(turn);
