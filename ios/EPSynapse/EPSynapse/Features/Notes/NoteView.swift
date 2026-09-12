@@ -151,12 +151,12 @@ struct NoteView: View {
         } label: {
             Text("Delete note")
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(EPSTheme.fg)
+                .foregroundStyle(goldLabel)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
         }
         .buttonStyle(.plain)
-        .epsGlassRounded(cornerRadius: 14, interactive: true)
+        .epsGlassRounded(cornerRadius: 14, tint: EPSTheme.accent.opacity(0.72), interactive: true)
     }
 
     private var researchButton: some View {
@@ -166,13 +166,21 @@ struct NoteView: View {
         } label: {
             Text("Research")
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(EPSTheme.fg)
+                .foregroundStyle(goldLabel)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
         }
         .buttonStyle(.plain)
-        .epsGlassRounded(cornerRadius: 14, interactive: true)
+        .epsGlassRounded(cornerRadius: 14, tint: EPSTheme.accent.opacity(0.72), interactive: true)
         .accessibilityHint("Opens the public research page in Safari")
+    }
+
+    private var goldLabel: Color {
+        Color(uiColor: UIColor { traits in
+            traits.userInterfaceStyle == .dark
+                ? .white
+                : UIColor(red: 11 / 255, green: 31 / 255, blue: 58 / 255, alpha: 1)
+        })
     }
 
     private func hydrate() {

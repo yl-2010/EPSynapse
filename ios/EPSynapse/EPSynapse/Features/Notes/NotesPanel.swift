@@ -47,12 +47,12 @@ struct NotesPanel: View {
                     } label: {
                         Text("Research")
                             .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(EPSTheme.fg)
+                            .foregroundStyle(goldLabel)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 10)
                     }
                     .buttonStyle(.plain)
-                    .epsGlassRounded(cornerRadius: 14, interactive: true)
+                    .epsGlassRounded(cornerRadius: 14, tint: EPSTheme.accent.opacity(0.72), interactive: true)
                     .accessibilityHint("Opens the public research page in Safari")
                 }
 

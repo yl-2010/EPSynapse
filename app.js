@@ -1655,7 +1655,7 @@
 
   function filesToolsHtml() {
     return `<div class="edu-files-tools">
-      <button type="button" class="edu-sheet-btn" data-file-upload data-liquid-glass="rounded" data-filter-id="lg-edu-file-up">Upload</button>
+      <button type="button" class="edu-sheet-btn edu-sheet-btn--gold" data-file-upload data-liquid-glass="rounded" data-filter-id="lg-edu-file-up">Upload</button>
       <a class="set-link" href="${OD_WEB}" target="_blank" rel="noopener">Open OneDrive</a>
       <p class="edu-empty" id="onedrive-upload-status"></p>
     </div>`;
@@ -2114,7 +2114,7 @@
           )}
           ${panelHtml(
             "Delete",
-            `<button type="button" class="edu-sheet-btn" data-delete-note="${escapeHtml(note.id)}" data-liquid-glass="rounded" data-filter-id="lg-edu-note-del">Delete note</button>
+            `<button type="button" class="edu-sheet-btn edu-sheet-btn--gold" data-delete-note="${escapeHtml(note.id)}" data-liquid-glass="rounded" data-filter-id="lg-edu-note-del">Delete note</button>
              <p class="edu-empty" id="note-delete-status"></p>`,
             "lg-edu-note-del"
           )}
