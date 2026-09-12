@@ -230,7 +230,7 @@
       window.google.accounts.id.renderButton(homeSlot, {
         type: "standard",
         theme: "outline",
-        size: "medium",
+        size: "large",
         text: "signin_with",
         shape: "pill",
         logo_alignment: "left",
