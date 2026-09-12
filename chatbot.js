@@ -69,6 +69,13 @@
     historyBtns.forEach((btn) => {
       btn.tabIndex = open ? 0 : -1;
     });
+    minimizeBtns.forEach((btn) => {
+      const onPill = btn.classList.contains("yan-chat-close--pill");
+      btn.tabIndex = open && (!onPill || next !== "panel") ? 0 : -1;
+    });
+    clearBtns.forEach((btn) => {
+      btn.tabIndex = next === "panel" ? 0 : -1;
+    });
     syncComposerSize();
     window.setTimeout(refreshGlass, reduceMotion ? 0 : 420);
   }

@@ -115,6 +115,7 @@ html[data-resolved-theme="dark"] {
 @media (prefers-color-scheme: dark) {
   :root:not([data-resolved-theme="light"]) .corner,
   :root:not([data-resolved-theme="light"]) .yan-chat-close,
+  :root:not([data-resolved-theme="light"]) .yan-chat-history-btn,
   :root:not([data-resolved-theme="light"]) .yan-chat-send {
     --lg-tint-opacity: 0.06;
     --lg-fallback-tint: 0.08;
@@ -123,6 +124,7 @@ html[data-resolved-theme="dark"] {
 
 html[data-resolved-theme="dark"] .corner,
 html[data-resolved-theme="dark"] .yan-chat-close,
+html[data-resolved-theme="dark"] .yan-chat-history-btn,
 html[data-resolved-theme="dark"] .yan-chat-send {
   --lg-tint-opacity: 0.06;
   --lg-fallback-tint: 0.08;
@@ -309,6 +311,7 @@ a {
 /* Liquid glass corner orbs. Lens is ::after, tint is ::before. */
 .corner,
 .yan-chat-close,
+.yan-chat-history-btn,
 .yan-chat-send {
   appearance: none;
   -webkit-appearance: none;
@@ -335,6 +338,7 @@ a {
 
 .corner::before,
 .yan-chat-close::before,
+.yan-chat-history-btn::before,
 .yan-chat-send::before,
 .edu-panel::before,
 .edu-file-tile::before,
@@ -365,6 +369,7 @@ a {
 
 .corner.lg-refraction::after,
 .yan-chat-close.lg-refraction::after,
+.yan-chat-history-btn.lg-refraction::after,
 .yan-chat-send.lg-refraction::after,
 .edu-panel.lg-refraction::after,
 .edu-file-tile.lg-refraction::after,
@@ -390,6 +395,7 @@ a {
 
 .corner.lg-fallback,
 .yan-chat-close.lg-fallback,
+.yan-chat-history-btn.lg-fallback,
 .yan-chat-send.lg-fallback,
 .yan-chat-widget.lg-fallback,
 .yan-chat-bubble.lg-fallback,
@@ -414,6 +420,7 @@ a {
 @media (prefers-color-scheme: dark) {
   html:not([data-resolved-theme="light"]) .corner.lg-refraction::after,
   html:not([data-resolved-theme="light"]) .yan-chat-close.lg-refraction::after,
+  html:not([data-resolved-theme="light"]) .yan-chat-history-btn.lg-refraction::after,
   html:not([data-resolved-theme="light"]) .yan-chat-send.lg-refraction::after,
   html:not([data-resolved-theme="light"]) .edu-panel.lg-refraction::after,
   html:not([data-resolved-theme="light"]) .edu-file-tile.lg-refraction::after,
@@ -432,6 +439,7 @@ a {
 
 html[data-resolved-theme="dark"] .corner.lg-refraction::after,
 html[data-resolved-theme="dark"] .yan-chat-close.lg-refraction::after,
+html[data-resolved-theme="dark"] .yan-chat-history-btn.lg-refraction::after,
 html[data-resolved-theme="dark"] .yan-chat-send.lg-refraction::after,
 html[data-resolved-theme="dark"] .edu-panel.lg-refraction::after,
 html[data-resolved-theme="dark"] .edu-file-tile.lg-refraction::after,
@@ -449,6 +457,7 @@ html[data-resolved-theme="dark"] .edu-check.lg-refraction::after {
 
 .corner svg,
 .yan-chat-close svg,
+.yan-chat-history-btn svg,
 .yan-chat-send svg {
   position: relative;
   z-index: 2;
@@ -1729,21 +1738,26 @@ html[data-resolved-theme="dark"] .yan-chat-pill.corner.lg-refraction::after {
   top: calc(var(--chat-panel-radius) - var(--chat-x-size) / 2);
   left: calc(var(--chat-panel-radius) - var(--chat-x-size) / 2);
 }
-.yan-chat.is-open:not(.has-panel) .yan-chat-close--pill,
-.yan-chat.is-open .yan-chat-minimize {
+.yan-chat-close--new {
+  left: auto;
+  right: calc(var(--chat-panel-radius) - var(--chat-x-size) / 2);
+}
+.yan-chat.is-open:not(.has-panel) .yan-chat-close--pill {
   opacity: 1; pointer-events: auto; transition-delay: 0.18s;
 }
 .yan-chat.has-panel .yan-chat-close--panel {
   opacity: 1; pointer-events: auto;
 }
-/* Minus stays on the pill even when the message panel is open */
 .yan-chat.has-panel .yan-chat-close--pill {
-  opacity: 1; pointer-events: auto; transition-delay: 0.18s;
+  opacity: 0; pointer-events: none;
 }
 .yan-chat-form {
   position: absolute; inset: 0; z-index: 4; display: flex; align-items: center; gap: 0.45rem;
   padding: 0 0.7rem 0 2.45rem; opacity: 0; pointer-events: none;
-  transition: opacity 0.28s var(--ease);
+  transition: opacity 0.28s var(--ease), padding 0.28s var(--ease);
+}
+.yan-chat.has-panel .yan-chat-form {
+  padding-left: 0.7rem;
 }
 .yan-chat-history-btn {
   --lg-filter: none;
@@ -1794,6 +1808,9 @@ html[data-resolved-theme="dark"] .yan-chat-pill.corner.lg-refraction::after {
 }
 .yan-chat.is-dragover.has-panel .yan-chat-panel {
   box-shadow: 0 0 0 2px var(--chat-orange), 0 10px var(--lg-outer-shadow-blur) var(--lg-outer-shadow);
+}
+.yan-chat.has-panel .yan-chat-attach-chips {
+  left: 3.2rem;
 }
 .yan-chat-attach-chips {
   position: absolute;

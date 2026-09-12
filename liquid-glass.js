@@ -1858,7 +1858,7 @@ void main() {
       el._lgMagClamp = !!(chat && chat.classList.contains("is-open"));
     });
     document
-      .querySelectorAll(".yan-chat-close")
+      .querySelectorAll(".yan-chat-close, .yan-chat-history-btn")
       .forEach((el) => bindMagnetic(el, 0.28));
     document.querySelectorAll(".yan-chat-panel").forEach((el) => {
       bindMagnetic(el, 0.28 * STATIC_BOX_MAG_SCALE, { clamp: true });
