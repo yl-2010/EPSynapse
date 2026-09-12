@@ -353,13 +353,6 @@
     gisInitialized = true;
     gisConfigError = "";
     paintAccount();
-    if (!signedInViaGoogle()) {
-      try {
-        window.google.accounts.id.prompt();
-      } catch {
-        /* One Tap is optional */
-      }
-    }
   }
 
   async function searchSchools(q) {
@@ -479,7 +472,7 @@
   }
 
   function panelHtml(title, body, filterId, extraClass, filtersHtml) {
-    return `<section class="edu-panel${extraClass ? " " + extraClass : ""}" data-liquid-glass="rounded" data-filter-id="${escapeHtml(filterId)}">
+    return `<section class="edu-panel${extraClass ? " " + extraClass : ""}" data-filter-id="${escapeHtml(filterId)}">
       <div class="edu-panel-head"><h2 class="edu-panel-title">${escapeHtml(title)}</h2>${filtersHtml || ""}</div>
       ${body}
     </section>`;
@@ -568,7 +561,7 @@
 
   function fileTile(f, i) {
     const href = f.webUrl || `${apiBase}/v1/me/onedrive/file?id=${encodeURIComponent(f.id)}`;
-    return `<a class="edu-file-tile" href="${escapeHtml(href)}" target="_blank" rel="noopener" data-liquid-glass="rounded" data-filter-id="lg-file-${i}" title="${escapeHtml(f.name)}"><span class="edu-file-name">${escapeHtml(f.name)}</span></a>`;
+    return `<a class="edu-file-tile" href="${escapeHtml(href)}" target="_blank" rel="noopener" data-filter-id="lg-file-${i}" title="${escapeHtml(f.name)}"><span class="edu-file-name">${escapeHtml(f.name)}</span></a>`;
   }
 
   function formatMailWhen(iso) {
