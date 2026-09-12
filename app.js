@@ -130,7 +130,10 @@
       if (slot) slot.hidden = true;
       if (homeSlot) homeSlot.hidden = true;
       if (fallback) fallback.hidden = true;
-      if (redirectBtn) redirectBtn.hidden = true;
+      if (redirectBtn) {
+        redirectBtn.hidden = true;
+        redirectBtn.style.display = "none";
+      }
       if (profile) profile.hidden = false;
       if (outRow) outRow.hidden = false;
       if (homeChip) {
@@ -174,15 +177,12 @@
       }
       if (redirectBtn) {
         redirectBtn.hidden = false;
+        redirectBtn.style.display = "";
         redirectBtn.textContent = redirectLabel;
       }
     }
     setStatus(statusEl, accountStatusText());
     renderGoogleButtons();
-    queueMicrotask(() => {
-      const again = document.getElementById("google-redirect");
-      if (again) again.hidden = signedInViaGoogle();
-    });
   }
 
   function waitForGis(ms) {
