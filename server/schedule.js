@@ -11,6 +11,7 @@ import { dirname, join, resolve, sep } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { ownerIdForStudent } from "./chat-history.js";
+import { prettyCourseName } from "./canvas.js";
 import { subjectFromCourseName } from "./subjects.js";
 
 const require = createRequire(import.meta.url);
@@ -177,7 +178,7 @@ export function cleanCourseName(raw) {
   }
   name = parts.join(" ").trim();
   if (name.length > 80) name = name.slice(0, 80).trim();
-  return name;
+  return prettyCourseName(name);
 }
 
 function isJunkName(name) {
@@ -510,7 +511,10 @@ export async function saveScheduleFromPdf(ownerId, buffer, filename = "schedule.
 }
 
 export function publicSchedule(stored, bells = loadBells(), now = new Date()) {
-  const classes = Array.isArray(stored?.classes) ? stored.classes : [];
+  const classes = (Array.isArray(stored?.classes) ? stored.classes : []).map((c) => ({
+    ...c,
+    name: prettyCourseName(c?.name || ""),
+  }));
   const todayKey = todayKeyFromBells(bells, now);
   return {
     classes,

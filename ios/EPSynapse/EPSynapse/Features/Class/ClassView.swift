@@ -99,7 +99,7 @@ struct ClassView: View {
                     .minimumScaleFactor(0.6)
             }
             VStack(alignment: .leading, spacing: 4) {
-                Text(schoolClass.name.isEmpty ? "Class" : schoolClass.name)
+                Text(schoolClass.name.isEmpty ? "Class" : CourseTitle.pretty(schoolClass.name))
                     .font(.title.weight(.bold))
                     .foregroundStyle(EPSTheme.fg)
                 HStack(spacing: 8) {

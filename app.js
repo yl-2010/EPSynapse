@@ -1259,16 +1259,20 @@
   }
 
   function prettyCourseName(raw) {
-    return String(raw || "")
+    const src = String(raw || "").trim();
+    const cleaned = src
       .replace(/\s*\([^)]*\)/g, " ")
-      .replace(/\s*\d{4}-\d{2}\S*/g, " ")
+      .replace(/\btri(?:mester)?\s*[1-3]\b/gi, " ")
+      .replace(/\b(fall|winter|spring|year|trimester)\b/gi, " ")
+      .replace(/\s*\d{4}(?:\s*[-/]\s*\d{2,4})?\S*/g, " ")
       .replace(/\s*:[a-z][a-z0-9_-]*$/i, " ")
       .replace(/\s+/g, " ")
       .trim();
+    return cleaned || src;
   }
 
   function fullerClassName(scheduleName, canvasName) {
-    const a = String(scheduleName || "").trim();
+    const a = prettyCourseName(scheduleName);
     const b = prettyCourseName(canvasName);
     if (a && b && courseNamesMatch(a, b) && b.length > a.length) return b;
     return a || b;
@@ -1307,7 +1311,7 @@
     }
     return raw
       .filter((c) => !isNonGradeCourse(c))
-      .map((c) => ({ ...c, period: periodLetter(c.period) }));
+      .map((c) => ({ ...c, name: prettyCourseName(c.name), period: periodLetter(c.period) }));
   }
 
   function gradeRow(c) {
@@ -1355,7 +1359,9 @@
   function todoRow(t) {
     const tag = t.tag || "HW";
     const due = t.due ? `<span class="edu-meta">${escapeHtml(formatDue(t.due))}</span>` : "";
-    const klass = t.courseName ? `<span class="edu-meta edu-course">${escapeHtml(t.courseName)}</span>` : "";
+    const klass = t.courseName
+      ? `<span class="edu-meta edu-course">${escapeHtml(prettyCourseName(t.courseName))}</span>`
+      : "";
     const href = canvasHref(t.canvasLink);
     return `<li class="edu-row edu-todo${t.done ? " is-done" : ""} ${toneClass(workTone(t))}" data-id="${escapeHtml(t.id || t.canvasId || "")}" data-tag="${escapeHtml(tag)}">
       <button type="button" class="edu-check${t.done ? " is-checked" : ""}" data-liquid-glass="circle" data-filter-id="lg-check-${escapeHtml(t.id)}" data-todo-id="${escapeHtml(t.id || t.canvasId || "")}" aria-label="${t.done ? "Mark incomplete" : "Mark complete"}"><span class="edu-check-dot"></span></button>

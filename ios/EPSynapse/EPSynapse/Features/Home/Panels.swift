@@ -220,7 +220,7 @@ struct TodoRow: View {
                     }
                     HStack(spacing: 8) {
                         if !item.courseName.isEmpty {
-                            Text(item.courseName)
+                            Text(CourseTitle.pretty(item.courseName))
                         }
                         if !item.due.isEmpty {
                             Text(EPSDueFormat.due(item.due))
@@ -317,7 +317,7 @@ struct ClassRow: View {
                     .foregroundStyle(EPSTheme.accent)
                     .frame(width: 22, alignment: .center)
             }
-            Text(course.name)
+            Text(CourseTitle.pretty(course.name))
                 .font(.body.weight(.semibold))
                 .foregroundStyle(EPSTheme.fg)
                 .frame(maxWidth: .infinity, alignment: .leading)

@@ -136,12 +136,26 @@ function periodFromCode(code) {
   return m ? m[1].toUpperCase() : "";
 }
 
+export function prettyCourseName(raw) {
+  const src = String(raw || "").trim();
+  const cleaned = src
+    .replace(/\s*\([^)]*\)/g, " ")
+    .replace(/\btri(?:mester)?\s*[1-3]\b/gi, " ")
+    .replace(/\b(fall|winter|spring|year|trimester)\b/gi, " ")
+    .replace(/\s*\d{4}(?:\s*[-/]\s*\d{2,4})?\S*/g, " ")
+    .replace(/\s*:[a-z][a-z0-9_-]*$/i, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned || src;
+}
+
 export function normalizeCourseName(raw) {
   return String(raw || "")
     .toLowerCase()
     .replace(/\./g, "")
     .replace(/\([^)]*\)/g, " ")
-    .replace(/\b(fall|winter|spring|year)\b/g, " ")
+    .replace(/\b(fall|winter|spring|year|trimester)\b/g, " ")
+    .replace(/\btri(?:mester)?\s*[1-3]\b/g, " ")
     .replace(/\d{4}-\d{2}\S*/g, " ")
     .replace(/:[a-z][a-z0-9_-]*$/i, " ")
     .replace(/[^a-z0-9]+/g, " ")
@@ -316,7 +330,7 @@ function mapCourse(c) {
   const scored = scoresFromEnrollment(studentEnrollment(c));
   return {
     id: String(c.id),
-    name: String(c.name || c.course_code || "Class").trim(),
+    name: prettyCourseName(String(c.name || c.course_code || "Class").trim()),
     courseCode: String(c.course_code || "").trim(),
     period: periodFromCode(c.course_code),
     currentScore: scored.currentScore,
@@ -484,7 +498,7 @@ function assignmentFromTodo(host, item, coursesById) {
     canvasId,
     canvasLink: absCanvasUrl(host, asg.html_url || item.html_url),
     title,
-    courseName: course?.name || String(item.context_name || "").trim(),
+    courseName: prettyCourseName(course?.name || String(item.context_name || "").trim()),
     courseId,
     due,
     tag: inferTag({ ...asg, name: title, title }),
@@ -508,7 +522,7 @@ function assignmentFromPlanner(host, item, coursesById) {
     canvasId,
     canvasLink: absCanvasUrl(host, item.html_url || p.html_url),
     title,
-    courseName: course?.name || String(item.context_name || "").trim(),
+    courseName: prettyCourseName(course?.name || String(item.context_name || "").trim()),
     courseId,
     due: String(item.plannable_date || p.due_at || "").trim(),
     tag: inferTag({ ...p, name: title, title, plannable_type: type }),
