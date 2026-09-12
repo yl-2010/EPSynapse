@@ -53,6 +53,20 @@ struct Profile: Codable, Equatable {
   var modelKeyCount: Int
   var sessionId: String?
 
+  // Microsoft per-service state. All optional on the wire; defaults are "not connected".
+  var onenoteConnected: Bool = false
+  var onenoteEmail: String = ""
+  var studioOnedrive: Bool = false
+  var studioOnenote: Bool = false
+  var studioOutlook: Bool = false
+  var studioTeams: Bool = false
+  var msClientMode: String = ""
+  var msSignedInEmail: String = ""
+  var msDenied: MSDenied = MSDenied()
+  var msNeedsAdminApproval: Bool = false
+  var adminConsentUrl: String = ""
+  var consentRequest: MSConsentRequest?
+
   init(
     school: String = "",
     studentId: String = "",
@@ -141,6 +155,19 @@ struct Profile: Codable, Equatable {
     }
     let sid = c.string(.sessionId)
     sessionId = sid.isEmpty ? nil : sid
+
+    onenoteConnected = c.bool(.onenoteConnected)
+    onenoteEmail = c.string(.onenoteEmail)
+    studioOnedrive = c.bool(.studioOnedrive)
+    studioOnenote = c.bool(.studioOnenote)
+    studioOutlook = c.bool(.studioOutlook)
+    studioTeams = c.bool(.studioTeams)
+    msClientMode = c.string(.msClientMode)
+    msSignedInEmail = c.string(.msSignedInEmail)
+    msDenied = (try? c.decodeIfPresent(MSDenied.self, forKey: .msDenied)) ?? MSDenied()
+    msNeedsAdminApproval = c.bool(.msNeedsAdminApproval)
+    adminConsentUrl = c.string(.adminConsentUrl)
+    consentRequest = try? c.decodeIfPresent(MSConsentRequest.self, forKey: .consentRequest)
   }
 
   var signedInName: String {
@@ -148,6 +175,216 @@ struct Profile: Codable, Equatable {
     if !displayName.isEmpty { return displayName }
     if !rosterName.isEmpty { return rosterName }
     return email
+  }
+
+  func msConnected(_ service: MSService) -> Bool {
+    switch service {
+    case .onedrive: onedriveConnected
+    case .onenote: onenoteConnected
+    case .outlook: outlookConnected
+    case .teams: teamsConnected
+    }
+  }
+
+  func msEmail(_ service: MSService) -> String {
+    let own: String = switch service {
+    case .onedrive: onedriveEmail
+    case .onenote: onenoteEmail
+    case .outlook: outlookEmail
+    case .teams: teamsEmail
+    }
+    return own.isEmpty ? msSignedInEmail : own
+  }
+
+  func msStudio(_ service: MSService) -> Bool {
+    switch service {
+    case .onedrive: studioOnedrive
+    case .onenote: studioOnenote
+    case .outlook: studioOutlook
+    case .teams: studioTeams
+    }
+  }
+
+  func msPending(_ service: MSService) -> DevicePending? {
+    switch service {
+    case .onedrive: onedrivePending
+    case .onenote: nil
+    case .outlook: outlookPending
+    case .teams: teamsPending
+    }
+  }
+}
+
+enum MSService: String, CaseIterable, Codable, Hashable {
+  case onedrive
+  case onenote
+  case outlook
+  case teams
+
+  var title: String {
+    switch self {
+    case .onedrive: "OneDrive"
+    case .onenote: "OneNote"
+    case .outlook: "Outlook"
+    case .teams: "Teams"
+    }
+  }
+
+  var statusPath: String { "/v1/me/\(rawValue)/status" }
+}
+
+struct MSDenied: Codable, Equatable {
+  var onedrive: String
+  var onenote: String
+  var outlook: String
+  var teams: String
+
+  init(onedrive: String = "", onenote: String = "", outlook: String = "", teams: String = "") {
+    self.onedrive = onedrive
+    self.onenote = onenote
+    self.outlook = outlook
+    self.teams = teams
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    onedrive = c.string(.onedrive)
+    onenote = c.string(.onenote)
+    outlook = c.string(.outlook)
+    teams = c.string(.teams)
+  }
+
+  func reason(_ service: MSService) -> String {
+    switch service {
+    case .onedrive: onedrive
+    case .onenote: onenote
+    case .outlook: outlook
+    case .teams: teams
+    }
+  }
+}
+
+/// Reply from POST /v1/me/ms/consent-request and the `consentRequest` block on /v1/me.
+struct MSConsentRequest: Codable, Equatable {
+  var ok: Bool
+  var sent: Bool
+  var to: String
+  var subject: String
+  var body: String
+  var mailto: String
+  var adminConsentUrl: String
+
+  init(
+    ok: Bool = false,
+    sent: Bool = false,
+    to: String = "",
+    subject: String = "",
+    body: String = "",
+    mailto: String = "",
+    adminConsentUrl: String = ""
+  ) {
+    self.ok = ok
+    self.sent = sent
+    self.to = to
+    self.subject = subject
+    self.body = body
+    self.mailto = mailto
+    self.adminConsentUrl = adminConsentUrl
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    ok = c.bool(.ok)
+    sent = c.bool(.sent)
+    to = c.string(.to)
+    subject = c.string(.subject)
+    body = c.string(.body)
+    mailto = c.string(.mailto)
+    adminConsentUrl = c.string(.adminConsentUrl)
+  }
+
+  var isEmpty: Bool { body.isEmpty && mailto.isEmpty && to.isEmpty }
+}
+
+/// Reply from POST /v1/me/ms/start and the older /v1/me/<service>/start routes.
+/// mode "app" carries authorizeUrl; mode "office" carries device-code fields.
+struct MSStartResponse: Codable {
+  var mode: String
+  var authorizeUrl: String
+  var state: String
+  var user_code: String
+  var verification_uri: String
+  var verification_uri_complete: String
+  var message: String
+  var interval: Int
+  var adminConsentUrl: String
+  var error: String
+
+  var isBrowserFlow: Bool { !authorizeUrl.isEmpty && mode != "office" }
+  var isDeviceFlow: Bool { !user_code.isEmpty }
+
+  var devicePending: DevicePending {
+    DevicePending(
+      user_code: user_code,
+      verification_uri: verification_uri,
+      verification_uri_complete: verification_uri_complete,
+      message: message
+    )
+  }
+
+  init(
+    mode: String = "",
+    authorizeUrl: String = "",
+    state: String = "",
+    user_code: String = "",
+    verification_uri: String = "",
+    verification_uri_complete: String = "",
+    message: String = "",
+    interval: Int = 0,
+    adminConsentUrl: String = "",
+    error: String = ""
+  ) {
+    self.mode = mode
+    self.authorizeUrl = authorizeUrl
+    self.state = state
+    self.user_code = user_code
+    self.verification_uri = verification_uri
+    self.verification_uri_complete = verification_uri_complete
+    self.message = message
+    self.interval = interval
+    self.adminConsentUrl = adminConsentUrl
+    self.error = error
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    mode = c.string(.mode)
+    authorizeUrl = c.string(.authorizeUrl)
+    state = c.string(.state)
+    user_code = c.string(.user_code)
+    verification_uri = c.string(.verification_uri)
+    verification_uri_complete = c.string(.verification_uri_complete)
+    message = c.string(.message)
+    interval = c.int(.interval)
+    adminConsentUrl = c.string(.adminConsentUrl)
+    error = c.string(.error)
+  }
+}
+
+struct MSServiceBody: Encodable {
+  var service: String
+  var returnTo: String?
+
+  enum CodingKeys: String, CodingKey {
+    case service, returnTo
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    try c.encode(service, forKey: .service)
+    if let returnTo, !returnTo.isEmpty {
+      try c.encode(returnTo, forKey: .returnTo)
+    }
   }
 }
 
@@ -864,6 +1101,13 @@ struct ConnectionStatusResponse: Codable {
   var outlookConnected: Bool
   var onedriveEmail: String
   var outlookEmail: String
+  var denied: String
+  var needsAdminApproval: Bool
+  var consentRequest: MSConsentRequest?
+  var mode: String
+  var msSignedInEmail: String
+  var studio: Bool
+  var adminConsentUrl: String
 
   init(
     connected: Bool = false,
@@ -873,7 +1117,14 @@ struct ConnectionStatusResponse: Codable {
     onedriveConnected: Bool = false,
     outlookConnected: Bool = false,
     onedriveEmail: String = "",
-    outlookEmail: String = ""
+    outlookEmail: String = "",
+    denied: String = "",
+    needsAdminApproval: Bool = false,
+    consentRequest: MSConsentRequest? = nil,
+    mode: String = "",
+    msSignedInEmail: String = "",
+    studio: Bool = false,
+    adminConsentUrl: String = ""
   ) {
     self.connected = connected
     self.pending = pending
@@ -883,18 +1134,32 @@ struct ConnectionStatusResponse: Codable {
     self.outlookConnected = outlookConnected
     self.onedriveEmail = onedriveEmail
     self.outlookEmail = outlookEmail
+    self.denied = denied
+    self.needsAdminApproval = needsAdminApproval
+    self.consentRequest = consentRequest
+    self.mode = mode
+    self.msSignedInEmail = msSignedInEmail
+    self.studio = studio
+    self.adminConsentUrl = adminConsentUrl
   }
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     connected = c.bool(.connected)
-    pending = try c.decodeIfPresent(DevicePending.self, forKey: .pending)
+    pending = try? c.decodeIfPresent(DevicePending.self, forKey: .pending)
     email = c.string(.email)
     error = c.string(.error)
     onedriveConnected = c.bool(.onedriveConnected)
     outlookConnected = c.bool(.outlookConnected)
     onedriveEmail = c.string(.onedriveEmail)
     outlookEmail = c.string(.outlookEmail)
+    denied = c.string(.denied)
+    needsAdminApproval = c.bool(.needsAdminApproval)
+    consentRequest = try? c.decodeIfPresent(MSConsentRequest.self, forKey: .consentRequest)
+    mode = c.string(.mode)
+    msSignedInEmail = c.string(.msSignedInEmail)
+    studio = c.bool(.studio)
+    adminConsentUrl = c.string(.adminConsentUrl)
   }
 }
 

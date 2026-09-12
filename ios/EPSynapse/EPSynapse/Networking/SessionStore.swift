@@ -1,15 +1,46 @@
+import AuthenticationServices
 import Combine
 import Foundation
 import GoogleSignIn
 import UIKit
 
+/// What a Microsoft settings pane should draw. One value per service.
+enum MSPaneState: Equatable {
+  /// Nothing started. Show the steps and a Connect button.
+  case idle
+  /// The server can read this service with the student's own token.
+  case connected(email: String)
+  /// The judges' demo account. Uses this Mac's school sign-in. No Disconnect.
+  case studio(email: String)
+  /// Microsoft or the school tenant refused. `needsAdminApproval` means IT has to consent once.
+  case denied(reason: String, needsAdminApproval: Bool)
+  /// Device-code flow. Show the code and a link to the Microsoft page, keep polling.
+  case pendingCode(code: String, url: String)
+  /// Browser OAuth flow. The web sign-in sheet is open or the callback is on its way.
+  case pendingBrowser(authorizeUrl: String)
+  /// Something failed on our side. Show the message and let them try again.
+  case error(String)
+
+  var isPendingCode: Bool {
+    if case .pendingCode = self { return true }
+    return false
+  }
+
+  var isConnected: Bool {
+    switch self {
+    case .connected, .studio: true
+    default: false
+    }
+  }
+}
+
 @MainActor
 final class SessionStore: ObservableObject {
   static let shared = SessionStore()
 
-  static let onedriveIdle = "Opens school OneDrive in the browser"
-  static let outlookIdle = "Opens school Outlook in the browser"
-  static let teamsIdle = "Opens school Teams in the browser"
+  static let msReturnTo = "epsynapse://ms"
+  static let msCallbackScheme = "epsynapse"
+  static let msCallbackHost = "ms"
   static let keyIdle = "Paste the gsk_ key here, tap Save key, wait until Chat key says Groq, then ask in chat. Do not paste the key in the chat box."
   static let setupGuide = """
 This box is only for questions. The Groq key goes in Settings, not here.
@@ -48,17 +79,23 @@ If you skip Save key, chat will send you back to these steps.
 
   @Published var providers: [AgentProvider] = []
   @Published var settingsStatus = ""
-  @Published var onedriveStatus = SessionStore.onedriveIdle
-  @Published var outlookStatus = SessionStore.outlookIdle
-  @Published var teamsStatus = SessionStore.teamsIdle
   @Published var keyStatus = SessionStore.keyIdle
-  @Published var odCode = ""
-  @Published var odURI = ""
-  @Published var olCode = ""
-  @Published var olURI = ""
-  @Published var tmCode = ""
-  @Published var tmURI = ""
   @Published var isBooting = true
+
+  /// Per-service pane state, recomputed from `profile` plus local pending flags.
+  @Published var msStates: [MSService: MSPaneState] = [:]
+  /// One-line confirmations under a pane, like "Request sent to it@...".
+  @Published var msNotes: [MSService: String] = [:]
+  /// Consent-request text fetched for the Copy button, per service.
+  @Published var msConsent: [MSService: MSConsentRequest] = [:]
+
+  private var msLocalPending: [MSService: DevicePending] = [:]
+  private var msBrowserPending: [MSService: String] = [:]
+  private var msLocalDenied: [MSService: String] = [:]
+  private var msErrors: [MSService: String] = [:]
+  private var msBusy: Set<MSService> = []
+  private var authSession: ASWebAuthenticationSession?
+  private let authPresenter = MSAuthPresenter()
 
   var isSignedIn: Bool {
     guard !sessionId.isEmpty, let profile else { return false }
@@ -183,181 +220,267 @@ If you skip Save key, chat will send you back to these steps.
     }
   }
 
-  func startOnedrive() async {
-    guard profile != nil, !sessionId.isEmpty else {
-      onedriveStatus = Self.googleFirst
-      return
-    }
-    do {
-      let started: DeviceStartResponse = try await api.request(
-        "/v1/me/onedrive/start",
-        method: "POST",
-        body: EmptyJSON(),
-        sessionId: sessionId
-      )
-      if started.user_code.isEmpty {
-        onedriveStatus = started.message.isEmpty
-          ? "Microsoft would not start school sign-in."
-          : started.message
-        odCode = ""
-        odURI = ""
-        return
-      }
-      profile?.onedrivePending = DevicePending(
-        user_code: started.user_code,
-        verification_uri: started.verification_uri,
-        verification_uri_complete: started.verification_uri_complete,
-        message: started.message
-      )
-      paintConnections()
-    } catch {
-      onedriveStatus = (error as? APIError)?.message ?? "Could not start OneDrive."
-    }
+  // MARK: Microsoft connect
+
+  func msState(_ service: MSService) -> MSPaneState {
+    msStates[service] ?? .idle
   }
 
-  func startOutlook() async {
-    guard profile != nil, !sessionId.isEmpty else {
-      outlookStatus = Self.googleFirst
-      return
-    }
-    do {
-      let started: DeviceStartResponse = try await api.request(
-        "/v1/me/outlook/start",
-        method: "POST",
-        body: EmptyJSON(),
-        sessionId: sessionId,
-        timeout: 20
-      )
-      if started.user_code.isEmpty {
-        outlookStatus = started.message.isEmpty
-          ? "Microsoft would not start Outlook sign-in."
-          : started.message
-        olCode = ""
-        olURI = ""
-        return
-      }
-      profile?.outlookPending = DevicePending(
-        user_code: started.user_code,
-        verification_uri: started.verification_uri,
-        verification_uri_complete: started.verification_uri_complete,
-        message: started.message
-      )
-      paintConnections()
-    } catch {
-      outlookStatus = (error as? APIError)?.message ?? "Could not start Outlook."
-    }
+  var hasMicrosoftPendingCode: Bool {
+    msStates.values.contains { $0.isPendingCode }
   }
 
-  func startTeams() async {
-    guard profile != nil, !sessionId.isEmpty else {
-      teamsStatus = Self.googleFirst
-      return
-    }
-    do {
-      let started: DeviceStartResponse = try await api.request(
-        "/v1/me/teams/start",
-        method: "POST",
-        body: EmptyJSON(),
-        sessionId: sessionId,
-        timeout: 20
-      )
-      if started.user_code.isEmpty {
-        teamsStatus = started.message.isEmpty
-          ? "Microsoft would not start Teams sign-in."
-          : started.message
-        tmCode = ""
-        tmURI = ""
-        return
-      }
-      profile?.teamsPending = DevicePending(
-        user_code: started.user_code,
-        verification_uri: started.verification_uri,
-        verification_uri_complete: started.verification_uri_complete,
-        message: started.message
-      )
-      paintConnections()
-    } catch {
-      teamsStatus = (error as? APIError)?.message ?? "Could not start Teams."
-    }
+  func adminConsentURL(for service: MSService) -> URL? {
+    let raw = [
+      msConsent[service]?.adminConsentUrl ?? "",
+      profile?.consentRequest?.adminConsentUrl ?? "",
+      profile?.adminConsentUrl ?? "",
+    ].first { !$0.isEmpty } ?? ""
+    return URL(string: raw)
   }
 
+  /// Starts the Microsoft sign-in for one service. The server picks browser OAuth ("app")
+  /// or device code ("office"). Browser mode runs ASWebAuthenticationSession and waits for
+  /// epsynapse://ms?... to come back, then reloads /v1/me so the pane shows the honest state.
+  func connectMicrosoft(_ service: MSService) async {
+    guard profile != nil, !sessionId.isEmpty else {
+      msErrors[service] = Self.googleFirst
+      paintConnections()
+      return
+    }
+    guard !msBusy.contains(service) else { return }
+    msBusy.insert(service)
+    defer { msBusy.remove(service) }
+
+    msErrors[service] = nil
+    msLocalDenied[service] = nil
+    msNotes[service] = nil
+    msBrowserPending[service] = nil
+    msLocalPending[service] = nil
+
+    let started: MSStartResponse
+    do {
+      started = try await api.msStart(service: service, returnTo: Self.msReturnTo, sessionId: sessionId)
+    } catch {
+      msErrors[service] = (error as? APIError)?.message ?? "Could not start \(service.title) sign-in."
+      paintConnections()
+      return
+    }
+
+    if started.isBrowserFlow {
+      msBrowserPending[service] = started.authorizeUrl
+      paintConnections()
+      await runBrowserSignIn(service, authorizeUrl: started.authorizeUrl)
+      return
+    }
+
+    if started.isDeviceFlow {
+      let pending = started.devicePending
+      msLocalPending[service] = pending
+      switch service {
+      case .onedrive: profile?.onedrivePending = pending
+      case .outlook: profile?.outlookPending = pending
+      case .teams: profile?.teamsPending = pending
+      case .onenote: break
+      }
+      paintConnections()
+      if let url = URL(string: pending.openURL), !pending.openURL.isEmpty {
+        await UIApplication.shared.open(url)
+      }
+      return
+    }
+
+    let fallback = started.error.isEmpty ? started.message : started.error
+    msErrors[service] = fallback.isEmpty ? "Microsoft would not start \(service.title) sign-in." : fallback
+    paintConnections()
+  }
+
+  /// Handles epsynapse://ms?service=onenote&result=connected|denied|error&reason=...&email=...
+  /// Returns false if the URL is not ours.
+  @discardableResult
+  func handleMicrosoftCallback(_ url: URL) async -> Bool {
+    guard Self.isMicrosoftCallback(url) else { return false }
+    let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+    func value(_ name: String) -> String {
+      (items.first { $0.name == name }?.value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    let service = MSService(rawValue: value("service").lowercased())
+    let result = value("result").lowercased()
+    let reason = value("reason")
+
+    if let service {
+      msBrowserPending[service] = nil
+      switch result {
+      case "denied":
+        msLocalDenied[service] = reason.isEmpty ? "Microsoft did not allow \(service.title)." : reason
+      case "error":
+        msErrors[service] = reason.isEmpty ? "Microsoft sign-in failed." : reason
+      default:
+        break
+      }
+    } else {
+      msBrowserPending.removeAll()
+    }
+    await reloadMe()
+    return true
+  }
+
+  /// Device-code flow only. Polls /v1/me/<service>/status for every pane that shows a code.
   func pollConnections(force: Bool = false) async {
+    guard !sessionId.isEmpty, let me = profile else { return }
+    let watch = MSService.allCases.filter { service in
+      if me.msConnected(service) || me.msStudio(service) { return false }
+      if force { return true }
+      return msState(service).isPendingCode
+    }
+    guard !watch.isEmpty else { return }
+
+    var reload = false
+    for service in watch {
+      guard let status = try? await api.msStatus(service: service, sessionId: sessionId) else { continue }
+      if status.connected {
+        reload = true
+        msLocalPending[service] = nil
+        continue
+      }
+      if !status.denied.isEmpty {
+        msLocalDenied[service] = status.denied
+        msLocalPending[service] = nil
+        reload = true
+        continue
+      }
+      if let pending = status.pending, pending.isActive {
+        msLocalPending[service] = pending
+      } else if msLocalPending[service] != nil, status.pending == nil {
+        // The code expired or the server dropped it. Let the pane offer Connect again.
+        msLocalPending[service] = nil
+        if !status.error.isEmpty { msErrors[service] = status.error }
+      }
+      if !status.error.isEmpty, msErrors[service] == nil, !msState(service).isPendingCode {
+        msErrors[service] = status.error
+      }
+    }
+    if reload {
+      await reloadMe()
+    } else {
+      paintConnections()
+    }
+  }
+
+  func disconnectMicrosoft(_ service: MSService) async {
     guard !sessionId.isEmpty else { return }
-    let watchOnedrive = profile?.onedriveConnected != true
-      && (force || profile?.onedrivePending?.isActive == true || !odCode.isEmpty)
-    let watchOutlook = profile?.outlookConnected != true
-      && (force || profile?.outlookPending?.isActive == true || !olCode.isEmpty)
-    let watchTeams = profile?.teamsConnected != true
-      && (force || profile?.teamsPending?.isActive == true || !tmCode.isEmpty)
-    guard watchOnedrive || watchOutlook || watchTeams else { return }
-
-    async let od: ConnectionStatusResponse? = {
-      guard watchOnedrive else { return nil }
-      return await self.fetchStatus("/v1/me/onedrive/status")
-    }()
-    async let ol: ConnectionStatusResponse? = {
-      guard watchOutlook else { return nil }
-      return await self.fetchStatus("/v1/me/outlook/status")
-    }()
-    async let tm: ConnectionStatusResponse? = {
-      guard watchTeams else { return nil }
-      return await self.fetchStatus("/v1/me/teams/status")
-    }()
-    let odStatus = await od
-    let olStatus = await ol
-    let tmStatus = await tm
-    var odPollError = ""
-    var olPollError = ""
-    var tmPollError = ""
-
-    if let odStatus {
-      if odStatus.connected {
-        profile?.onedriveConnected = true
-        profile?.onedriveEmail = odStatus.email
-        profile?.onedrivePending = nil
-      } else {
-        profile?.onedrivePending = odStatus.pending
-      }
-      if odStatus.outlookConnected {
-        profile?.outlookConnected = true
-        if !odStatus.outlookEmail.isEmpty {
-          profile?.outlookEmail = odStatus.outlookEmail
-        }
-        profile?.outlookPending = nil
-      }
-      odPollError = odStatus.error
+    msNotes[service] = nil
+    do {
+      let me = try await api.msDisconnect(service: service, sessionId: sessionId)
+      profile = me
+      rememberSession(me.sessionId)
+      msLocalDenied[service] = nil
+      msErrors[service] = nil
+      msLocalPending[service] = nil
+      paintConnections()
+    } catch {
+      msErrors[service] = (error as? APIError)?.message ?? "Could not disconnect \(service.title)."
+      paintConnections()
     }
-    if let olStatus {
-      if olStatus.connected {
-        profile?.outlookConnected = true
-        profile?.outlookEmail = olStatus.email
-        profile?.outlookPending = nil
-      } else if let pending = olStatus.pending, pending.isActive {
-        profile?.outlookPending = pending
+  }
+
+  /// Asks the server to email school IT. If the Mac cannot send, opens the mailto draft instead.
+  func requestConsent(_ service: MSService) async {
+    guard !sessionId.isEmpty else { return }
+    msNotes[service] = "Sending…"
+    do {
+      let reply = try await api.msConsentRequest(service: service, sessionId: sessionId)
+      msConsent[service] = reply
+      if reply.sent {
+        msNotes[service] = reply.to.isEmpty ? "Request sent" : "Request sent to \(reply.to)"
+        return
       }
-      if olStatus.onedriveConnected {
-        profile?.onedriveConnected = true
-        if !olStatus.onedriveEmail.isEmpty {
-          profile?.onedriveEmail = olStatus.onedriveEmail
-        }
-        profile?.onedrivePending = nil
+      if let mailto = URL(string: reply.mailto), !reply.mailto.isEmpty {
+        let opened = await UIApplication.shared.open(mailto)
+        msNotes[service] = opened ? "Opened Mail" : "Mail did not open. Use Copy request."
+        return
       }
-      olPollError = olStatus.error
+      msNotes[service] = reply.body.isEmpty
+        ? "Could not build the request. Use the admin approval link."
+        : "Mail is not set up here. Use Copy request."
+    } catch {
+      msNotes[service] = (error as? APIError)?.message ?? "Could not send the request."
     }
-    if let tmStatus {
-      if tmStatus.connected {
-        profile?.teamsConnected = true
-        profile?.teamsEmail = tmStatus.email
-        profile?.teamsPending = nil
-      } else if let pending = tmStatus.pending, pending.isActive {
-        profile?.teamsPending = pending
-      }
-      tmPollError = tmStatus.error
+  }
+
+  /// Puts the IT request text on the clipboard. Fetches it first if we do not have it yet.
+  func copyConsentRequest(_ service: MSService) async {
+    var request = msConsent[service] ?? profile?.consentRequest
+    if request == nil || request?.body.isEmpty == true, !sessionId.isEmpty {
+      request = try? await api.msConsentRequest(service: service, sessionId: sessionId)
+      if let request { msConsent[service] = request }
+    }
+    guard let request, !request.body.isEmpty else {
+      msNotes[service] = "Nothing to copy yet."
+      return
+    }
+    var text = request.body
+    if !request.subject.isEmpty { text = "Subject: \(request.subject)\n\n\(text)" }
+    if !request.to.isEmpty { text = "To: \(request.to)\n\(text)" }
+    UIPasteboard.general.string = text
+    msNotes[service] = "Copied"
+  }
+
+  func reloadMe() async {
+    guard !sessionId.isEmpty else { return }
+    do {
+      let me = try await api.fetchMe(sessionId: sessionId)
+      profile = me
+      rememberSession(me.sessionId)
+    } catch let error as APIError where error.status == 401 {
+      profile = nil
+    } catch {
+      /* keep the profile we have; the pane keeps its last state */
     }
     paintConnections()
-    if !odPollError.isEmpty { onedriveStatus = odPollError }
-    if !olPollError.isEmpty { outlookStatus = olPollError }
-    if !tmPollError.isEmpty { teamsStatus = tmPollError }
+  }
+
+  static func isMicrosoftCallback(_ url: URL) -> Bool {
+    guard url.scheme?.lowercased() == msCallbackScheme else { return false }
+    let host = (url.host ?? "").lowercased()
+    if host == msCallbackHost { return true }
+    return url.path.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "/")) == msCallbackHost
+  }
+
+  private func runBrowserSignIn(_ service: MSService, authorizeUrl: String) async {
+    guard let url = URL(string: authorizeUrl) else {
+      msBrowserPending[service] = nil
+      msErrors[service] = "Microsoft sent a sign-in link the app could not open."
+      paintConnections()
+      return
+    }
+    authSession?.cancel()
+    let callback: URL? = await withCheckedContinuation { continuation in
+      var resumed = false
+      let session = ASWebAuthenticationSession(url: url, callbackURLScheme: Self.msCallbackScheme) { url, _ in
+        guard !resumed else { return }
+        resumed = true
+        continuation.resume(returning: url)
+      }
+      session.prefersEphemeralWebBrowserSession = false
+      session.presentationContextProvider = authPresenter
+      authSession = session
+      if !session.start() {
+        guard !resumed else { return }
+        resumed = true
+        continuation.resume(returning: nil)
+      }
+    }
+    authSession = nil
+
+    if let callback {
+      await handleMicrosoftCallback(callback)
+      return
+    }
+    // Closed or cancelled. The server may still have finished if the redirect landed
+    // outside the sheet, so check once before falling back to the Connect button.
+    msBrowserPending[service] = nil
+    await reloadMe()
   }
 
   func saveKey(_ key: String) async {
@@ -528,65 +651,52 @@ If you skip Save key, chat will send you back to these steps.
     ]
   }
 
-  private func fetchStatus(_ path: String) async -> ConnectionStatusResponse? {
-    try? await api.request(path, sessionId: sessionId, timeout: 15)
-  }
-
   private func paintConnections() {
     guard let me = profile else {
-      onedriveStatus = Self.onedriveIdle
-      outlookStatus = Self.outlookIdle
-      teamsStatus = Self.teamsIdle
-      odCode = ""
-      odURI = ""
-      olCode = ""
-      olURI = ""
-      tmCode = ""
-      tmURI = ""
+      msStates = [:]
+      msLocalPending = [:]
+      msBrowserPending = [:]
+      msLocalDenied = [:]
+      msErrors = [:]
       return
     }
-
-    if me.onedriveConnected {
-      onedriveStatus = me.onedriveEmail.isEmpty ? "OneDrive connected" : "OneDrive · \(me.onedriveEmail)"
-      odCode = ""
-      odURI = ""
-    } else if let pending = me.onedrivePending, pending.isActive {
-      onedriveStatus = "Microsoft should open with this code. Allow access, then come back."
-      odCode = pending.user_code
-      odURI = pending.openURL
-    } else {
-      onedriveStatus = Self.onedriveIdle
-      odCode = ""
-      odURI = ""
+    var next: [MSService: MSPaneState] = [:]
+    for service in MSService.allCases {
+      next[service] = paneState(service, me: me)
     }
+    msStates = next
+  }
 
-    if me.outlookConnected {
-      outlookStatus = me.outlookEmail.isEmpty ? "Outlook connected" : "Outlook · \(me.outlookEmail)"
-      olCode = ""
-      olURI = ""
-    } else if let pending = me.outlookPending, pending.isActive {
-      outlookStatus = "Microsoft should open with this code. Allow access, then come back."
-      olCode = pending.user_code
-      olURI = pending.openURL
-    } else {
-      outlookStatus = Self.outlookIdle
-      olCode = ""
-      olURI = ""
+  private func paneState(_ service: MSService, me: Profile) -> MSPaneState {
+    if me.msStudio(service) {
+      return .studio(email: me.msEmail(service))
     }
+    if me.msConnected(service) {
+      return .connected(email: me.msEmail(service))
+    }
+    if let error = msErrors[service], !error.isEmpty {
+      return .error(error)
+    }
+    let denied = me.msDenied.reason(service)
+    if !denied.isEmpty {
+      return .denied(reason: denied, needsAdminApproval: me.msNeedsAdminApproval || Self.looksLikeAdminConsent(denied))
+    }
+    if let local = msLocalDenied[service], !local.isEmpty {
+      return .denied(reason: local, needsAdminApproval: me.msNeedsAdminApproval || Self.looksLikeAdminConsent(local))
+    }
+    if let pending = msLocalPending[service] ?? me.msPending(service), pending.isActive {
+      return .pendingCode(code: pending.user_code, url: pending.openURL)
+    }
+    if let authorizeUrl = msBrowserPending[service] {
+      return .pendingBrowser(authorizeUrl: authorizeUrl)
+    }
+    return .idle
+  }
 
-    if me.teamsConnected {
-      teamsStatus = me.teamsEmail.isEmpty ? "Teams connected" : "Teams · \(me.teamsEmail)"
-      tmCode = ""
-      tmURI = ""
-    } else if let pending = me.teamsPending, pending.isActive {
-      teamsStatus = "Microsoft should open with this code. Allow access, then come back."
-      tmCode = pending.user_code
-      tmURI = pending.openURL
-    } else {
-      teamsStatus = Self.teamsIdle
-      tmCode = ""
-      tmURI = ""
-    }
+  private static func looksLikeAdminConsent(_ reason: String) -> Bool {
+    let folded = reason.lowercased()
+    return folded.contains("admin") || folded.contains("approval") || folded.contains("consent")
+      || folded.contains("aadsts65001") || folded.contains("aadsts90094") || folded.contains("aadsts900941")
   }
 
   private func refreshKeyStatus() {
@@ -634,5 +744,15 @@ If you skip Save key, chat will send you back to these steps.
     let ns = error as NSError
     if ns.domain.contains("GIDSignIn") && ns.code == -5 { return true }
     return error.localizedDescription.lowercased().contains("cancel")
+  }
+}
+
+/// Hands ASWebAuthenticationSession the key window so the Microsoft sheet has somewhere to appear.
+private final class MSAuthPresenter: NSObject, ASWebAuthenticationPresentationContextProviding {
+  func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+    let windows = UIApplication.shared.connectedScenes
+      .compactMap { $0 as? UIWindowScene }
+      .flatMap(\.windows)
+    return windows.first(where: \.isKeyWindow) ?? windows.first ?? ASPresentationAnchor()
   }
 }

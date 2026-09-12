@@ -88,6 +88,49 @@ struct APIClient {
     )
   }
 
+  // Microsoft connect. The server picks the flow: "app" returns authorizeUrl for a
+  // browser sign-in, "office" returns a device code.
+  func msStart(service: MSService, returnTo: String, sessionId: String) async throws -> MSStartResponse {
+    try await request(
+      "/v1/me/ms/start",
+      method: "POST",
+      body: MSServiceBody(service: service.rawValue, returnTo: returnTo),
+      sessionId: sessionId,
+      timeout: 25
+    )
+  }
+
+  func msStatus(service: MSService, sessionId: String) async throws -> ConnectionStatusResponse {
+    try await request(service.statusPath, sessionId: sessionId, timeout: 15)
+  }
+
+  func onenoteStatus(sessionId: String) async throws -> ConnectionStatusResponse {
+    try await msStatus(service: .onenote, sessionId: sessionId)
+  }
+
+  func msConsentRequest(service: MSService, sessionId: String) async throws -> MSConsentRequest {
+    try await request(
+      "/v1/me/ms/consent-request",
+      method: "POST",
+      body: MSServiceBody(service: service.rawValue),
+      sessionId: sessionId,
+      timeout: 25
+    )
+  }
+
+  func msDisconnect(service: MSService, sessionId: String) async throws -> Profile {
+    try await request(
+      "/v1/me/ms/disconnect",
+      method: "POST",
+      body: MSServiceBody(service: service.rawValue),
+      sessionId: sessionId
+    )
+  }
+
+  func fetchMe(sessionId: String) async throws -> Profile {
+    try await request("/v1/me", sessionId: sessionId)
+  }
+
   func fetchSchedule(sessionId: String) async throws -> ScheduleResponse {
     try await request("/v1/me/schedule", sessionId: sessionId)
   }

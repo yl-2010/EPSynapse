@@ -81,6 +81,10 @@ targets:
             CFBundleURLName: com.jype.epsynapse.google
             CFBundleURLSchemes:
               - com.googleusercontent.apps.873841837124-ocu4kaka0t0j6fbsur11s4ajde8ha5u1
+          - CFBundleTypeRole: Editor
+            CFBundleURLName: com.jype.epsynapse.microsoft
+            CFBundleURLSchemes:
+              - epsynapse
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft

@@ -18,8 +18,6 @@
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>0.1.0</string>
-	<key>CFBundleVersion</key>
-	<string>1</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -32,13 +30,25 @@
 				<string>com.googleusercontent.apps.873841837124-ocu4kaka0t0j6fbsur11s4ajde8ha5u1</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.jype.epsynapse.microsoft</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>epsynapse</string>
+			</array>
+		</dict>
 	</array>
+	<key>CFBundleVersion</key>
+	<string>1</string>
 	<key>EPSApiBaseURL</key>
 	<string>https://api.epsynapse.com</string>
-	<key>EPSGoogleiOSClientID</key>
-	<string>873841837124-ocu4kaka0t0j6fbsur11s4ajde8ha5u1.apps.googleusercontent.com</string>
 	<key>EPSGoogleReversedClientID</key>
 	<string>com.googleusercontent.apps.873841837124-ocu4kaka0t0j6fbsur11s4ajde8ha5u1</string>
+	<key>EPSGoogleiOSClientID</key>
+	<string>873841837124-ocu4kaka0t0j6fbsur11s4ajde8ha5u1.apps.googleusercontent.com</string>
 	<key>EPSLocalApiBaseURL</key>
 	<string>http://127.0.0.1:3006</string>
 	<key>GIDClientID</key>

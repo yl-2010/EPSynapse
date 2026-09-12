@@ -21,6 +21,16 @@ private enum SettingsPane: String, Hashable {
         case .teams: "Teams"
         }
     }
+
+    var microsoftService: MSService? {
+        switch self {
+        case .onedrive: .onedrive
+        case .onenote: .onenote
+        case .outlook: .outlook
+        case .teams: .teams
+        default: nil
+        }
+    }
 }
 
 struct SettingsSheet: View {
@@ -94,7 +104,7 @@ struct SettingsSheet: View {
         }
         .task {
             while !Task.isCancelled {
-                if hasMicrosoftPending {
+                if session.hasMicrosoftPendingCode {
                     await session.pollConnections()
                 }
                 try? await Task.sleep(nanoseconds: 4_000_000_000)
@@ -390,87 +400,133 @@ struct SettingsSheet: View {
 
     @ViewBuilder
     private func microsoftPane(_ pane: SettingsPane) -> some View {
-        let connected: Bool = {
-            switch pane {
-            case .onedrive, .onenote: session.profile?.onedriveConnected == true
-            case .outlook: session.profile?.outlookConnected == true
-            case .teams: session.profile?.teamsConnected == true
-            default: false
-            }
-        }()
-        let email: String = {
-            switch pane {
-            case .onedrive, .onenote: session.profile?.onedriveEmail ?? ""
-            case .outlook: session.profile?.outlookEmail ?? ""
-            case .teams: session.profile?.teamsEmail ?? ""
-            default: ""
-            }
-        }()
-        let code: String = {
-            switch pane {
-            case .onedrive, .onenote: session.odCode
-            case .outlook: session.olCode
-            case .teams: session.tmCode
-            default: ""
-            }
-        }()
-        let uri: String = {
-            switch pane {
-            case .onedrive, .onenote: session.odURI
-            case .outlook: session.olURI
-            case .teams: session.tmURI
-            default: ""
-            }
-        }()
-        let status: String = {
-            switch pane {
-            case .onedrive, .onenote: session.onedriveStatus
-            case .outlook: session.outlookStatus
-            case .teams: session.teamsStatus
-            default: ""
-            }
-        }()
-        let pending = !code.isEmpty || !uri.isEmpty
+        if let service = pane.microsoftService {
+            microsoftServicePane(service)
+        }
+    }
+
+    @ViewBuilder
+    private func microsoftServicePane(_ service: MSService) -> some View {
+        let state = session.msState(service)
+        let note = session.msNotes[service] ?? ""
+        let consentURL = session.adminConsentURL(for: service) ?? Self.adminConsent
 
         VStack(alignment: .leading, spacing: 12) {
-            if !connected {
-                stepList(Self.microsoftSteps(for: pane))
+            if !state.isConnected {
+                stepList(Self.microsoftSteps(for: service))
             }
 
-            if connected {
-                Text("\(pane.title) connected")
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(EPSTheme.fg)
+            switch state {
+            case .connected(let email):
+                HStack(alignment: .center, spacing: 12) {
+                    Text("\(service.title) connected")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(EPSTheme.fg)
+                    Spacer(minLength: 8)
+                    textAction("Disconnect") {
+                        Task { await session.disconnectMicrosoft(service) }
+                    }
+                }
                 if !email.isEmpty {
                     Text(email)
                         .font(.footnote)
                         .foregroundStyle(EPSTheme.muted)
                 }
-            } else if !pending {
-                goldButton("Connect \(pane.title)") {
-                    Task { await startMicrosoft(pane) }
-                }
-            }
 
-            if pending {
+            case .studio(let email):
+                Text("\(service.title) connected")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(EPSTheme.fg)
+                Text(email.isEmpty ? "\(service.title) connected" : "\(service.title) · \(email)")
+                    .font(.footnote)
+                    .foregroundStyle(EPSTheme.muted)
+
+            case .denied(let reason, let needsAdminApproval):
+                Text(needsAdminApproval ? "Approval required" : "Microsoft said no")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(EPSTheme.fg)
+                if !reason.isEmpty {
+                    Text(reason)
+                        .font(.footnote)
+                        .foregroundStyle(EPSTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                }
+                Text("Microsoft needs school IT to approve EPSynapse once. After that every EPS student can connect.")
+                    .font(.footnote)
+                    .foregroundStyle(EPSTheme.fg)
+                    .fixedSize(horizontal: false, vertical: true)
+                goldButton("Send request to school IT") {
+                    Task { await session.requestConsent(service) }
+                }
+                HStack(alignment: .center, spacing: 16) {
+                    textAction("Copy request") {
+                        Task { await session.copyConsentRequest(service) }
+                    }
+                    textAction("Connect again") {
+                        Task { await session.connectMicrosoft(service) }
+                    }
+                }
+                helpLink("Admin approval link", consentURL)
+
+            case .pendingCode(let code, let url):
                 if !code.isEmpty {
                     Text(code)
                         .font(.title2.weight(.bold).monospaced())
                         .foregroundStyle(EPSTheme.fg)
                         .textSelection(.enabled)
                 }
-                if let url = URL(string: uri), !uri.isEmpty {
-                    helpLink("Open Microsoft sign-in", url)
+                if let link = URL(string: url), !url.isEmpty {
+                    helpLink("Open Microsoft sign-in", link)
+                }
+                Text("Microsoft should open with this code. Allow access, then come back. This page checks every few seconds.")
+                    .font(.footnote)
+                    .foregroundStyle(EPSTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                textAction("Start over") {
+                    Task { await session.connectMicrosoft(service) }
+                }
+
+            case .pendingBrowser:
+                Text("Finish the school sign-in in the Microsoft window, then come back here.")
+                    .font(.footnote)
+                    .foregroundStyle(EPSTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                goldButton("Connect \(service.title)") {
+                    Task { await session.connectMicrosoft(service) }
+                }
+
+            case .error(let message):
+                goldButton("Connect \(service.title)") {
+                    Task { await session.connectMicrosoft(service) }
+                }
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(EPSTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+
+            case .idle:
+                goldButton("Connect \(service.title)") {
+                    Task { await session.connectMicrosoft(service) }
                 }
             }
 
-            if !status.isEmpty {
-                Text(status)
+            if !note.isEmpty {
+                Text(note)
                     .font(.footnote)
                     .foregroundStyle(EPSTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            helpLink("Ask school IT to approve", Self.adminConsent)
+            if !state.isConnected, !isDenied(state) {
+                helpLink("Admin approval link", consentURL)
+            }
         }
+    }
+
+    private func isDenied(_ state: MSPaneState) -> Bool {
+        if case .denied = state { return true }
+        return false
     }
 
     @ViewBuilder
@@ -641,28 +697,23 @@ struct SettingsSheet: View {
         session.profile?.canvasConnected == true ? "Connected" : "URL and token"
     }
 
-    private var onedriveMeta: String {
-        msMeta(connected: session.profile?.onedriveConnected == true, email: session.profile?.onedriveEmail ?? "", fallback: "School files")
-    }
+    private var onedriveMeta: String { msMeta(.onedrive) }
+    private var onenoteMeta: String { msMeta(.onenote) }
+    private var outlookMeta: String { msMeta(.outlook) }
+    private var teamsMeta: String { msMeta(.teams) }
 
-    private var onenoteMeta: String {
-        msMeta(connected: session.profile?.onedriveConnected == true, email: session.profile?.onedriveEmail ?? "", fallback: "School notebooks")
-    }
-
-    private var outlookMeta: String {
-        msMeta(connected: session.profile?.outlookConnected == true, email: session.profile?.outlookEmail ?? "", fallback: "School mail")
-    }
-
-    private var teamsMeta: String {
-        msMeta(connected: session.profile?.teamsConnected == true, email: session.profile?.teamsEmail ?? "", fallback: "School chat")
-    }
-
-    private func msMeta(connected: Bool, email: String, fallback: String) -> String {
-        if connected {
+    private func msMeta(_ service: MSService) -> String {
+        switch session.msState(service) {
+        case .connected(let email), .studio(let email):
             let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmed.isEmpty ? "Connected" : trimmed
+        case .denied(_, let needsAdminApproval):
+            return needsAdminApproval ? "Needs IT approval" : "Not connected"
+        case .pendingCode, .pendingBrowser:
+            return "Finishing sign-in"
+        case .idle, .error:
+            return "Not connected"
         }
-        return fallback
     }
 
     private var hasChatKey: Bool {
@@ -704,15 +755,6 @@ struct SettingsSheet: View {
         return hint.isEmpty ? [] : [hint]
     }
 
-    private var hasMicrosoftPending: Bool {
-        session.profile?.onedrivePending?.isActive == true
-            || session.profile?.outlookPending?.isActive == true
-            || session.profile?.teamsPending?.isActive == true
-            || !session.odCode.isEmpty
-            || !session.olCode.isEmpty
-            || !session.tmCode.isEmpty
-    }
-
     private func saveSchool() async {
         await session.save(
             school: school,
@@ -737,27 +779,6 @@ struct SettingsSheet: View {
             replacingCanvas = false
             await dashboard.load(from: session)
         }
-    }
-
-    private func startMicrosoft(_ pane: SettingsPane) async {
-        switch pane {
-        case .onedrive, .onenote:
-            await session.startOnedrive()
-            openPending(session.odURI)
-        case .outlook:
-            await session.startOutlook()
-            openPending(session.olURI)
-        case .teams:
-            await session.startTeams()
-            openPending(session.tmURI)
-        default:
-            break
-        }
-    }
-
-    private func openPending(_ raw: String) {
-        guard let url = URL(string: raw), !raw.isEmpty else { return }
-        openURL(url)
     }
 
     private func hydrate() {
@@ -787,15 +808,18 @@ struct SettingsSheet: View {
         "Canvas on the settings list must say Connected. Then close settings.",
     ]
 
-    private static func microsoftSteps(for pane: SettingsPane) -> [String] {
-        let last = pane == .onenote
-            ? "OneNote uses the OneDrive Microsoft sign-in. OneNote on the settings list must say Connected."
-            : "\(pane.title) on the settings list must say Connected."
+    private static func microsoftSteps(for service: MSService) -> [String] {
+        let noun: String = switch service {
+        case .onedrive: "files"
+        case .onenote: "notebooks"
+        case .outlook: "mail"
+        case .teams: "chats"
+        }
         return [
             "Sign in with Google on this page if you have not already.",
-            "Tap Connect \(pane.title). Microsoft opens a school sign-in.",
-            "Use your @eastsideprep.org account. If Microsoft says the app needs admin approval, that is expected. School IT Accepts once, then every student can connect.",
-            last,
+            "Tap Connect. Microsoft opens a school sign-in. Use your @eastsideprep.org account.",
+            "If Microsoft says Approval required, come back and tap Send request to school IT.",
+            "Once IT approves, tap Connect again. Connected only appears after EPSynapse can actually read your \(service.title) \(noun).",
         ]
     }
 

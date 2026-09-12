@@ -16,7 +16,13 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         open url: URL,
         options: [UIApplication.OpenURLOptionsKey: Any] = [:]
     ) -> Bool {
-        GIDSignIn.sharedInstance.handle(url)
+        if SessionStore.isMicrosoftCallback(url) {
+            Task { @MainActor in
+                await SessionStore.shared.handleMicrosoftCallback(url)
+            }
+            return true
+        }
+        return GIDSignIn.sharedInstance.handle(url)
     }
 
     private func applyPlistGoogleConfig() {
@@ -59,6 +65,12 @@ struct EPSynapseApp: App {
                 .preferredColorScheme(themeStore.colorScheme)
                 .tint(EPSTheme.accent)
                 .onOpenURL { url in
+                    // epsynapse://ms?... comes back from the Microsoft sign-in when the
+                    // redirect lands outside the in-app web sheet.
+                    if SessionStore.isMicrosoftCallback(url) {
+                        Task { await sessionStore.handleMicrosoftCallback(url) }
+                        return
+                    }
                     GIDSignIn.sharedInstance.handle(url)
                 }
                 .overlay {
