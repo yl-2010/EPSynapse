@@ -136,7 +136,7 @@ struct ChatHistoryPanel: View {
     @EnvironmentObject private var chat: ChatStore
 
     var body: some View {
-        ScrollView {
+        ScrollView(.vertical) {
             LazyVStack(alignment: .leading, spacing: 16) {
                 if chat.chats.isEmpty, chat.historyLoading {
                     ProgressView()
@@ -176,6 +176,7 @@ struct ChatHistoryPanel: View {
             .padding(.bottom, 28)
         }
         .scrollIndicators(.hidden)
+        .epsVerticalScrollOnly()
     }
 }
 

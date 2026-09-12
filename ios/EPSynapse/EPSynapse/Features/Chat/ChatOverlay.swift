@@ -187,7 +187,7 @@ struct ChatOverlay: View {
             .padding(.bottom, 8)
 
             if chat.turns.isEmpty {
-                ScrollView {
+                ScrollView(.vertical) {
                     if hasChatKey {
                         Text(SessionStore.readyGuide)
                             .font(.body)
@@ -198,10 +198,11 @@ struct ChatOverlay: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
+                .epsVerticalScrollOnly()
                 .padding(.vertical, 8)
             } else {
                 ScrollViewReader { proxy in
-                    ScrollView {
+                    ScrollView(.vertical) {
                         LazyVStack(alignment: .leading, spacing: 10) {
                             ForEach(chat.turns) { turn in
                                 chatBubble(turn)
@@ -210,6 +211,7 @@ struct ChatOverlay: View {
                         }
                         .padding(.bottom, 4)
                     }
+                    .epsVerticalScrollOnly()
                     .scrollDismissesKeyboard(.never)
                     .onAppear { scrollToLatest(proxy) }
                     .onChange(of: chat.turns.count) { _, _ in
@@ -227,7 +229,7 @@ struct ChatOverlay: View {
         .padding(16)
         .frame(maxWidth: .infinity)
         .frame(maxHeight: panelMaxHeight)
-        .epsGlassRounded(cornerRadius: 22, interactive: true)
+        .epsGlassRounded(cornerRadius: 22, interactive: false)
     }
 
     private func scrollToLatest(_ proxy: ScrollViewProxy) {

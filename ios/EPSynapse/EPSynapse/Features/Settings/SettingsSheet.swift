@@ -20,7 +20,7 @@ struct SettingsSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
-            ScrollView {
+            ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 22) {
                     statusLine
                     accountSection
@@ -35,6 +35,7 @@ struct SettingsSheet: View {
             }
             .scrollIndicators(.hidden)
             .scrollDismissesKeyboard(.interactively)
+            .epsVerticalScrollOnly()
         }
         .presentationDetents([.large])
         .presentationBackground(.ultraThinMaterial)

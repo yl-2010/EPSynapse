@@ -54,7 +54,7 @@ struct ClassView: View {
     }
 
     var body: some View {
-        ScrollView {
+        ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: 16) {
                 backRow
                 if let schoolClass {
@@ -77,6 +77,7 @@ struct ClassView: View {
             .frame(maxWidth: .infinity)
         }
         .scrollIndicators(.hidden)
+        .epsVerticalScrollOnly()
         .toolbar(.hidden, for: .navigationBar)
         .navigationBarBackButtonHidden(true)
     }
@@ -130,7 +131,7 @@ struct ClassView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .epsGlassRounded(cornerRadius: 22, interactive: true)
+        .epsGlassRounded(cornerRadius: 22, interactive: false)
     }
 
     private func canvasButton(_ raw: String) -> some View {

@@ -73,4 +73,68 @@ extension View {
     func adaptiveReadableWidth(_ maxWidth: CGFloat = AdaptiveLayout.pageMaxWidth) -> some View {
         modifier(AdaptiveReadableWidthModifier(maxWidth: maxWidth))
     }
+
+    /// Page scrolls up and down only. Buttons and orbs still get Liquid Glass warp.
+    func epsVerticalScrollOnly() -> some View {
+        self
+            .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+            .background {
+                EPSVerticalScrollLock()
+                    .frame(width: 0, height: 0)
+                    .accessibilityHidden(true)
+            }
+    }
+}
+
+enum EPSScrollAxis {
+    static func lockVertical(_ scroll: UIScrollView) {
+        scroll.alwaysBounceHorizontal = false
+        scroll.isDirectionalLockEnabled = true
+        if #available(iOS 17.4, *) {
+            scroll.bouncesHorizontally = false
+        }
+    }
+}
+
+private struct EPSVerticalScrollLock: UIViewRepresentable {
+    func makeUIView(context: Context) -> EPSVerticalScrollLockView {
+        EPSVerticalScrollLockView()
+    }
+
+    func updateUIView(_ uiView: EPSVerticalScrollLockView, context: Context) {
+        uiView.apply()
+    }
+}
+
+private final class EPSVerticalScrollLockView: UIView {
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false
+        backgroundColor = .clear
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        apply()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        apply()
+    }
+
+    func apply() {
+        var node: UIView? = superview
+        while let current = node {
+            if let scroll = current as? UIScrollView {
+                EPSScrollAxis.lockVertical(scroll)
+                return
+            }
+            node = current.superview
+        }
+    }
 }

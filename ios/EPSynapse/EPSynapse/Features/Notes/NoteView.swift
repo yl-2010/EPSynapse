@@ -29,7 +29,7 @@ struct NoteView: View {
     }
 
     var body: some View {
-        ScrollView {
+        ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: 16) {
                 backRow
                 if let note {
@@ -49,6 +49,7 @@ struct NoteView: View {
             .frame(maxWidth: .infinity)
         }
         .scrollIndicators(.hidden)
+        .epsVerticalScrollOnly()
         .toolbar(.hidden, for: .navigationBar)
         .navigationBarBackButtonHidden(true)
         .task {

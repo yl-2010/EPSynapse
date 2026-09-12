@@ -22,7 +22,7 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            ScrollView {
+            ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 16) {
                     Text("EPSynapse")
                         .font(.system(size: 20, weight: .bold))
@@ -49,6 +49,7 @@ struct HomeView: View {
             }
             .scrollIndicators(.hidden)
             .scrollDismissesKeyboard(.never)
+            .epsVerticalScrollOnly()
             .refreshable {
                 guard session.isSignedIn else { return }
                 await dashboard.load(from: session)
@@ -182,7 +183,8 @@ private struct ScrollToTopBridge: UIViewRepresentable {
             var node: UIView? = uiView
             while let current = node {
                 if let scroll = current as? UIScrollView {
-                    let top = CGPoint(x: scroll.contentOffset.x, y: -scroll.adjustedContentInset.top)
+                    EPSScrollAxis.lockVertical(scroll)
+                    let top = CGPoint(x: 0, y: -scroll.adjustedContentInset.top)
                     UIView.animate(
                         withDuration: 0.35,
                         delay: 0,

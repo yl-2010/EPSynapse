@@ -8,6 +8,8 @@ import UIKit
 /// Interactive fields use SwiftUI `.glassEffect(.regular.interactive())` via `epsGlassField`.
 /// Passive panels use UIKit `UIGlassEffect` via `glassPanel` / `glassCapsule`
 /// (avoids stacking `glassEffect` on large static surfaces).
+/// Do not set `interactive: true` on large cards inside a scroll view. Finger-follow
+/// glass then slides sideways during a vertical flick. Keep it on buttons and orbs.
 ///
 /// Creation note for UIKit glass: prefer `+[UIGlassEffect effectWithStyle:]` when present
 /// (iOS 27+ / later 26). Early iOS 26.0 only supports plain `init` / `effectWithGlass:`.

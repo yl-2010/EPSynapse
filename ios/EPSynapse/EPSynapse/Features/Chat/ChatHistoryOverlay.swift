@@ -27,7 +27,7 @@ struct ChatHistoryOverlay: View {
                 ChatHistoryPanel()
                     .frame(width: width)
                     .frame(height: height)
-                    .epsGlassRounded(cornerRadius: 22, interactive: true, clear: true)
+                    .epsGlassRounded(cornerRadius: 22, interactive: false, clear: true)
                     .padding(.top, top)
                     .padding(.leading, leading)
                     .offset(x: (chat.historyReveal - 1) * travel)
