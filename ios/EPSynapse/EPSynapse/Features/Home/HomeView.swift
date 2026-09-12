@@ -73,9 +73,6 @@ struct HomeView: View {
         .task {
             await session.boot()
             await dashboard.load(from: session)
-            if session.profile == nil {
-                showSettings = true
-            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .epsOpenSettings)) { _ in
             showSettings = true
