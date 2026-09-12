@@ -320,7 +320,7 @@
   }
 
   async function tick() {
-    if (document.hidden || inflight) return;
+    if (inflight) return;
     inflight = true;
     try {
       if (!pulseId) {

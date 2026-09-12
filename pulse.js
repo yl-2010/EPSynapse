@@ -329,7 +329,10 @@
         applyPulse(next, data.results || next.results || null);
         if (next.voted && !data.results && !next.results) {
           const results = await fetchResultsAfterVoted();
-          if (results) renderResults(results);
+          if (results) {
+            thanksCopyEl.textContent = "Here's where it stands.";
+            renderResults(results);
+          }
         }
         return;
       }
