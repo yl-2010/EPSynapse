@@ -125,7 +125,7 @@ struct ChatOverlay: View {
                     .background {
                         KeyboardAccessoryInstaller()
                     }
-                    .epsGlassField(interactive: true, cornerRadius: 18)
+                    .epsGlassField(interactive: false, cornerRadius: 18)
                     .onSubmit { send() }
 
                 Button {
@@ -161,7 +161,7 @@ struct ChatOverlay: View {
         .frame(minHeight: pillSide)
         .frame(maxWidth: isOpen ? .infinity : pillSide)
         .fixedSize(horizontal: false, vertical: true)
-        .epsGlassRounded(cornerRadius: isOpen ? 28 : pillSide / 2, interactive: true)
+        .epsGlassRounded(cornerRadius: isOpen ? 28 : pillSide / 2, interactive: !isOpen)
     }
 
     private var messagePanel: some View {

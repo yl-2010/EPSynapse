@@ -766,6 +766,9 @@
         writeBubble(slot.body, "assistant", errBody.error || "Chat failed.");
         if (slot.think) slot.think.remove();
         messages.pop();
+        if (res.status === 401) {
+          window.__epsynapseOpenChatKey?.();
+        }
         return;
       }
 

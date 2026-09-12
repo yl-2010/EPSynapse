@@ -13,6 +13,7 @@ import {
   explainUpstreamError,
   extractChatDelta,
   publicAgentConfig,
+  MISSING_KEY_ERROR,
   resolveApiKey,
   sanitizeMessages,
   upstreamBody,
@@ -868,8 +869,7 @@ app.post("/v1/agent/chat", async (req, res) => {
   const { key, source } = resolveApiKey(req, providerId, student);
   if (!key) {
     return res.status(401).json({
-      error:
-        "Paste a free API key first. Groq is the fastest signup: console.groq.com/keys",
+      error: MISSING_KEY_ERROR,
     });
   }
 

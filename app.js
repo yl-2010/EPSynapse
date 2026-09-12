@@ -559,6 +559,14 @@
     openPane("chat");
   }
 
+  function openChatKeySettings() {
+    if (!signedInViaGoogle()) return;
+    openSheet();
+    openPane("chat");
+  }
+
+  window.__epsynapseOpenChatKey = openChatKeySettings;
+
   function closeKeys(immediate) {
     closePane(immediate);
   }

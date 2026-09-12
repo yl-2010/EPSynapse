@@ -9,7 +9,7 @@ final class SessionStore: ObservableObject {
 
   static let onedriveIdle = "School OneDrive. Tap Connect, then sign in with @eastsideprep.org."
   static let outlookIdle = "School Outlook. Same Microsoft sign-in, mail only."
-  static let keyIdle = "No model key on this account. Groq is the short path: console.groq.com/keys"
+  static let keyIdle = "Do not paste a key in chat. Settings → Chat key, then a free Groq key from console.groq.com/keys."
   static let googleFirst = "Sign in with Google first."
   static let signedInHint = "Signed in with Google. School and student ID let us match you at school."
 

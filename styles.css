@@ -1686,10 +1686,25 @@ html[data-resolved-theme="light"] .yan-chat {
 }
 .yan-chat.is-open .yan-chat-pill.corner {
   cursor: text;
+  --lg-filter: none;
+  background-color: rgba(var(--lg-tint-rgb), var(--lg-fallback-tint));
+  backdrop-filter: blur(var(--lg-panel-blur)) saturate(1.6);
+  -webkit-backdrop-filter: blur(var(--lg-panel-blur)) saturate(1.6);
 }
 .yan-chat-pill.corner.lg-refraction::after {
   backdrop-filter: blur(var(--lg-read-blur)) var(--lg-filter);
   -webkit-backdrop-filter: blur(var(--lg-read-blur)) var(--lg-filter);
+}
+.yan-chat.is-open .yan-chat-pill.corner.lg-refraction::after,
+html:not([data-resolved-theme="light"]) .yan-chat.is-open .yan-chat-pill.corner.lg-refraction::after,
+html[data-resolved-theme="dark"] .yan-chat.is-open .yan-chat-pill.corner.lg-refraction::after,
+html.lg-chrome .yan-chat.is-open .yan-chat-pill.corner.lg-refraction::after,
+html.lg-chrome[data-resolved-theme="dark"] .yan-chat.is-open .yan-chat-pill.corner.lg-refraction::after {
+  display: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  background: none;
+  mix-blend-mode: normal;
 }
 @media (prefers-color-scheme: dark) {
   html:not([data-resolved-theme="light"]) .yan-chat-pill.corner.lg-refraction::after {
@@ -1709,6 +1724,11 @@ html[data-resolved-theme="dark"] .yan-chat-pill.corner.lg-refraction::after {
 .yan-chat.has-input-text .yan-chat-pill.lg-fallback {
   backdrop-filter: blur(20px) saturate(1.5);
   -webkit-backdrop-filter: blur(20px) saturate(1.5);
+}
+.yan-chat.is-open .yan-chat-pill.lg-fallback,
+.yan-chat.is-open.has-input-text .yan-chat-pill.lg-fallback {
+  backdrop-filter: blur(var(--lg-panel-blur)) saturate(1.6);
+  -webkit-backdrop-filter: blur(var(--lg-panel-blur)) saturate(1.6);
 }
 
 .yan-chat-launcher {

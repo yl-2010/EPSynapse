@@ -5,6 +5,7 @@
 
 import {
   PROVIDERS,
+  MISSING_KEY_ERROR,
   explainUpstreamError,
   resolveApiKey,
   textFromModelField,
@@ -56,9 +57,7 @@ async function completeJson(req, student, system, user) {
   const provider = PROVIDERS[providerId] || PROVIDERS.groq;
   const { key, source } = resolveApiKey(req, provider.id, student);
   if (!key) {
-    const err = new Error(
-      "Paste a free API key first. Groq is the fastest signup: console.groq.com/keys"
-    );
+    const err = new Error(MISSING_KEY_ERROR);
     err.status = 401;
     throw err;
   }

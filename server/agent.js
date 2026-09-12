@@ -72,6 +72,9 @@ export function publicAgentConfig() {
   };
 }
 
+export const MISSING_KEY_ERROR =
+  "Do not paste a key in this chat. Open Settings (bottom-left gear) → Chat key, then paste a free Groq key from console.groq.com/keys and save.";
+
 export function resolveApiKey(req, providerId, student) {
   const header = req.get("authorization") || "";
   const bearer = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
