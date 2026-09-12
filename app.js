@@ -2140,7 +2140,7 @@
             `<form class="edu-notes-form" id="note-gold">
               <label for="note-subject">Correct class</label>
               <select id="note-subject" name="subject">${subjectOptions(gold)}</select>
-              <button type="submit" class="edu-sheet-btn edu-sheet-btn--gold" data-liquid-glass="rounded" data-filter-id="lg-edu-note-gold">Save</button>
+              <button type="submit" class="edu-sheet-btn edu-sheet-btn--gold" data-liquid-glass="rounded" data-filter-id="lg-edu-note-save">Save</button>
               <p class="edu-empty" id="note-gold-status"></p>
             </form>`,
             "lg-edu-note-gold"

@@ -3249,9 +3249,7 @@ html[data-resolved-theme="dark"] .edu-sheet-field {
 }
 
 .edu-sheet-btn,
-.edu-sheet-btn--gold,
-html[data-resolved-theme="dark"] .edu-sheet-btn,
-html[data-resolved-theme="dark"] .edu-sheet-btn--gold {
+.edu-sheet-btn--gold {
   --lg-filter: none;
   --lg-tint-rgb: var(--accent-rgb);
   --lg-tint-opacity: 0;
@@ -3271,6 +3269,13 @@ html[data-resolved-theme="dark"] .edu-sheet-btn--gold {
   background: #eba700;
   box-shadow: 0 2px 8px rgba(11, 31, 58, 0.08);
   cursor: pointer;
+}
+
+html[data-resolved-theme="dark"] .edu-sheet-btn,
+html[data-resolved-theme="dark"] .edu-sheet-btn--gold {
+  color: #0b1f3a;
+  background: #eba700;
+  --lg-tint-opacity: 0;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -3822,9 +3827,11 @@ html[data-auth="in"] #stage-out {
 
 .edu-notes-form .edu-sheet-btn {
   flex: 0 0 auto;
+  align-self: flex-start;
   width: auto;
   min-width: 0;
-  padding: 0.42rem 0.9rem;
+  height: auto;
+  padding: 0.34rem 0.72rem;
   font-size: var(--text-footnote);
 }
 
