@@ -747,7 +747,50 @@
 
   function listOrEmpty(itemsHtml, empty) {
     if (!itemsHtml) return `<p class="edu-empty">${escapeHtml(empty || "Nothing here")}</p>`;
-    return `<ul class="edu-list">${itemsHtml}</ul>`;
+    return `<ul class="edu-list">${itemsHtml}</ul><p class="edu-empty edu-filter-empty" hidden>${escapeHtml(empty || "Nothing here")}</p>`;
+  }
+
+  function paintAssignmentFilters() {
+    document.querySelectorAll(".edu-filter").forEach((label) => {
+      const input = label.querySelector("input[data-filter]");
+      const tag = input && input.getAttribute("data-filter");
+      if (!tag) return;
+      const on = typeFilter.has(tag);
+      label.classList.toggle("is-on", on);
+      input.checked = on;
+    });
+    document.querySelectorAll(".edu-row[data-tag]").forEach((row) => {
+      const tag = row.getAttribute("data-tag") || "HW";
+      row.classList.toggle("is-filter-hidden", !typeFilter.has(tag));
+    });
+    applyCollapseHidden("lg-edu-todo", todoExpanded, TODOS_COLLAPSED_LIMIT);
+    applyCollapseHidden("lg-edu-dates", datesExpanded, DATES_COLLAPSED_LIMIT);
+    document.querySelectorAll(".edu-list").forEach((list) => {
+      const rows = [...list.querySelectorAll(":scope > .edu-row[data-tag]")];
+      if (!rows.length) return;
+      const visible = rows.some(
+        (row) =>
+          !row.classList.contains("is-filter-hidden") &&
+          !row.classList.contains("is-collapse-hidden")
+      );
+      list.classList.toggle("is-filter-empty", !visible);
+      const empty = list.nextElementSibling;
+      if (empty && empty.classList.contains("edu-filter-empty")) {
+        empty.hidden = visible;
+      }
+    });
+  }
+
+  function applyCollapseHidden(filterId, expanded, limit) {
+    const panel = document.querySelector(`[data-filter-id="${filterId}"]`);
+    if (!panel) return;
+    const rows = [...panel.querySelectorAll(".edu-row[data-tag]")];
+    rows.forEach((row) => row.classList.remove("is-collapse-hidden"));
+    if (expanded) return;
+    rows
+      .filter((row) => !row.classList.contains("is-filter-hidden"))
+      .slice(limit)
+      .forEach((row) => row.classList.add("is-collapse-hidden"));
   }
 
   function trimNum(n) {
@@ -832,7 +875,7 @@
     const due = t.due ? `<span class="edu-meta">${escapeHtml(formatDue(t.due))}</span>` : "";
     const klass = t.courseName ? `<span class="edu-meta">${escapeHtml(t.courseName)}</span>` : "";
     const href = t.canvasLink || "#";
-    return `<li class="edu-row edu-todo${t.done ? " is-done" : ""}">
+    return `<li class="edu-row edu-todo${t.done ? " is-done" : ""}" data-tag="${escapeHtml(tag)}">
       <span class="edu-check${t.done ? " is-checked" : ""}" data-liquid-glass="circle" data-filter-id="lg-check-${escapeHtml(t.id)}" aria-hidden="true"><span class="edu-check-dot"></span></span>
       <a class="edu-row-link" href="${escapeHtml(href)}" target="_blank" rel="noopener">
         <span class="edu-name"><span class="edu-tag edu-tag-${escapeHtml(tag)}">${escapeHtml(tag)}</span> ${escapeHtml(t.title)}</span>
@@ -875,7 +918,7 @@
 
   function dateRow(t) {
     const tag = t.tag || "HW";
-    return `<li class="edu-row${tag === "MA" ? " is-ma" : ""}">
+    return `<li class="edu-row${tag === "MA" ? " is-ma" : ""}" data-tag="${escapeHtml(tag)}">
       <span class="edu-name"><span class="edu-tag edu-tag-${escapeHtml(tag)}">${escapeHtml(tag)}</span> ${escapeHtml(t.title)}</span>
       <span class="edu-meta">${escapeHtml(formatDue(t.due))}</span>
     </li>`;
@@ -969,13 +1012,11 @@
       notes: notes || lastHome.notes || [],
       grades: grades || lastHome.grades || [],
     };
-    const openAll = (lastHome.assignments || []).filter((t) => !t.done && matchesTag(t));
-    const open = collapsedSlice(openAll, todoExpanded, TODOS_COLLAPSED_LIMIT);
-    const done = (lastHome.assignments || []).filter((t) => t.done && matchesTag(t));
-    const datesAll = (lastHome.assignments || [])
-      .filter((t) => t.due && matchesTag(t))
+    const open = (lastHome.assignments || []).filter((t) => !t.done);
+    const done = (lastHome.assignments || []).filter((t) => t.done);
+    const dates = (lastHome.assignments || [])
+      .filter((t) => t.due)
       .sort((a, b) => String(a.due).localeCompare(String(b.due)));
-    const dates = collapsedSlice(datesAll, datesExpanded, DATES_COLLAPSED_LIMIT);
     const fileTiles = (lastHome.files || []).map(fileTile).join("");
     const classItems = homeClasses();
 
@@ -1014,6 +1055,7 @@
       </div>
     `;
     if (typeof window.reinitLiquidGlass === "function") window.reinitLiquidGlass();
+    paintAssignmentFilters();
   }
 
   function classMatchesWork(klass, item) {
@@ -1060,13 +1102,11 @@
       return;
     }
     const work = (lastHome.assignments || []).filter((t) => classMatchesWork(klass, t));
-    const openAll = work.filter((t) => !t.done && matchesTag(t));
-    const open = collapsedSlice(openAll, todoExpanded, TODOS_COLLAPSED_LIMIT);
-    const done = work.filter((t) => t.done && matchesTag(t));
-    const datesAll = work
-      .filter((t) => t.due && matchesTag(t))
+    const open = work.filter((t) => !t.done);
+    const done = work.filter((t) => t.done);
+    const dates = work
+      .filter((t) => t.due)
       .sort((a, b) => String(a.due).localeCompare(String(b.due)));
-    const dates = collapsedSlice(datesAll, datesExpanded, DATES_COLLAPSED_LIMIT);
     const nameHint = String(klass.name || "").toLowerCase();
     const files = (lastHome.files || []).filter((f) => {
       if (!nameHint) return false;
@@ -1122,6 +1162,7 @@
       </div>
     `;
     if (typeof window.reinitLiquidGlass === "function") window.reinitLiquidGlass();
+    paintAssignmentFilters();
   }
 
   function voteLine(label, vote) {
@@ -1695,7 +1736,7 @@
     if (input.checked) typeFilter.add(tag);
     else typeFilter.delete(tag);
     if (typeFilter.size === 0) TAGS.forEach((t) => typeFilter.add(t));
-    routeAndRender();
+    paintAssignmentFilters();
   });
 
   form.addEventListener("submit", async (ev) => {

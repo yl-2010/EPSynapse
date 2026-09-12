@@ -1723,6 +1723,16 @@ void main() {
     }
     const strength = el._lgMagStrength || 0.28 * HOVER_ANIM;
     const clamp = !!el._lgMagClamp;
+    if (clamp) {
+      const hit = document.elementFromPoint(clientX, clientY);
+      if (hit && typeof hit.closest === "function" && hit.closest(".edu-filter")) {
+        el._mx = 0;
+        el._my = 0;
+        clearLiquidSquish(el);
+        applyMagneticT(el);
+        return;
+      }
+    }
     const r = el.getBoundingClientRect();
     let mx = (clientX - r.left - r.width / 2) * strength;
     let my = (clientY - r.top - r.height / 2) * strength;

@@ -1053,14 +1053,19 @@ html[data-resolved-theme="dark"] .edu-back-shadow feGaussianBlur {
   z-index: 2;
   display: grid;
   place-items: center;
+  box-sizing: border-box;
   flex: 0 0 2.05rem;
   width: 2.05rem;
   height: 2.05rem;
+  max-width: 2.05rem;
+  max-height: 2.05rem;
   margin: 0;
   padding: 0;
   border: 0;
   border-radius: 50%;
   isolation: isolate;
+  overflow: hidden;
+  contain: layout;
   background: transparent;
   color: var(--muted);
   font-size: 9px;
@@ -1071,9 +1076,10 @@ html[data-resolved-theme="dark"] .edu-back-shadow feGaussianBlur {
   user-select: none;
   box-shadow: 0 2px var(--lg-outer-shadow-blur) var(--lg-outer-shadow);
   transition:
-    color 0.2s var(--ease),
-    box-shadow 0.2s var(--ease),
-    filter 0.2s var(--ease);
+    color 0.22s var(--ease),
+    box-shadow 0.22s var(--ease),
+    background-color 0.22s var(--ease),
+    filter 0.22s var(--ease);
 }
 
 .edu-filter input {
@@ -1095,7 +1101,7 @@ html[data-resolved-theme="dark"] .edu-back-shadow feGaussianBlur {
   --lg-tint-opacity: 0.72;
   box-shadow:
     0 2px var(--lg-outer-shadow-blur) var(--lg-outer-shadow),
-    0 0 0 1.5px color-mix(in srgb, var(--accent) 55%, transparent);
+    inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -1146,7 +1152,39 @@ html[data-resolved-theme="light"] .edu-filter.is-on {
   gap: 0.65rem;
   padding: 0.55rem 0.65rem;
   border-radius: 10px;
-  transition: background 0.2s var(--ease);
+  transition:
+    background 0.2s var(--ease),
+    max-height 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.2s var(--ease),
+    padding 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    margin 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.edu-row[data-tag] {
+  overflow: hidden;
+  max-height: 6.5rem;
+}
+
+.edu-row.is-filter-hidden,
+.edu-row.is-collapse-hidden {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  margin: 0;
+  pointer-events: none;
+}
+
+.edu-list:has(> .edu-row[data-tag]) {
+  gap: 0;
+}
+
+.edu-row[data-tag]:not(.is-filter-hidden):not(.is-collapse-hidden) {
+  margin-bottom: 0.3rem;
+}
+
+.edu-list.is-filter-empty {
+  display: none;
 }
 
 .edu-row.edu-todo,

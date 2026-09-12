@@ -208,12 +208,12 @@ extension View {
     /// Prefer this over `epsGlassCircleButton` when height must match a neighbor
     /// (`.buttonStyle(.glass)` uses system control sizing and ignores label frames).
     @ViewBuilder
-    func epsSizedGlassCircle(side: CGFloat, tint: Color? = nil) -> some View {
+    func epsSizedGlassCircle(side: CGFloat, tint: Color? = nil, interactive: Bool = true) -> some View {
         let shaped = self
             .frame(width: side, height: side)
             .contentShape(Circle())
         if #available(iOS 26, *) {
-            shaped.glassEffect(Self.epsGlass(tint: tint, interactive: true), in: Circle())
+            shaped.glassEffect(Self.epsGlass(tint: tint, interactive: interactive), in: Circle())
         } else {
             shaped
                 .background {

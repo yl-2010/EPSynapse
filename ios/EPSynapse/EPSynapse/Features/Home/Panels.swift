@@ -63,7 +63,7 @@ struct EPSPanel<Content: View>: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .epsGlassRounded(cornerRadius: 22, interactive: true)
+        .epsGlassRounded(cornerRadius: 22, interactive: false)
         .opacity(dimmed ? 0.78 : 1)
     }
 
@@ -107,7 +107,9 @@ struct FilterOrbBar: View {
                     tag: tag,
                     isOn: dashboard.typeFilter.contains(tag)
                 ) {
-                    dashboard.toggleFilter(tag)
+                    withAnimation(.easeInOut(duration: 0.28)) {
+                        dashboard.toggleFilter(tag)
+                    }
                 }
             }
         }
@@ -130,7 +132,8 @@ struct FilterOrb: View {
                 .frame(width: 33, height: 33)
         }
         .buttonStyle(.plain)
-        .epsSizedGlassCircle(side: 33, tint: isOn ? EPSTheme.filterOnTint(colorScheme) : nil)
+        .epsSizedGlassCircle(side: 33, tint: isOn ? EPSTheme.filterOnTint(colorScheme) : nil, interactive: false)
+        .animation(.easeInOut(duration: 0.22), value: isOn)
         .accessibilityLabel(tag)
         .accessibilityAddTraits(isOn ? [.isSelected] : [])
         .epsHapticOnTap()
