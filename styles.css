@@ -3132,6 +3132,7 @@ html[data-resolved-theme="dark"] .edu-school-results {
 
 html[data-auth="out"] #home-open,
 html[data-auth="out"] #settings-open,
+html[data-auth="out"] .c-tr,
 html[data-auth="out"] #stage-full,
 html[data-auth="out"] #stage-loading,
 html[data-auth="out"] #edu-chat,
