@@ -3008,7 +3008,111 @@ html[data-auth="out"] #stage-full,
 html[data-auth="out"] #stage-loading,
 html[data-auth="out"] #edu-chat,
 html[data-auth="out"] #settings-sheet,
-html[data-auth="out"] #settings-gated {
+html[data-auth="out"] #settings-gated,
+html[data-auth="out"] #home-google {
   display: none !important;
+}
+
+html[data-auth="in"] #stage-out {
+  display: none !important;
+}
+
+.stage-out {
+  align-content: center;
+  padding-top: calc(var(--corner-orb) + var(--corner-pad) + 0.5rem);
+  padding-bottom: 4.5rem;
+}
+
+.stage-out-card {
+  width: min(22.5rem, calc(100vw - 2.5rem));
+  text-align: center;
+}
+
+.stage-out-mark {
+  margin: 0;
+  font-family: var(--display);
+  font-size: var(--text-large-title);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+}
+
+.stage-out-lead {
+  margin: 0.7rem 0 1.15rem;
+  font-size: var(--text-body);
+  color: var(--muted);
+}
+
+.google-native {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.72rem;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 3.15rem;
+  margin: 0;
+  padding: 0.7rem 1.15rem;
+  border: 0;
+  border-radius: 14px;
+  font: inherit;
+  font-size: var(--text-subhead);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: #0b1f3a;
+  background: var(--accent);
+  box-shadow: 0 10px 28px rgba(11, 31, 58, 0.16);
+  cursor: pointer;
+}
+
+.google-native:hover {
+  filter: brightness(1.05);
+}
+
+.google-native:active {
+  transform: translateY(1px);
+}
+
+.google-native-mark {
+  display: grid;
+  place-items: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 999px;
+  background: #fff;
+  flex: 0 0 auto;
+}
+
+.google-native-mark svg {
+  display: block;
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.edu-sheet-body > .google-native {
+  margin-bottom: 0.85rem;
+}
+
+.edu-sheet-body:has(#google-profile:not([hidden])) #google-redirect {
+  display: none !important;
+}
+
+.stage-out-status {
+  margin: 0.7rem 0 0;
+  font-size: var(--text-footnote);
+  color: var(--muted);
+}
+
+.stage-out-status[hidden] {
+  display: none;
+}
+
+.stage-out-foot {
+  display: block;
+  margin-top: 2.4rem;
+  font-size: var(--text-caption);
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 0.16em;
 }
 
