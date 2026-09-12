@@ -590,20 +590,11 @@ struct EPSTagChip: View {
     }
 
     private var fg: Color {
-        switch resolved {
-        case "CW": return Color(red: 11 / 255, green: 31 / 255, blue: 58 / 255)
-        case "MA": return Color(red: 232 / 255, green: 238 / 255, blue: 244 / 255)
-        default: return EPSTheme.accent
-        }
+        Color(red: 11 / 255, green: 31 / 255, blue: 58 / 255)
     }
 
     private var bg: Color {
-        switch resolved {
-        case "CW": return EPSTheme.accent
-        case "QA": return Color(red: 0, green: 70 / 255, blue: 127 / 255)
-        case "MA": return Color(red: 11 / 255, green: 31 / 255, blue: 58 / 255)
-        default: return Color(red: 0, green: 70 / 255, blue: 127 / 255).opacity(0.22)
-        }
+        EPSTheme.accent
     }
 }
 

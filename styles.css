@@ -3103,26 +3103,8 @@ html.lg-chrome[data-resolved-theme="dark"] .yan-chat-panel.lg-static.lg-refracti
   letter-spacing: 0.04em;
   border-radius: 6px;
   padding: 0.12rem 0.4rem;
-}
-
-.edu-tag-CW {
   color: #0b1f3a;
   background: #eba700;
-}
-
-.edu-tag-HW {
-  color: #eba700;
-  background: color-mix(in srgb, #00467f 22%, transparent);
-}
-
-.edu-tag-QA {
-  color: #eba700;
-  background: #00467f;
-}
-
-.edu-tag-MA {
-  color: #e8eef4;
-  background: #0b1f3a;
 }
 
 .edu-google-slot[hidden],
