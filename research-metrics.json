@@ -9,23 +9,63 @@
     "Literature",
     "Economics"
   ],
-  "test_n": 0,
+  "test_n": 2000,
   "arms": {
     "zero_shot": {
       "name": "zero_shot",
-      "n": 0,
-      "accuracy": 0,
-      "micro_f1": 0,
-      "macro_f1": 0,
+      "n": 2000,
+      "accuracy": 0.2685,
+      "micro_f1": 0.2685,
+      "macro_f1": 0.17949506313561878,
       "per_class": {
-        "Mathematics": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
-        "Physics": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
-        "Chemistry": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
-        "Biology": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
-        "Computer Science": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
-        "History": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
-        "Literature": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
-        "Economics": { "precision": 0, "recall": 0, "f1": 0, "support": 0 }
+        "Mathematics": {
+          "precision": 0.3829787234042553,
+          "recall": 0.072,
+          "f1": 0.12121212121212122,
+          "support": 250
+        },
+        "Physics": {
+          "precision": 0.18676716917922948,
+          "recall": 0.892,
+          "f1": 0.30886426592797783,
+          "support": 250
+        },
+        "Chemistry": {
+          "precision": 0.5,
+          "recall": 0.032,
+          "f1": 0.06015037593984962,
+          "support": 250
+        },
+        "Biology": {
+          "precision": 0.041666666666666664,
+          "recall": 0.004,
+          "f1": 0.0072992700729927005,
+          "support": 250
+        },
+        "Computer Science": {
+          "precision": 0.36666666666666664,
+          "recall": 0.484,
+          "f1": 0.41724137931034483,
+          "support": 250
+        },
+        "History": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 250
+        },
+        "Literature": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 250
+        },
+        "Economics": {
+          "precision": 0.4289405684754522,
+          "recall": 0.664,
+          "f1": 0.521193092621664,
+          "support": 250
+        }
       },
       "protocol": "zero_shot_cls_cosine",
       "model": "bert-base-uncased",
@@ -33,44 +73,128 @@
     },
     "fine_tuned": {
       "name": "fine_tuned",
-      "n": 0,
-      "accuracy": 0,
-      "micro_f1": 0,
-      "macro_f1": 0,
+      "n": 2000,
+      "accuracy": 0.917,
+      "micro_f1": 0.917,
+      "macro_f1": 0.9170199233661559,
       "per_class": {
-        "Mathematics": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
-        "Physics": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
-        "Chemistry": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
-        "Biology": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
-        "Computer Science": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
-        "History": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
-        "Literature": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
-        "Economics": { "precision": 0, "recall": 0, "f1": 0, "support": 0 }
+        "Mathematics": {
+          "precision": 0.9087136929460581,
+          "recall": 0.876,
+          "f1": 0.8920570264765784,
+          "support": 250
+        },
+        "Physics": {
+          "precision": 0.864,
+          "recall": 0.864,
+          "f1": 0.864,
+          "support": 250
+        },
+        "Chemistry": {
+          "precision": 0.8622047244094488,
+          "recall": 0.876,
+          "f1": 0.8690476190476191,
+          "support": 250
+        },
+        "Biology": {
+          "precision": 0.9098039215686274,
+          "recall": 0.928,
+          "f1": 0.9188118811881189,
+          "support": 250
+        },
+        "Computer Science": {
+          "precision": 0.9243027888446215,
+          "recall": 0.928,
+          "f1": 0.9261477045908184,
+          "support": 250
+        },
+        "History": {
+          "precision": 0.96,
+          "recall": 0.96,
+          "f1": 0.96,
+          "support": 250
+        },
+        "Literature": {
+          "precision": 0.9752066115702479,
+          "recall": 0.944,
+          "f1": 0.959349593495935,
+          "support": 250
+        },
+        "Economics": {
+          "precision": 0.933852140077821,
+          "recall": 0.96,
+          "f1": 0.9467455621301775,
+          "support": 250
+        }
       },
       "protocol": "fine_tuned",
-      "model": "fine-tuned-bert",
+      "model_dir": "models/fine-tuned-bert",
       "label": "Fine-tuned BERT"
     },
     "student_key": {
       "name": "student_key",
       "n": 0,
-      "accuracy": 0,
-      "micro_f1": 0,
-      "macro_f1": 0,
+      "accuracy": 0.0,
+      "micro_f1": 0.0,
+      "macro_f1": 0.0,
       "per_class": {
-        "Mathematics": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
-        "Physics": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
-        "Chemistry": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
-        "Biology": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
-        "Computer Science": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
-        "History": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
-        "Literature": { "precision": 0, "recall": 0, "f1": 0, "support": 0 },
-        "Economics": { "precision": 0, "recall": 0, "f1": 0, "support": 0 }
+        "Mathematics": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0
+        },
+        "Physics": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0
+        },
+        "Chemistry": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0
+        },
+        "Biology": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0
+        },
+        "Computer Science": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0
+        },
+        "History": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0
+        },
+        "Literature": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0
+        },
+        "Economics": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0
+        }
       },
-      "protocol": "student_key",
-      "model": "student-key",
+      "protocol": "live_only",
       "label": "Student-key model"
     }
   },
-  "updated_at": "2026-09-12T00:00:00.000Z"
+  "include_user_tests": false,
+  "include_frozen_tests": true,
+  "frozen_test_n": 2000,
+  "user_test_n": 0,
+  "source": "frozen_eval",
+  "updated_at": "2026-09-12T21:29:21Z"
 }
