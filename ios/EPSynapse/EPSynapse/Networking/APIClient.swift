@@ -65,6 +65,27 @@ struct APIClient {
     return (data, json)
   }
 
+  func listChats(sessionId: String) async throws -> ChatListResponse {
+    try await request("/v1/agent/chats", sessionId: sessionId)
+  }
+
+  func persistChat(_ body: ChatPersistBody, sessionId: String) async throws -> ChatListItemResponse {
+    try await request("/v1/agent/chats", method: "POST", body: body, sessionId: sessionId)
+  }
+
+  func loadChat(id: String, sessionId: String) async throws -> ChatDetailResponse {
+    try await request("/v1/agent/chats/\(id)", sessionId: sessionId)
+  }
+
+  func markChatRead(id: String, sessionId: String) async throws {
+    _ = try await requestRaw(
+      "/v1/agent/chats/\(id)/read",
+      method: "POST",
+      body: EmptyJSON(),
+      sessionId: sessionId
+    )
+  }
+
   func streamChat(
     provider: String,
     messages: [[String: String]],

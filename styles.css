@@ -1808,6 +1808,34 @@ html[data-resolved-theme="dark"] .yan-chat-pill.corner.lg-refraction::after {
 .yan-chat.has-panel .yan-chat-close--pill {
   opacity: 1; pointer-events: auto; transition-delay: 0.18s;
 }
+.yan-chat-history-btn--panel {
+  left: auto;
+  right: calc(var(--chat-panel-radius) - var(--chat-x-size) / 2);
+}
+.yan-chat-history-btn--dock {
+  top: auto;
+  left: calc(var(--pill-left) - var(--chat-x-size) - 0.65rem);
+  bottom: calc(var(--chat-pad) + (var(--pill-h) - var(--chat-x-size)) / 2);
+  transition:
+    opacity 0.28s var(--ease),
+    transform 0.3s var(--ease),
+    box-shadow 0.3s var(--ease),
+    left 0.7s var(--chat-spring),
+    bottom 0.22s var(--ease);
+}
+.yan-chat.is-open .yan-chat-history-btn--dock,
+.yan-chat.has-panel .yan-chat-history-btn--panel {
+  opacity: 1;
+  pointer-events: auto;
+  transition-delay: 0.18s;
+}
+.yan-chat.has-panel .yan-chat-history-btn--dock {
+  opacity: 0;
+  pointer-events: none;
+}
+.yan-chat.is-history .yan-chat-history-btn {
+  color: var(--chat-orange);
+}
 
 .yan-chat-form {
   position: absolute; inset: 0; z-index: 4; display: flex; align-items: center; gap: 0.45rem;

@@ -42,6 +42,7 @@ struct EPSynapseApp: App {
     @StateObject private var themeStore = ThemeStore()
     @StateObject private var sessionStore = SessionStore.shared
     @StateObject private var dashboardStore = DashboardStore()
+    @StateObject private var chatStore = ChatStore.shared
     @State private var showLaunchCover = true
 
     init() {
@@ -54,6 +55,7 @@ struct EPSynapseApp: App {
                 .environmentObject(themeStore)
                 .environmentObject(sessionStore)
                 .environmentObject(dashboardStore)
+                .environmentObject(chatStore)
                 .preferredColorScheme(themeStore.colorScheme)
                 .tint(EPSTheme.accent)
                 .onOpenURL { url in

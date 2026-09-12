@@ -14,17 +14,24 @@
 
   const panel = root.querySelector(".yan-chat-panel");
   const messagesEl = root.querySelector(".yan-chat-messages");
+  const historyEl = root.querySelector(".yan-chat-history");
   const form = root.querySelector(".yan-chat-form");
   const input = root.querySelector(".yan-chat-input");
   const launcher = root.querySelector(".yan-chat-launcher");
   const clearBtns = root.querySelectorAll("[data-edu-chat-clear]");
   const minimizeBtns = root.querySelectorAll("[data-edu-chat-minimize]");
+  const historyBtns = root.querySelectorAll("[data-edu-chat-history]");
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const LS_CHATS = "epsynapse.chat.threads";
 
   let messages = [];
+  let sessionId = "";
   let busy = false;
   let preferPanel = false;
+  let showingHistory = false;
   let bubbleSeq = 0;
+  let historyPointerSid = null;
+  let historyFetchGen = 0;
 
   function apiBase() {
     return window.__epsynapseApiBase || "";
@@ -39,6 +46,7 @@
   }
 
   function setState(next, opts = {}) {
+    if (next === "closed" && showingHistory) hideHistory();
     root.dataset.state = next;
     const open = next !== "closed";
     root.classList.toggle("is-open", open);
@@ -162,6 +170,72 @@
     return document.documentElement.dataset.auth === "in";
   }
 
+  function newChatId() {
+    if (crypto.randomUUID) return crypto.randomUUID();
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0;
+      return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+    });
+  }
+
+  function authHeaders() {
+    const headers = { "Content-Type": "application/json" };
+    const key = localStorage.getItem(LS_KEY) || "";
+    const session = localStorage.getItem(LS_SID) || "";
+    if (key) headers.Authorization = "Bearer " + key;
+    if (session) headers["X-EPSynapse-Session"] = session;
+    return headers;
+  }
+
+  function titleFromMessages(list) {
+    const first = (list || []).find((m) => m.role === "user" && String(m.content || "").trim());
+    const text = String(first?.content || "").replace(/\s+/g, " ").trim();
+    if (!text) return "Chat";
+    return text.length > 72 ? `${text.slice(0, 71)}…` : text;
+  }
+
+  function previewFromMessages(list) {
+    for (let i = (list || []).length - 1; i >= 0; i -= 1) {
+      const text = String(list[i]?.content || "").replace(/\s+/g, " ").trim();
+      if (text) return text.slice(0, 160);
+    }
+    return "";
+  }
+
+  function readLocalBag() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(LS_CHATS) || "null");
+      if (raw && Array.isArray(raw.chats)) return raw;
+    } catch {
+      /* ignore */
+    }
+    return { currentId: "", chats: [] };
+  }
+
+  function writeLocalBag(bag) {
+    try {
+      localStorage.setItem(LS_CHATS, JSON.stringify(bag));
+    } catch {
+      /* quota */
+    }
+  }
+
+  function upsertLocalThread(chat) {
+    const bag = readLocalBag();
+    const next = {
+      sessionId: chat.sessionId,
+      title: chat.title || titleFromMessages(chat.messages),
+      preview: chat.preview || previewFromMessages(chat.messages),
+      started: chat.started || new Date().toISOString(),
+      updated: chat.updated || new Date().toISOString(),
+      lastRead: chat.lastRead || new Date().toISOString(),
+      messages: Array.isArray(chat.messages) ? chat.messages.slice(-MAX_SAVED) : [],
+    };
+    bag.chats = [next, ...bag.chats.filter((c) => c.sessionId !== next.sessionId)].slice(0, 80);
+    bag.currentId = next.sessionId;
+    writeLocalBag(bag);
+  }
+
   function loadSavedChat() {
     try {
       const raw = JSON.parse(localStorage.getItem(LS_CHAT) || "[]");
@@ -187,11 +261,268 @@
     }
   }
 
-  function paintSavedChat() {
+  function paintMessages(list) {
     if (!messagesEl) return;
     messagesEl.innerHTML = "";
-    messages.forEach((m) => appendTurn(m.role, m.content));
-    if (messages.length) preferPanel = true;
+    list.forEach((m) => appendTurn(m.role, m.content));
+    if (list.length) preferPanel = true;
+  }
+
+  function paintSavedChat() {
+    paintMessages(messages);
+  }
+
+  async function persistThread() {
+    if (!messages.length) return;
+    if (!sessionId) sessionId = newChatId();
+    const now = new Date().toISOString();
+    const row = {
+      sessionId,
+      title: titleFromMessages(messages),
+      preview: previewFromMessages(messages),
+      started: readLocalBag().chats.find((c) => c.sessionId === sessionId)?.started || now,
+      updated: now,
+      lastRead: now,
+      messages: messages.slice(-MAX_SAVED),
+    };
+    upsertLocalThread(row);
+    saveChat();
+    try {
+      const res = await fetch(apiBase() + "/v1/agent/chats", {
+        method: "POST",
+        credentials: "include",
+        headers: authHeaders(),
+        body: JSON.stringify({ sessionId, messages: row.messages, title: row.title }),
+      });
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (data.sessionId) sessionId = data.sessionId;
+      }
+    } catch {
+      /* local copy is enough */
+    }
+  }
+
+  function localDateKey(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
+  function relativeChatAge(iso, now = new Date()) {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
+    const ms = now.getTime() - d.getTime();
+    if (ms < 60 * 1000) return "now";
+    const mins = Math.floor(ms / (60 * 1000));
+    if (mins < 60) return `${mins}m`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 48) return `${hours}h`;
+    return "";
+  }
+
+  function chatHistoryGroup(iso, now = new Date()) {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return { key: "older", label: "Older", showAge: false };
+    const that = localDateKey(d);
+    if (that === localDateKey(now)) return { key: "today", label: "Today", showAge: true };
+    const yest = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+    if (that === localDateKey(yest)) return { key: "yesterday", label: "Yesterday", showAge: false };
+    const startThat = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const diffDays = Math.round((startToday - startThat) / 86400000);
+    if (diffDays > 1 && diffDays < 7) {
+      return { key: that, label: d.toLocaleDateString(undefined, { weekday: "long" }), showAge: false };
+    }
+    return { key: "older", label: "Older", showAge: false };
+  }
+
+  function groupChatHistory(chats) {
+    const now = new Date();
+    const byKey = new Map();
+    const sections = [];
+    for (const chat of chats || []) {
+      const g = chatHistoryGroup(chat.updated, now);
+      let sec = byKey.get(g.key);
+      if (!sec) {
+        sec = { key: g.key, label: g.label, showAge: g.showAge, chats: [] };
+        byKey.set(g.key, sec);
+        sections.push(sec);
+      }
+      sec.chats.push(chat);
+    }
+    return sections;
+  }
+
+  function chatDisplayTitle(chat) {
+    return String(chat?.title || "").trim() || String(chat?.preview || "").trim() || "Chat";
+  }
+
+  function syncHistoryChrome() {
+    root.classList.toggle("is-history", showingHistory);
+    historyBtns.forEach((btn) => {
+      btn.setAttribute("aria-pressed", showingHistory ? "true" : "false");
+    });
+  }
+
+  function hideHistory() {
+    showingHistory = false;
+    syncHistoryChrome();
+    if (messagesEl) messagesEl.hidden = false;
+    if (historyEl) {
+      historyEl.hidden = true;
+      historyEl.setAttribute("aria-hidden", "true");
+      historyEl.innerHTML = "";
+    }
+  }
+
+  async function listThreads() {
+    try {
+      const res = await fetch(apiBase() + "/v1/agent/chats", {
+        method: "GET",
+        credentials: "include",
+        headers: authHeaders(),
+      });
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (Array.isArray(data.chats)) return data.chats;
+      }
+    } catch {
+      /* local */
+    }
+    return readLocalBag().chats.map((c) => ({
+      sessionId: c.sessionId,
+      title: c.title,
+      preview: c.preview,
+      updated: c.updated,
+      started: c.started,
+      unread: Boolean(c.lastRead && c.updated && c.lastRead < c.updated),
+    }));
+  }
+
+  function applyHistoryDot(row, chat) {
+    const unread = Boolean(chat?.unread);
+    let dot = row.querySelector(".yan-chat-history-dot");
+    if (!unread) {
+      dot?.remove();
+      return;
+    }
+    if (!dot) {
+      dot = document.createElement("span");
+      dot.className = "yan-chat-history-dot";
+      dot.setAttribute("aria-hidden", "true");
+      row.insertBefore(dot, row.firstChild);
+    }
+  }
+
+  async function renderHistory() {
+    if (!historyEl) return;
+    const fetchGen = ++historyFetchGen;
+    const chats = await listThreads();
+    if (fetchGen !== historyFetchGen || !showingHistory) return;
+    historyEl.innerHTML = "";
+    if (!chats.length) {
+      const empty = document.createElement("p");
+      empty.className = "yan-chat-history-empty";
+      empty.textContent = "No past chats yet.";
+      historyEl.appendChild(empty);
+      return;
+    }
+    for (const section of groupChatHistory(chats)) {
+      const wrap = document.createElement("section");
+      wrap.className = "yan-chat-history-section";
+      const label = document.createElement("h2");
+      label.className = "yan-chat-history-label";
+      label.textContent = section.label;
+      wrap.appendChild(label);
+      for (const chat of section.chats) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "yan-chat-history-row";
+        btn.dataset.sessionId = String(chat.sessionId || "");
+        const title = document.createElement("span");
+        title.className = "yan-chat-history-title";
+        title.textContent = chatDisplayTitle(chat);
+        btn.appendChild(title);
+        if (section.showAge) {
+          const age = document.createElement("span");
+          age.className = "yan-chat-history-age";
+          age.textContent = relativeChatAge(chat.updated);
+          btn.appendChild(age);
+        }
+        applyHistoryDot(btn, chat);
+        wrap.appendChild(btn);
+      }
+      historyEl.appendChild(wrap);
+    }
+  }
+
+  async function showHistory() {
+    if (!signedIn()) return;
+    showingHistory = true;
+    syncHistoryChrome();
+    setState("panel", { skipFocus: true });
+    if (messagesEl) messagesEl.hidden = true;
+    if (historyEl) {
+      historyEl.hidden = false;
+      historyEl.setAttribute("aria-hidden", "false");
+      historyEl.innerHTML = "";
+      const loading = document.createElement("p");
+      loading.className = "yan-chat-history-empty";
+      loading.textContent = "Loading…";
+      historyEl.appendChild(loading);
+    }
+    await renderHistory();
+  }
+
+  function toggleHistory() {
+    if (showingHistory) hideHistory();
+    else showHistory();
+  }
+
+  async function openHistoryChat(sid) {
+    const id = String(sid || "").trim();
+    if (!id) return;
+    hideHistory();
+    if (id === sessionId && messages.length) {
+      paintMessages(messages);
+      setState("panel");
+      return;
+    }
+    if (messages.length) await persistThread();
+    let loaded = null;
+    try {
+      const res = await fetch(apiBase() + "/v1/agent/chats/" + encodeURIComponent(id), {
+        method: "GET",
+        credentials: "include",
+        headers: authHeaders(),
+      });
+      if (res.ok) loaded = await res.json();
+    } catch {
+      /* local */
+    }
+    if (!loaded) {
+      loaded = readLocalBag().chats.find((c) => c.sessionId === id) || null;
+    }
+    sessionId = id;
+    messages = Array.isArray(loaded?.messages) ? loaded.messages : [];
+    paintMessages(messages);
+    saveChat();
+    const bag = readLocalBag();
+    bag.currentId = id;
+    writeLocalBag(bag);
+    setState("panel");
+    try {
+      await fetch(apiBase() + "/v1/agent/chats/" + encodeURIComponent(id) + "/read", {
+        method: "POST",
+        credentials: "include",
+        headers: authHeaders(),
+        body: "{}",
+      });
+    } catch {
+      /* ignore */
+    }
   }
 
   function openChat() {
@@ -200,18 +531,22 @@
   }
 
   function minimizeChat() {
+    hideHistory();
     if (input) input.value = "";
     syncComposerSize();
     preferPanel = messages.length > 0 || preferPanel;
     setState("closed");
   }
 
-  function clearChat() {
+  async function clearChat() {
     if (!signedIn()) {
       minimizeChat();
       return;
     }
+    hideHistory();
+    if (messages.length) await persistThread();
     messages = [];
+    sessionId = "";
     preferPanel = false;
     busy = false;
     root.classList.remove("is-busy");
@@ -221,6 +556,9 @@
     } catch {
       /* ignore */
     }
+    const bag = readLocalBag();
+    bag.currentId = "";
+    writeLocalBag(bag);
     if (input) input.value = "";
     syncComposerSize();
     setState("open");
@@ -242,11 +580,8 @@
     busy = true;
     root.classList.add("is-busy");
 
-    const headers = { "Content-Type": "application/json" };
-    const key = localStorage.getItem(LS_KEY) || "";
-    const session = localStorage.getItem(LS_SID) || "";
-    if (key) headers.Authorization = "Bearer " + key;
-    if (session) headers["X-EPSynapse-Session"] = session;
+    hideHistory();
+    const headers = authHeaders();
 
     try {
       const res = await fetch(apiBase() + "/v1/agent/chat", {
@@ -295,6 +630,7 @@
       if (!answer) slot.body.textContent = "The model returned an empty reply.";
       messages.push({ role: "assistant", content: answer || "" });
       saveChat();
+      persistThread();
     } catch {
       slot.body.textContent = "Could not reach api.epsynapse.com.";
       if (slot.think) slot.think.remove();
@@ -324,6 +660,30 @@
       minimizeChat();
     });
   });
+  historyBtns.forEach((btn) => {
+    btn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleHistory();
+    });
+  });
+  historyEl?.addEventListener("pointerdown", (event) => {
+    if (event.button && event.button !== 0) return;
+    const row = event.target.closest?.(".yan-chat-history-row");
+    historyPointerSid = row?.dataset.sessionId || null;
+  });
+  historyEl?.addEventListener("pointercancel", () => {
+    historyPointerSid = null;
+  });
+  historyEl?.addEventListener("click", (event) => {
+    const row = event.target.closest?.(".yan-chat-history-row");
+    const sid = historyPointerSid || row?.dataset.sessionId || "";
+    historyPointerSid = null;
+    if (sid) openHistoryChat(sid);
+  });
+  input?.addEventListener("focus", () => {
+    if (showingHistory) hideHistory();
+  });
   form?.addEventListener("submit", (event) => {
     event.preventDefault();
     sendMessage(input?.value);
@@ -339,6 +699,8 @@
   });
 
   messages = loadSavedChat();
+  sessionId = readLocalBag().currentId || "";
+  if (messages.length && !sessionId) sessionId = newChatId();
   paintSavedChat();
   setState("closed", { skipFocus: true });
 })();

@@ -9,6 +9,10 @@ enum EPSHaptics {
     static func medium() {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     }
+
+    static func swipeBegin() {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+    }
 }
 
 extension View {

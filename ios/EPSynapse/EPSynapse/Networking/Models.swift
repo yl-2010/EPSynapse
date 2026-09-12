@@ -350,6 +350,130 @@ struct ChatRequestBody: Encodable {
   var messages: [[String: String]]
 }
 
+struct ChatMessageBody: Codable, Equatable {
+  var role: String
+  var content: String
+
+  init(role: String, content: String) {
+    self.role = role
+    self.content = content
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    role = c.string(.role)
+    content = c.string(.content)
+  }
+}
+
+struct ChatListItemResponse: Codable, Equatable {
+  var sessionId: String
+  var title: String
+  var preview: String
+  var started: String
+  var updated: String
+  var unread: Bool
+
+  init(
+    sessionId: String = "",
+    title: String = "",
+    preview: String = "",
+    started: String = "",
+    updated: String = "",
+    unread: Bool = false
+  ) {
+    self.sessionId = sessionId
+    self.title = title
+    self.preview = preview
+    self.started = started
+    self.updated = updated
+    self.unread = unread
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    sessionId = c.string(.sessionId)
+    title = c.string(.title)
+    preview = c.string(.preview)
+    started = c.string(.started)
+    updated = c.string(.updated)
+    unread = c.bool(.unread)
+  }
+}
+
+struct ChatListResponse: Codable {
+  var chats: [ChatListItemResponse]
+
+  init(chats: [ChatListItemResponse] = []) {
+    self.chats = chats
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    chats = (try? c.decodeIfPresent([ChatListItemResponse].self, forKey: .chats)) ?? []
+  }
+}
+
+struct ChatPersistBody: Encodable {
+  var sessionId: String?
+  var messages: [ChatMessageBody]
+  var title: String?
+
+  enum CodingKeys: String, CodingKey {
+    case sessionId, messages, title
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    if let sessionId, !sessionId.isEmpty {
+      try c.encode(sessionId, forKey: .sessionId)
+    }
+    try c.encode(messages, forKey: .messages)
+    if let title, !title.isEmpty {
+      try c.encode(title, forKey: .title)
+    }
+  }
+}
+
+struct ChatDetailResponse: Codable {
+  var sessionId: String
+  var title: String
+  var preview: String
+  var started: String
+  var updated: String
+  var unread: Bool
+  var messages: [ChatMessageBody]
+
+  init(
+    sessionId: String = "",
+    title: String = "",
+    preview: String = "",
+    started: String = "",
+    updated: String = "",
+    unread: Bool = false,
+    messages: [ChatMessageBody] = []
+  ) {
+    self.sessionId = sessionId
+    self.title = title
+    self.preview = preview
+    self.started = started
+    self.updated = updated
+    self.unread = unread
+    self.messages = messages
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    sessionId = c.string(.sessionId)
+    title = c.string(.title)
+    preview = c.string(.preview)
+    started = c.string(.started)
+    updated = c.string(.updated)
+    unread = c.bool(.unread)
+    messages = (try? c.decodeIfPresent([ChatMessageBody].self, forKey: .messages)) ?? []
+  }
+}
+
 struct CoursesResponse: Codable {
   var courses: [Course]
 
