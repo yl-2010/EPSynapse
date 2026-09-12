@@ -1,5 +1,13 @@
 {
   "git": {
     "deploymentEnabled": false
-  }
+  },
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "www.epsynapse.com" }],
+      "destination": "https://epsynapse.com/:path*",
+      "permanent": true
+    }
+  ]
 }

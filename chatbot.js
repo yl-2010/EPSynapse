@@ -9,6 +9,8 @@
   const LS_KEY = "epsynapse.agent.key";
   const LS_PROV = "epsynapse.agent.provider";
   const LS_SID = "epsynapse.sid";
+  const LS_CHAT = "epsynapse.chat.messages";
+  const MAX_SAVED = 40;
 
   const panel = root.querySelector(".yan-chat-panel");
   const messagesEl = root.querySelector(".yan-chat-messages");
@@ -160,6 +162,38 @@
     return document.documentElement.dataset.auth === "in";
   }
 
+  function loadSavedChat() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(LS_CHAT) || "[]");
+      if (!Array.isArray(raw)) return [];
+      return raw
+        .filter((m) => m && (m.role === "user" || m.role === "assistant") && String(m.content || "").trim())
+        .slice(-MAX_SAVED)
+        .map((m) => ({ role: m.role, content: String(m.content) }));
+    } catch {
+      return [];
+    }
+  }
+
+  function saveChat() {
+    try {
+      if (!messages.length) {
+        localStorage.removeItem(LS_CHAT);
+        return;
+      }
+      localStorage.setItem(LS_CHAT, JSON.stringify(messages.slice(-MAX_SAVED)));
+    } catch {
+      /* quota */
+    }
+  }
+
+  function paintSavedChat() {
+    if (!messagesEl) return;
+    messagesEl.innerHTML = "";
+    messages.forEach((m) => appendTurn(m.role, m.content));
+    if (messages.length) preferPanel = true;
+  }
+
   function openChat() {
     if (!signedIn() || state() !== "closed") return;
     setState(messages.length || preferPanel ? "panel" : "open");
@@ -182,6 +216,11 @@
     busy = false;
     root.classList.remove("is-busy");
     messagesEl.innerHTML = "";
+    try {
+      localStorage.removeItem(LS_CHAT);
+    } catch {
+      /* ignore */
+    }
     if (input) input.value = "";
     syncComposerSize();
     setState("open");
@@ -255,6 +294,7 @@
       if (!thought && slot.think) slot.think.remove();
       if (!answer) slot.body.textContent = "The model returned an empty reply.";
       messages.push({ role: "assistant", content: answer || "" });
+      saveChat();
     } catch {
       slot.body.textContent = "Could not reach api.epsynapse.com.";
       if (slot.think) slot.think.remove();
@@ -298,5 +338,7 @@
     if (event.key === "Escape" && state() !== "closed") minimizeChat();
   });
 
+  messages = loadSavedChat();
+  paintSavedChat();
   setState("closed", { skipFocus: true });
 })();
