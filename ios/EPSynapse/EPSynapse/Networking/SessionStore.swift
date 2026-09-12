@@ -7,8 +7,8 @@ import UIKit
 final class SessionStore: ObservableObject {
   static let shared = SessionStore()
 
-  static let onedriveIdle = "School OneDrive. Tap Connect, then sign in with @eastsideprep.org."
-  static let outlookIdle = "School Outlook. Same Microsoft sign-in, mail only."
+  static let onedriveIdle = "School OneDrive. One Microsoft sign-in can unlock both OneDrive and Outlook."
+  static let outlookIdle = "School Outlook. Same Microsoft sign-in can unlock both."
   static let keyIdle = "Paste the gsk_ key here, tap Save key, wait until Chat key says Groq, then ask in chat. Do not paste the key in the chat box."
   static let setupGuide = """
 This box is only for questions. The Groq key goes in Settings, not here.
@@ -244,12 +244,12 @@ If you skip Save key, chat will send you back to these steps.
     }
   }
 
-  func pollConnections() async {
+  func pollConnections(force: Bool = false) async {
     guard !sessionId.isEmpty else { return }
     let watchOnedrive = profile?.onedriveConnected != true
-      && (profile?.onedrivePending?.isActive == true || !odCode.isEmpty)
+      && (force || profile?.onedrivePending?.isActive == true || !odCode.isEmpty)
     let watchOutlook = profile?.outlookConnected != true
-      && (profile?.outlookPending?.isActive == true || !olCode.isEmpty)
+      && (force || profile?.outlookPending?.isActive == true || !olCode.isEmpty)
     guard watchOnedrive || watchOutlook else { return }
 
     async let od: ConnectionStatusResponse? = {
@@ -262,6 +262,8 @@ If you skip Save key, chat will send you back to these steps.
     }()
     let odStatus = await od
     let olStatus = await ol
+    var odPollError = ""
+    var olPollError = ""
 
     if let odStatus {
       if odStatus.connected {
@@ -271,6 +273,14 @@ If you skip Save key, chat will send you back to these steps.
       } else {
         profile?.onedrivePending = odStatus.pending
       }
+      if odStatus.outlookConnected {
+        profile?.outlookConnected = true
+        if !odStatus.outlookEmail.isEmpty {
+          profile?.outlookEmail = odStatus.outlookEmail
+        }
+        profile?.outlookPending = nil
+      }
+      odPollError = odStatus.error
     }
     if let olStatus {
       if olStatus.connected {
@@ -280,8 +290,18 @@ If you skip Save key, chat will send you back to these steps.
       } else if let pending = olStatus.pending, pending.isActive {
         profile?.outlookPending = pending
       }
+      if olStatus.onedriveConnected {
+        profile?.onedriveConnected = true
+        if !olStatus.onedriveEmail.isEmpty {
+          profile?.onedriveEmail = olStatus.onedriveEmail
+        }
+        profile?.onedrivePending = nil
+      }
+      olPollError = olStatus.error
     }
     paintConnections()
+    if !odPollError.isEmpty { onedriveStatus = odPollError }
+    if !olPollError.isEmpty { outlookStatus = olPollError }
   }
 
   func saveKey(_ key: String) async {

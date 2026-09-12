@@ -207,6 +207,10 @@ struct SettingsSheet: View {
 
     private var microsoftSection: some View {
         settingsGroup("Microsoft") {
+            Text("One school Microsoft sign-in can unlock both OneDrive and Outlook.")
+                .font(.footnote)
+                .foregroundStyle(EPSTheme.muted)
+
             fieldLabel("OneDrive")
             actionRow {
                 glassAction(session.profile?.onedriveConnected == true ? "Reconnect OneDrive" : "Connect OneDrive") {
@@ -235,6 +239,15 @@ struct SettingsSheet: View {
                 .font(.footnote)
                 .foregroundStyle(EPSTheme.muted)
             deviceCode(session.olCode, uri: session.olURI)
+
+            actionRow {
+                glassAction("I signed in") {
+                    Task {
+                        await session.pollConnections(force: true)
+                        await dashboard.load(from: session)
+                    }
+                }
+            }
         }
     }
 

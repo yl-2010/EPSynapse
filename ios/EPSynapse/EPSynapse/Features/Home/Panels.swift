@@ -334,25 +334,43 @@ struct ClassRow: View {
 }
 
 struct FilesPanel: View {
+    var schoolClass: SchoolClass? = nil
+
     @EnvironmentObject private var session: SessionStore
     @EnvironmentObject private var dashboard: DashboardStore
 
+    private var shown: [DriveFile] {
+        if let schoolClass {
+            return dashboard.files(for: schoolClass)
+        }
+        return dashboard.files
+    }
+
     var body: some View {
         EPSPanel(title: "Files") {
-            if dashboard.files.isEmpty {
-                EmptyLine(
-                    session.profile?.onedriveConnected == true
-                        ? "No files in /EPSynapse yet"
-                        : "Connect OneDrive in settings"
-                )
-            } else {
-                VStack(spacing: 12) {
-                    ForEach(dashboard.files) { file in
-                        FileTile(file: file)
+            VStack(alignment: .leading, spacing: 8) {
+                if !dashboard.filesError.isEmpty, !shown.isEmpty {
+                    EmptyLine(dashboard.filesError)
+                }
+                if shown.isEmpty {
+                    EmptyLine(emptyCopy)
+                } else {
+                    VStack(spacing: 12) {
+                        ForEach(shown) { file in
+                            FileTile(file: file)
+                        }
                     }
                 }
             }
         }
+    }
+
+    private var emptyCopy: String {
+        if !dashboard.filesError.isEmpty { return dashboard.filesError }
+        if session.profile?.onedriveConnected == true {
+            return schoolClass == nil ? "No recent school files yet" : "No files for this class"
+        }
+        return "Connect OneDrive in settings"
     }
 }
 
@@ -382,25 +400,48 @@ struct FileTile: View {
 struct MailPanel: View {
     @EnvironmentObject private var session: SessionStore
     @EnvironmentObject private var dashboard: DashboardStore
+    @Environment(\.openURL) private var openURL
 
     @State private var to = ""
     @State private var subject = ""
     @State private var mailBody = ""
     @State private var confirmSend = false
 
+    private var outlookConnected: Bool {
+        session.profile?.outlookConnected == true
+    }
+
     var body: some View {
         EPSPanel(title: "Mail") {
             VStack(alignment: .leading, spacing: 12) {
-                if session.profile?.outlookConnected != true {
-                    EmptyLine("Connect Outlook in settings")
-                } else if dashboard.messages.isEmpty {
-                    EmptyLine("Inbox is empty")
+                if !dashboard.mailError.isEmpty {
+                    EmptyLine(dashboard.mailError)
+                }
+                if dashboard.messages.isEmpty {
+                    if dashboard.mailError.isEmpty {
+                        EmptyLine(outlookConnected ? "Inbox is empty" : "Connect Outlook in settings")
+                    }
                 } else {
                     VStack(alignment: .leading, spacing: 4) {
                         ForEach(dashboard.messages) { message in
                             MailRow(message: message)
                         }
                     }
+                }
+
+                if !outlookConnected {
+                    Button {
+                        openURL(EPSLinks.outlookWeb)
+                    } label: {
+                        Text("Open Outlook on the web")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(EPSTheme.fg)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                    }
+                    .buttonStyle(.plain)
+                    .epsGlassRounded(cornerRadius: 14, interactive: true)
+                    .epsHapticOnTap()
                 }
 
                 if let open = dashboard.openMail {
@@ -420,7 +461,7 @@ struct MailPanel: View {
                     .padding(.top, 4)
                 }
 
-                if session.profile?.outlookConnected == true {
+                if outlookConnected {
                     compose
                 }
             }
@@ -490,10 +531,16 @@ struct MailRow: View {
     var message: MailMessage
     @EnvironmentObject private var session: SessionStore
     @EnvironmentObject private var dashboard: DashboardStore
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         Button {
-            Task { await dashboard.openMessage(id: message.id, session: session) }
+            let body = message.body.trimmingCharacters(in: .whitespacesAndNewlines)
+            if body.isEmpty, let url = URL(string: message.webLink), !message.webLink.isEmpty {
+                openURL(url)
+            } else {
+                Task { await dashboard.openMessage(id: message.id, session: session) }
+            }
         } label: {
             VStack(alignment: .leading, spacing: 2) {
                 Text(message.subject.isEmpty ? "(no subject)" : message.subject)

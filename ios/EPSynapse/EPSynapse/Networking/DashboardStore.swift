@@ -11,6 +11,8 @@ final class DashboardStore: ObservableObject {
   @Published var assignments: [Assignment] = []
   @Published var files: [DriveFile] = []
   @Published var messages: [MailMessage] = []
+  @Published var filesError = ""
+  @Published var mailError = ""
   @Published var notes: [ClassifiedNote] = []
   @Published var openMail: MailMessage?
   @Published var mailBusy = false
@@ -42,6 +44,8 @@ final class DashboardStore: ObservableObject {
       assignments = []
       files = []
       messages = []
+      filesError = ""
+      mailError = ""
       notes = []
       return
     }
@@ -54,14 +58,8 @@ final class DashboardStore: ObservableObject {
       guard me.canvasConnected else { return [] }
       return await self.loadAssignments(sessionId: sid)
     }()
-    async let fetchedFiles: [DriveFile] = {
-      guard me.onedriveConnected else { return [] }
-      return await self.loadFiles(sessionId: sid)
-    }()
-    async let fetchedMessages: [MailMessage] = {
-      guard me.outlookConnected else { return [] }
-      return await self.loadMessages(sessionId: sid)
-    }()
+    async let fetchedFiles: (files: [DriveFile], error: String) = self.loadFiles(sessionId: sid)
+    async let fetchedMessages: (messages: [MailMessage], error: String) = self.loadMessages(sessionId: sid)
     async let fetchedSchedule: (classes: [SchoolClass], meetings: [ScheduleMeeting]) = self.loadSchedule(
       sessionId: sid
     )
@@ -69,8 +67,12 @@ final class DashboardStore: ObservableObject {
 
     courses = await fetchedCourses
     assignments = await fetchedAssignments
-    files = await fetchedFiles
-    messages = await fetchedMessages
+    let fileResult = await fetchedFiles
+    files = fileResult.files
+    filesError = fileResult.error
+    let mailResult = await fetchedMessages
+    messages = mailResult.messages
+    mailError = mailResult.error
     let schedule = await fetchedSchedule
     scheduleClasses = schedule.classes
     meetings = schedule.meetings
@@ -87,6 +89,13 @@ final class DashboardStore: ObservableObject {
 
   func assignments(for schoolClass: SchoolClass) -> [Assignment] {
     assignments.filter { Self.assignment($0, matches: schoolClass) }
+  }
+
+  func files(for schoolClass: SchoolClass) -> [DriveFile] {
+    let hint = schoolClass.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard !hint.isEmpty else { return files }
+    let matched = files.filter { $0.name.lowercased().contains(hint) }
+    return matched.isEmpty ? files : matched
   }
 
   func notes(for schoolClass: SchoolClass) -> [ClassifiedNote] {
@@ -311,18 +320,26 @@ final class DashboardStore: ObservableObject {
     return wrapped?.assignments ?? []
   }
 
-  private func loadFiles(sessionId: String) async -> [DriveFile] {
-    let wrapped: FilesResponse? = try? await api.request("/v1/me/onedrive/files", sessionId: sessionId, timeout: 20)
-    return wrapped?.files ?? []
+  private func loadFiles(sessionId: String) async -> (files: [DriveFile], error: String) {
+    do {
+      let wrapped: FilesResponse = try await api.request("/v1/me/onedrive/files", sessionId: sessionId, timeout: 20)
+      return (wrapped.files, wrapped.error)
+    } catch {
+      return ([], (error as? APIError)?.message ?? "Could not load files.")
+    }
   }
 
-  private func loadMessages(sessionId: String) async -> [MailMessage] {
-    let wrapped: MessagesResponse? = try? await api.request(
-      "/v1/me/outlook/messages?limit=12",
-      sessionId: sessionId,
-      timeout: 20
-    )
-    return wrapped?.messages ?? []
+  private func loadMessages(sessionId: String) async -> (messages: [MailMessage], error: String) {
+    do {
+      let wrapped: MessagesResponse = try await api.request(
+        "/v1/me/outlook/messages?limit=12",
+        sessionId: sessionId,
+        timeout: 20
+      )
+      return (wrapped.messages, wrapped.error)
+    } catch {
+      return ([], (error as? APIError)?.message ?? "Could not load mail.")
+    }
   }
 
   private static func queryValue(_ raw: String) -> String {

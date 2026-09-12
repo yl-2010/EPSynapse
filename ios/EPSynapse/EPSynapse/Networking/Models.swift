@@ -232,11 +232,13 @@ struct DriveFile: Codable, Identifiable, Equatable {
   var id: String
   var name: String
   var webUrl: String
+  var source: String
 
-  init(id: String = "", name: String = "", webUrl: String = "") {
+  init(id: String = "", name: String = "", webUrl: String = "", source: String = "") {
     self.id = id
     self.name = name
     self.webUrl = webUrl
+    self.source = source
   }
 
   init(from decoder: Decoder) throws {
@@ -244,6 +246,7 @@ struct DriveFile: Codable, Identifiable, Equatable {
     id = c.string(.id)
     name = c.string(.name)
     webUrl = c.string(.webUrl)
+    source = c.string(.source)
   }
 }
 
@@ -256,6 +259,7 @@ struct MailMessage: Codable, Identifiable, Equatable {
   var body: String
   var received: String
   var unread: Bool
+  var webLink: String
 
   init(
     id: String = "",
@@ -265,7 +269,8 @@ struct MailMessage: Codable, Identifiable, Equatable {
     preview: String = "",
     body: String = "",
     received: String = "",
-    unread: Bool = false
+    unread: Bool = false,
+    webLink: String = ""
   ) {
     self.id = id
     self.subject = subject
@@ -275,6 +280,7 @@ struct MailMessage: Codable, Identifiable, Equatable {
     self.body = body
     self.received = received
     self.unread = unread
+    self.webLink = webLink
   }
 
   init(from decoder: Decoder) throws {
@@ -287,6 +293,7 @@ struct MailMessage: Codable, Identifiable, Equatable {
     body = c.string(.body)
     received = c.string(.received)
     unread = c.bool(.unread)
+    webLink = c.string(.webLink)
   }
 }
 
@@ -552,27 +559,33 @@ struct AssignmentsResponse: Codable {
 
 struct FilesResponse: Codable {
   var files: [DriveFile]
+  var error: String
 
-  init(files: [DriveFile] = []) {
+  init(files: [DriveFile] = [], error: String = "") {
     self.files = files
+    self.error = error
   }
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     files = (try? c.decodeIfPresent([DriveFile].self, forKey: .files)) ?? []
+    error = c.string(.error)
   }
 }
 
 struct MessagesResponse: Codable {
   var messages: [MailMessage]
+  var error: String
 
-  init(messages: [MailMessage] = []) {
+  init(messages: [MailMessage] = [], error: String = "") {
     self.messages = messages
+    self.error = error
   }
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     messages = (try? c.decodeIfPresent([MailMessage].self, forKey: .messages)) ?? []
+    error = c.string(.error)
   }
 }
 
@@ -643,11 +656,30 @@ struct ConnectionStatusResponse: Codable {
   var connected: Bool
   var pending: DevicePending?
   var email: String
+  var error: String
+  var onedriveConnected: Bool
+  var outlookConnected: Bool
+  var onedriveEmail: String
+  var outlookEmail: String
 
-  init(connected: Bool = false, pending: DevicePending? = nil, email: String = "") {
+  init(
+    connected: Bool = false,
+    pending: DevicePending? = nil,
+    email: String = "",
+    error: String = "",
+    onedriveConnected: Bool = false,
+    outlookConnected: Bool = false,
+    onedriveEmail: String = "",
+    outlookEmail: String = ""
+  ) {
     self.connected = connected
     self.pending = pending
     self.email = email
+    self.error = error
+    self.onedriveConnected = onedriveConnected
+    self.outlookConnected = outlookConnected
+    self.onedriveEmail = onedriveEmail
+    self.outlookEmail = outlookEmail
   }
 
   init(from decoder: Decoder) throws {
@@ -655,6 +687,11 @@ struct ConnectionStatusResponse: Codable {
     connected = c.bool(.connected)
     pending = try c.decodeIfPresent(DevicePending.self, forKey: .pending)
     email = c.string(.email)
+    error = c.string(.error)
+    onedriveConnected = c.bool(.onedriveConnected)
+    outlookConnected = c.bool(.outlookConnected)
+    onedriveEmail = c.string(.onedriveEmail)
+    outlookEmail = c.string(.outlookEmail)
   }
 }
 
@@ -780,6 +817,7 @@ enum NoteSubject {
 
 enum EPSLinks {
   static let research = URL(string: "https://epsynapse.com/research")!
+  static let outlookWeb = URL(string: "https://outlook.office.com/mail/")!
 }
 
 struct SchoolClass: Codable, Identifiable, Hashable, Equatable {
