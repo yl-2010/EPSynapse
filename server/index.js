@@ -26,6 +26,7 @@ import {
   listAssignments,
   listCourses,
   listGrades,
+  markAssignmentComplete,
   normalizeHost,
   validateToken,
 } from "./canvas.js";
@@ -610,6 +611,25 @@ app.get("/v1/me/canvas/assignments", async (req, res) => {
     }
     const assignments = await listAssignments(student.canvasHost, student.canvasToken);
     return res.json({ assignments });
+  } catch (err) {
+    return fail(res, err, err.status || 502);
+  }
+});
+
+app.post("/v1/me/canvas/assignments/:id/complete", async (req, res) => {
+  try {
+    const student = await requireStudent(req, res);
+    if (!student) return;
+    if (!student.canvasToken) {
+      return res.status(400).json({ error: "Connect Canvas in settings first." });
+    }
+    const saved = await markAssignmentComplete(student.canvasHost, student.canvasToken, {
+      id: req.params.id,
+      canvasId: req.body?.canvasId || req.params.id,
+      plannerOverrideId: req.body?.plannerOverrideId,
+      plannableType: req.body?.plannableType,
+    });
+    return res.json(saved);
   } catch (err) {
     return fail(res, err, err.status || 502);
   }

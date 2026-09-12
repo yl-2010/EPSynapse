@@ -191,6 +191,8 @@ struct Assignment: Codable, Identifiable, Equatable {
   var due: String
   var tag: String
   var done: Bool
+  var plannerOverrideId: String
+  var plannableType: String
 
   init(
     id: String = "",
@@ -201,7 +203,9 @@ struct Assignment: Codable, Identifiable, Equatable {
     courseId: String = "",
     due: String = "",
     tag: String = "",
-    done: Bool = false
+    done: Bool = false,
+    plannerOverrideId: String = "",
+    plannableType: String = "assignment"
   ) {
     self.id = id
     self.canvasId = canvasId
@@ -212,6 +216,8 @@ struct Assignment: Codable, Identifiable, Equatable {
     self.due = due
     self.tag = tag
     self.done = done
+    self.plannerOverrideId = plannerOverrideId
+    self.plannableType = plannableType
   }
 
   init(from decoder: Decoder) throws {
@@ -225,6 +231,11 @@ struct Assignment: Codable, Identifiable, Equatable {
     due = c.string(.due)
     tag = c.string(.tag)
     done = c.bool(.done)
+    plannerOverrideId = c.string(.plannerOverrideId)
+    plannableType = {
+      let value = c.string(.plannableType)
+      return value.isEmpty ? "assignment" : value
+    }()
   }
 }
 
@@ -414,6 +425,12 @@ struct SendMailBody: Encodable {
   var body: String
 }
 
+struct CompleteAssignmentBody: Encodable {
+  var canvasId: String
+  var plannerOverrideId: String
+  var plannableType: String
+}
+
 struct ChatRequestBody: Encodable {
   var provider: String
   var messages: [[String: String]]
@@ -566,6 +583,23 @@ struct AssignmentsResponse: Codable {
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     assignments = (try? c.decodeIfPresent([Assignment].self, forKey: .assignments)) ?? []
+  }
+}
+
+struct AssignmentCompleteResponse: Codable {
+  var id: String
+  var canvasId: String
+  var done: Bool
+  var plannerOverrideId: String
+  var plannableType: String
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    id = c.string(.id)
+    canvasId = c.string(.canvasId)
+    done = c.bool(.done)
+    plannerOverrideId = c.string(.plannerOverrideId)
+    plannableType = c.string(.plannableType)
   }
 }
 

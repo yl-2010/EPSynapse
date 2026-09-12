@@ -1,5 +1,6 @@
 /**
- * Read-only Canvas LMS client. Student access token. No writes.
+ * Canvas LMS client. Student access token.
+ * Reads courses/assignments. The only write is planner complete for TODO checks.
  */
 
 export const DEFAULT_HOST = "https://eastsideprep.instructure.com";
@@ -480,6 +481,8 @@ function assignmentFromTodo(item, coursesById) {
     due,
     tag: inferTag({ ...asg, name: title, title }),
     done,
+    plannerOverrideId: String(item.planner_override?.id || "").trim(),
+    plannableType: String(item.plannable_type || "assignment").trim() || "assignment",
   };
 }
 
@@ -502,6 +505,8 @@ function assignmentFromPlanner(item, coursesById) {
     due: String(item.plannable_date || p.due_at || "").trim(),
     tag: inferTag({ ...p, name: title, title, plannable_type: type }),
     done: Boolean(item.planner_override?.marked_complete || item.submissions?.submitted),
+    plannerOverrideId: String(item.planner_override?.id || "").trim(),
+    plannableType: type || "assignment",
   };
 }
 
@@ -517,8 +522,19 @@ export async function listAssignments(host, token) {
   const seen = new Map();
 
   const add = (row) => {
-    if (!row?.canvasId || seen.has(row.canvasId)) return;
-    seen.set(row.canvasId, row);
+    if (!row?.canvasId) return;
+    const prev = seen.get(row.canvasId);
+    if (!prev) {
+      seen.set(row.canvasId, row);
+      return;
+    }
+    seen.set(row.canvasId, {
+      ...prev,
+      ...row,
+      done: Boolean(prev.done || row.done),
+      plannerOverrideId: prev.plannerOverrideId || row.plannerOverrideId,
+      plannableType: prev.plannableType || row.plannableType,
+    });
   };
 
   try {
@@ -555,4 +571,79 @@ export async function dashboardPayload(host, token) {
     listAssignments(host, token),
   ]);
   return { self, courses, assignments };
+}
+
+async function canvasWrite(host, token, path, method, body) {
+  const base = normalizeHost(host);
+  const tokenStr = String(token || "").trim();
+  if (!tokenStr) {
+    const err = new Error("Canvas rejected that token.");
+    err.status = 401;
+    throw err;
+  }
+  const url = `${base}/api/v1${path.startsWith("/") ? path : `/${path}`}`;
+  let res;
+  try {
+    res = await fetch(url, {
+      method,
+      headers: {
+        Authorization: `Bearer ${tokenStr}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body || {}),
+      signal: AbortSignal.timeout(FETCH_MS),
+    });
+  } catch (err) {
+    const timedOut = err && err.name === "TimeoutError";
+    const e = new Error(timedOut ? "Canvas timed out." : "Could not reach Canvas.");
+    e.status = 502;
+    throw e;
+  }
+  if (res.status === 401 || res.status === 403) {
+    const err = new Error("Canvas rejected that token.");
+    err.status = 401;
+    throw err;
+  }
+  if (!res.ok) {
+    const err = new Error(`Canvas returned ${res.status}.`);
+    err.status = res.status >= 400 && res.status < 600 ? res.status : 502;
+    throw err;
+  }
+  const text = await res.text();
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch {
+    return {};
+  }
+}
+
+export async function markAssignmentComplete(host, token, assignment) {
+  const canvasId = String(assignment?.canvasId || assignment?.id || "").trim();
+  if (!canvasId) {
+    const err = new Error("Missing assignment id.");
+    err.status = 400;
+    throw err;
+  }
+  const overrideId = String(assignment?.plannerOverrideId || "").trim();
+  const plannableType = String(assignment?.plannableType || "assignment").trim() || "assignment";
+  let saved;
+  if (overrideId) {
+    saved = await canvasWrite(host, token, `/planner/overrides/${encodeURIComponent(overrideId)}`, "PUT", {
+      marked_complete: true,
+    });
+  } else {
+    saved = await canvasWrite(host, token, "/planner/overrides", "POST", {
+      plannable_type: plannableType,
+      plannable_id: canvasId,
+      marked_complete: true,
+    });
+  }
+  return {
+    id: canvasId,
+    canvasId,
+    done: true,
+    plannerOverrideId: String(saved?.id || overrideId).trim(),
+    plannableType,
+  };
 }

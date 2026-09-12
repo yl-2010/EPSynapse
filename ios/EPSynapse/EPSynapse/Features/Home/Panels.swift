@@ -157,6 +157,10 @@ struct TodoPanel: View {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(visible) { item in
                         TodoRow(item: item)
+                            .transition(.asymmetric(
+                                insertion: .opacity,
+                                removal: .move(edge: .bottom).combined(with: .opacity)
+                            ))
                     }
                 }
             }
@@ -183,6 +187,7 @@ struct CompletedPanel: View {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(items) { item in
                         TodoRow(item: item)
+                            .transition(.move(edge: .top).combined(with: .opacity))
                     }
                 }
             }
@@ -193,6 +198,8 @@ struct CompletedPanel: View {
 struct TodoRow: View {
     var item: Assignment
     @Environment(\.openURL) private var openURL
+    @EnvironmentObject private var session: SessionStore
+    @EnvironmentObject private var dashboard: DashboardStore
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
@@ -232,16 +239,25 @@ struct TodoRow: View {
     }
 
     private var checkbox: some View {
-        Color.clear
-            .epsSizedGlassCircle(side: 20)
-            .overlay {
-                if item.done {
-                    Circle()
-                        .fill(EPSTheme.accent)
-                        .frame(width: 8, height: 8)
+        Button {
+            guard !item.done else { return }
+            Task { await dashboard.markDone(item, session: session) }
+        } label: {
+            Color.clear
+                .epsSizedGlassCircle(side: 20, interactive: false)
+                .overlay {
+                    if item.done {
+                        Circle()
+                            .fill(EPSTheme.accent)
+                            .frame(width: 8, height: 8)
+                            .transition(.scale.combined(with: .opacity))
+                    }
                 }
-            }
-            .accessibilityHidden(true)
+        }
+        .buttonStyle(.plain)
+        .disabled(item.done)
+        .accessibilityLabel(item.done ? "Completed" : "Mark complete")
+        .epsHapticOnTap()
     }
 }
 

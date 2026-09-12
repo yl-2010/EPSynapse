@@ -1316,6 +1316,8 @@ html[data-resolved-theme="light"] .edu-filter.is-on {
 /* Liquid-glass circle checkbox */
 .edu-check {
   --lg-filter: none;
+  display: grid;
+  place-items: center;
   flex: 0 0 1.25rem;
   width: 1.25rem;
   height: 1.25rem;
@@ -1358,6 +1360,21 @@ html[data-resolved-theme="light"] .edu-filter.is-on {
 .edu-check.is-checked .edu-check-dot {
   opacity: 1;
   transform: scale(1);
+}
+
+.edu-todo.is-flying {
+  position: relative;
+  z-index: 6;
+  pointer-events: none;
+}
+
+.edu-todo.is-done {
+  opacity: 0.62;
+}
+
+.edu-todo.is-done .edu-name {
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--fg) 45%, transparent);
 }
 
 .edu-empty {

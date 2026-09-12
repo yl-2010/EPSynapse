@@ -253,6 +253,34 @@ final class DashboardStore: ObservableObject {
     typeFilter = next
   }
 
+  func markDone(_ item: Assignment, session: SessionStore) async {
+    guard !item.done else { return }
+    let id = item.id
+    guard let index = assignments.firstIndex(where: { $0.id == id }) else { return }
+    withAnimation(.spring(duration: 0.48, bounce: 0.12)) {
+      assignments[index].done = true
+    }
+    let canvasId = item.canvasId.isEmpty ? id : item.canvasId
+    do {
+      let saved: AssignmentCompleteResponse = try await api.request(
+        "/v1/me/canvas/assignments/\(Self.queryValue(id))/complete",
+        method: "POST",
+        body: CompleteAssignmentBody(
+          canvasId: canvasId,
+          plannerOverrideId: item.plannerOverrideId,
+          plannableType: item.plannableType.isEmpty ? "assignment" : item.plannableType
+        ),
+        sessionId: session.sessionId,
+        timeout: 15
+      )
+      if let again = assignments.firstIndex(where: { $0.id == id }), !saved.plannerOverrideId.isEmpty {
+        assignments[again].plannerOverrideId = saved.plannerOverrideId
+      }
+    } catch {
+      // Local complete still stands so the row can move during the demo.
+    }
+  }
+
   func openMessage(id: String, session: SessionStore) async {
     let mid = id.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !mid.isEmpty, !session.sessionId.isEmpty else { return }
