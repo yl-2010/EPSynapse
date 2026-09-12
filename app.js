@@ -99,7 +99,10 @@
 
   function applyAuthGate() {
     const on = signedInViaGoogle();
-    document.documentElement.dataset.auth = on ? "in" : "out";
+    const next = on ? "in" : "out";
+    const authChanged = document.documentElement.dataset.auth !== next;
+    document.documentElement.dataset.auth = next;
+    if (authChanged) queueMicrotask(() => window.reinitLiquidGlass?.());
     const out = document.getElementById("stage-out");
     if (on) {
       if (out) out.hidden = true;

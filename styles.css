@@ -209,15 +209,6 @@ html.lg-chrome #lg-chrome-wash {
     linear-gradient(165deg, var(--bg-0), var(--bg-1));
 }
 
-html.lg-chrome .corner {
-  will-change: auto;
-}
-
-html.lg-chrome .corner:hover,
-html.lg-chrome .corner.is-dragging {
-  will-change: transform;
-}
-
 html.lg-chrome .edu-vote {
   will-change: auto;
 }
@@ -480,11 +471,33 @@ html[data-resolved-theme="dark"] .edu-check.lg-refraction::after {
 }
 
 .corner.squircle {
-  border-radius: var(--lg-radius, 21px);
+  --lg-radius: 21px;
+  border-radius: var(--lg-radius);
 }
 
 .corner.circle {
+  --lg-radius: 50%;
   border-radius: 50%;
+}
+
+/* url(#filter) backdrop paints a rect. Clip glass to the same shape as the
+   button so a stale --lg-radius cannot square the fill. */
+.corner.squircle::before,
+.corner.squircle.lg-refraction::after {
+  clip-path: inset(0 round var(--lg-radius, 21px));
+  -webkit-clip-path: inset(0 round var(--lg-radius, 21px));
+}
+
+.corner.circle::before,
+.corner.circle.lg-refraction::after {
+  clip-path: circle(50%);
+  -webkit-clip-path: circle(50%);
+}
+
+.yan-chat-pill.corner::before,
+.yan-chat-pill.corner.lg-refraction::after {
+  clip-path: inset(0 round calc(var(--chat-circle) / 2));
+  -webkit-clip-path: inset(0 round calc(var(--chat-circle) / 2));
 }
 
 .c-tl,
