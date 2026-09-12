@@ -55,6 +55,7 @@ struct HomeView: View {
                 await dashboard.load(from: session)
             }
             .toolbar(.hidden, for: .navigationBar)
+            .epsPageBackground()
             .navigationDestination(for: HomeDestination.self) { destination in
                 switch destination {
                 case .schoolClass(let id):

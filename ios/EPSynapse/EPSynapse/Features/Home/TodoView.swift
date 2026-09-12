@@ -68,6 +68,7 @@ struct TodoView: View {
         .epsVerticalScrollOnly()
         .toolbar(.hidden, for: .navigationBar)
         .navigationBarBackButtonHidden(true)
+        .epsPageBackground()
         .epsSwipeBackHaptics()
         .sheet(item: $htmlFile) { file in
             ClassHTMLSheet(file: file)

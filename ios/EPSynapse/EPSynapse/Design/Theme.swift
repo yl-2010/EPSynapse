@@ -151,9 +151,12 @@ enum EPSTheme {
 }
 
 extension View {
+    /// Page gradient behind a screen. Also paints the navigation container so
+    /// the stack does not show the system white/black behind pushed pages.
     func epsPageBackground() -> some View {
         background {
             EPSTheme.pageFill.ignoresSafeArea()
         }
+        .containerBackground(EPSTheme.pageFill, for: .navigation)
     }
 }
