@@ -140,15 +140,12 @@
   }
 
   function paintAccount() {
-    const homeWrap = document.getElementById("home-google");
     const profile = document.getElementById("google-profile");
     const outRow = document.getElementById("google-signout-row");
-    const homeChip = document.getElementById("home-google-chip");
     const redirectBtn = document.getElementById("google-redirect");
     const pic = document.getElementById("google-picture");
     const nameEl = document.getElementById("google-name");
     const emailEl = document.getElementById("google-email");
-    const homePic = document.getElementById("home-google-pic");
     const inGoogle = signedInViaGoogle();
 
     if (inGoogle) {
@@ -158,10 +155,6 @@
       }
       if (profile) profile.hidden = false;
       if (outRow) outRow.hidden = false;
-      if (homeChip) {
-        homeChip.hidden = false;
-        homeChip.setAttribute("aria-label", me.googleName || me.email || "Account");
-      }
       if (pic) {
         if (me.picture) {
           pic.src = me.picture;
@@ -171,27 +164,16 @@
           pic.hidden = true;
         }
       }
-      if (homePic) {
-        if (me.picture) {
-          homePic.src = me.picture;
-          homePic.hidden = false;
-        } else {
-          homePic.removeAttribute("src");
-          homePic.hidden = true;
-        }
-      }
       if (nameEl) nameEl.textContent = me.googleName || me.displayName || "Signed in";
       if (emailEl) emailEl.textContent = me.email || "";
     } else {
       if (profile) profile.hidden = true;
       if (outRow) outRow.hidden = true;
-      if (homeChip) homeChip.hidden = true;
       if (redirectBtn) {
         redirectBtn.hidden = false;
         redirectBtn.style.display = "";
       }
     }
-    if (homeWrap) homeWrap.classList.toggle("is-in", inGoogle);
     if (statusEl) {
       statusEl.hidden = inGoogle;
       if (!inGoogle) setStatus(statusEl, accountStatusText());
@@ -854,16 +836,12 @@
   document.getElementById("settings-close").addEventListener("click", () => {
     closeSheet();
   });
-  document.getElementById("home-google-fallback")?.addEventListener("click", () => {
-    startGoogleRedirect();
-  });
   document.getElementById("stage-google")?.addEventListener("click", () => {
     startGoogleRedirect();
   });
   document.getElementById("google-redirect")?.addEventListener("click", () => {
     startGoogleRedirect();
   });
-  document.getElementById("home-google-chip")?.addEventListener("click", openSheet);
   document.getElementById("google-signout")?.addEventListener("click", () => {
     signOutGoogle();
   });
