@@ -15,13 +15,17 @@
 		2FD2BEBA7807F3CF62CDED66 /* DashboardStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00789498338B32818C6282FE /* DashboardStore.swift */; };
 		3C24598F668F9F4086FA69AA /* AdaptiveLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65EF08C412BCF8D97A0D1C1A /* AdaptiveLayout.swift */; };
 		4F019090CA1C2B3C4F4336F2 /* AppLoadingScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1F03974FD1C8B336D0073D8 /* AppLoadingScreen.swift */; };
+		5D3B7F375A0F566B6A877E69 /* PulseCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D28235BC1FB835F2910C968 /* PulseCard.swift */; };
 		6BBF05D2B8EAABF7C905058A /* ChatOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 083CC9E2B8BA48AEA4876689 /* ChatOverlay.swift */; };
 		7EA85D7AFE3D8CE315294C1D /* SettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38378331DA95509DDF83EA11 /* SettingsSheet.swift */; };
+		814AB770010CD9A26B26A7D6 /* PulseSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85DB06842D05BE2A049FC71B /* PulseSheet.swift */; };
+		94A4B0DFC51DE11C8449ECB7 /* PulseModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63FBC7790DE891194406E001 /* PulseModels.swift */; };
 		A99A08DB40E235E1245F8150 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FE3FA4CABABD9581D9D60A3 /* HomeView.swift */; };
 		B867302471945E2A703774E7 /* Mark.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26437E9A27791C15BDCBCABF /* Mark.swift */; };
 		C88B394A86285350CF8C2D1E /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = F34BB0DB83964EF98A568E2D /* Theme.swift */; };
 		D41EF186DAC050B047A1A3EB /* SessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4130A4ED23C8BF8A9677E84A /* SessionStore.swift */; };
 		E842FB99C4EA4655145E3C69 /* Panels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8388796443CE474081A8311E /* Panels.swift */; };
+		F55A1E61F5F03A0ACD07DE23 /* PulseStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44B64450905A21115FF10EDA /* PulseStore.swift */; };
 		F5AF63727273D49042BF02D7 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C870AD9003B84236B411ED /* RootView.swift */; };
 		F75323FF82CFBD2DAECBDD58 /* Haptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1047250444DFCD9F54D0AA95 /* Haptics.swift */; };
 		A81F2C3D4E5B6071890ABCE1 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = A81F2C3D4E5B6071890ABCDF /* GoogleSignIn */; };
@@ -49,10 +53,14 @@
 		3D3C406C38500C0E4C7C942B /* EPSynapseApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPSynapseApp.swift; sourceTree = "<group>"; };
 		3FE3FA4CABABD9581D9D60A3 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		4130A4ED23C8BF8A9677E84A /* SessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionStore.swift; sourceTree = "<group>"; };
+		44B64450905A21115FF10EDA /* PulseStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PulseStore.swift; sourceTree = "<group>"; };
+		63FBC7790DE891194406E001 /* PulseModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PulseModels.swift; sourceTree = "<group>"; };
 		659F015C8C3FE9B4918ABB1F /* GlassChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassChrome.swift; sourceTree = "<group>"; };
 		65EF08C412BCF8D97A0D1C1A /* AdaptiveLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdaptiveLayout.swift; sourceTree = "<group>"; };
 		6FB0D0B241ED5574211F4138 /* EPSynapse.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = EPSynapse.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8388796443CE474081A8311E /* Panels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels.swift; sourceTree = "<group>"; };
+		85DB06842D05BE2A049FC71B /* PulseSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PulseSheet.swift; sourceTree = "<group>"; };
+		8D28235BC1FB835F2910C968 /* PulseCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PulseCard.swift; sourceTree = "<group>"; };
 		A89D748793FD8AECBFD1275E /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		B2C870AD9003B84236B411ED /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		B771AFED5734D5E80A1F3FEB /* CornerChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CornerChrome.swift; sourceTree = "<group>"; };
@@ -76,6 +84,7 @@
 				09DBA250AFBE8BE1EA56ACB9 /* Chat */,
 				4E827BA4F8893DCB9BB8FE7C /* Chrome */,
 				42E7C40EA3A98CA610D39FFB /* Home */,
+				DCF85C5A6C02B494F0DAB0C5 /* Pulse */,
 				E3AA5112E2056034CF5FAA54 /* Settings */,
 			);
 			path = Features;
@@ -156,6 +165,17 @@
 				6FB0D0B241ED5574211F4138 /* EPSynapse.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		DCF85C5A6C02B494F0DAB0C5 /* Pulse */ = {
+			isa = PBXGroup;
+			children = (
+				8D28235BC1FB835F2910C968 /* PulseCard.swift */,
+				63FBC7790DE891194406E001 /* PulseModels.swift */,
+				85DB06842D05BE2A049FC71B /* PulseSheet.swift */,
+				44B64450905A21115FF10EDA /* PulseStore.swift */,
+			);
+			path = Pulse;
 			sourceTree = "<group>";
 		};
 		E3AA5112E2056034CF5FAA54 /* Settings */ = {
@@ -244,6 +264,10 @@
 				B867302471945E2A703774E7 /* Mark.swift in Sources */,
 				03338F0771A5563BAD3CBBE2 /* Models.swift in Sources */,
 				E842FB99C4EA4655145E3C69 /* Panels.swift in Sources */,
+				5D3B7F375A0F566B6A877E69 /* PulseCard.swift in Sources */,
+				94A4B0DFC51DE11C8449ECB7 /* PulseModels.swift in Sources */,
+				814AB770010CD9A26B26A7D6 /* PulseSheet.swift in Sources */,
+				F55A1E61F5F03A0ACD07DE23 /* PulseStore.swift in Sources */,
 				F5AF63727273D49042BF02D7 /* RootView.swift in Sources */,
 				D41EF186DAC050B047A1A3EB /* SessionStore.swift in Sources */,
 				7EA85D7AFE3D8CE315294C1D /* SettingsSheet.swift in Sources */,

@@ -7,6 +7,8 @@ struct HomeView: View {
     @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     @State private var showSettings = false
+    @State private var showPulse = false
+    @StateObject private var pulse = PulseStore()
 
     private var isWide: Bool {
         AdaptiveLayout.isWideLayout(horizontal: horizontalSizeClass, vertical: verticalSizeClass)
@@ -48,16 +50,19 @@ struct HomeView: View {
             }
         }
         .refreshable {
+            await pulse.load(sessionId: session.sessionId)
             guard session.isSignedIn else { return }
             await dashboard.load(from: session)
         }
         .task {
             await session.boot()
+            await pulse.load(sessionId: session.sessionId)
             if session.isSignedIn {
                 await dashboard.load(from: session)
             }
         }
         .onChange(of: session.isSignedIn) { _, signedIn in
+            Task { await pulse.load(sessionId: session.sessionId) }
             if signedIn {
                 Task { await dashboard.load(from: session) }
             }
@@ -70,10 +75,16 @@ struct HomeView: View {
                 .environmentObject(session)
                 .environmentObject(dashboard)
         }
+        .sheet(isPresented: $showPulse) {
+            PulseSheet(isPresented: $showPulse, store: pulse, sessionId: session.sessionId)
+        }
     }
 
     @ViewBuilder
     private var dashboardContent: some View {
+        PulseCard(store: pulse, slim: true) {
+            showPulse = true
+        }
         if isWide {
             HStack(alignment: .top, spacing: 16) {
                 VStack(spacing: 16) {
@@ -103,6 +114,10 @@ struct HomeView: View {
 
     private var signedOutContent: some View {
         VStack(alignment: .leading, spacing: 12) {
+            PulseCard(store: pulse, slim: false) {
+                showPulse = true
+            }
+
             Button {
                 Task { await session.signInWithGoogle() }
             } label: {

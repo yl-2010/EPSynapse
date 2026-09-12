@@ -146,6 +146,10 @@ struct APIClient {
     if !sessionId.isEmpty {
       request.setValue(sessionId, forHTTPHeaderField: "X-EPSynapse-Session")
     }
+    let voter = PulseVoter.id()
+    if !voter.isEmpty {
+      request.setValue(voter, forHTTPHeaderField: "X-EPSynapse-Voter")
+    }
     if let body {
       request.httpBody = try encoder.encode(AnyEncodable(body))
       request.setValue("application/json", forHTTPHeaderField: "Content-Type")
