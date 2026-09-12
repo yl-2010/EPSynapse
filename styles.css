@@ -2391,14 +2391,21 @@ html[data-resolved-theme="dark"] .edu-sheet {
 }
 
 .edu-sheet-head {
+  position: relative;
+  z-index: 5;
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.85rem;
   margin: 0;
-  padding: 1.05rem 1.2rem 0.85rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  padding: 1rem 1.15rem;
+  isolation: auto;
+  overflow: visible;
+  filter: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--fg) 12%, transparent);
   background: #f4f7fb;
 }
 
@@ -2412,8 +2419,23 @@ html[data-resolved-theme="dark"] .edu-sheet-head {
   }
 }
 
+.edu-sheet-title,
 .edu-sheet-head .edu-panel-title {
+  position: relative;
+  z-index: 6;
   margin: 0;
+  padding: 0;
+  overflow: visible;
+  isolation: auto;
+  filter: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  font-family: var(--display);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--fg);
+  box-shadow: none;
 }
 
 .edu-sheet-body {
@@ -2426,11 +2448,12 @@ html[data-resolved-theme="dark"] .edu-sheet-head {
 
 .edu-sheet-close {
   --lg-filter: none;
-  --lg-tint-rgb: 232, 238, 246;
-  --lg-tint-opacity: 0.62;
-  flex: 0 0 2.35rem;
-  width: 2.35rem;
-  height: 2.35rem;
+  --lg-tint-opacity: 0;
+  position: relative;
+  z-index: 6;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
   margin: 0;
   padding: 0;
   border: 1px solid color-mix(in srgb, var(--fg) 12%, transparent);
@@ -2438,34 +2461,41 @@ html[data-resolved-theme="dark"] .edu-sheet-head {
   display: grid;
   place-items: center;
   overflow: visible;
+  isolation: auto;
+  filter: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   color: var(--fg);
-  background: color-mix(in srgb, #fff 72%, transparent);
-  isolation: isolate;
-  box-shadow: 0 3px 10px rgba(11, 31, 58, 0.12);
+  background: #e8eef6;
+  box-shadow: none;
   cursor: pointer;
 }
 
 html[data-resolved-theme="dark"] .edu-sheet-close {
-  --lg-tint-rgb: 18, 34, 56;
-  --lg-tint-opacity: 0.7;
-  background: rgba(255, 255, 255, 0.1);
+  background: #16324f;
   border-color: rgba(255, 255, 255, 0.16);
 }
 
 @media (prefers-color-scheme: dark) {
   html:not([data-resolved-theme="light"]) .edu-sheet-close {
-    --lg-tint-rgb: 18, 34, 56;
-    --lg-tint-opacity: 0.7;
-    background: rgba(255, 255, 255, 0.1);
+    background: #16324f;
     border-color: rgba(255, 255, 255, 0.16);
   }
 }
 
 .edu-sheet-close svg {
   position: relative;
-  z-index: 2;
-  width: 42%;
-  height: 42%;
+  z-index: 7;
+  width: 20px;
+  height: 20px;
+  filter: none;
+}
+
+.edu-sheet-close::before,
+.edu-sheet-close::after,
+.edu-sheet-close.lg-refraction::after {
+  content: none !important;
+  display: none !important;
 }
 
 .edu-sheet label {
