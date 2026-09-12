@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		003DB71BAC37924600968D15 /* CourseTitle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99B5D6EFD5EA5C91F03602C1 /* CourseTitle.swift */; };
 		03338F0771A5563BAD3CBBE2 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBA3E1253E1D0707195E2512 /* Models.swift */; };
 		10297A70CB3CFA1F8E1E00F3 /* CornerChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = B771AFED5734D5E80A1F3FEB /* CornerChrome.swift */; };
 		290BE63D1F07FEC80832F140 /* GlassChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 659F015C8C3FE9B4918ABB1F /* GlassChrome.swift */; };
@@ -57,6 +58,7 @@
 		6FB0D0B241ED5574211F4138 /* EPSynapse.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = EPSynapse.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8388796443CE474081A8311E /* Panels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels.swift; sourceTree = "<group>"; };
 		98FFD2BA92EAF72474A93719 /* NoteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteView.swift; sourceTree = "<group>"; };
+		99B5D6EFD5EA5C91F03602C1 /* CourseTitle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CourseTitle.swift; sourceTree = "<group>"; };
 		A89D748793FD8AECBFD1275E /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		B2C870AD9003B84236B411ED /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		B3AF0A19753DC997EE55CAA3 /* Markdown.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Markdown.swift; sourceTree = "<group>"; };
@@ -177,6 +179,7 @@
 			isa = PBXGroup;
 			children = (
 				A89D748793FD8AECBFD1275E /* APIClient.swift */,
+				99B5D6EFD5EA5C91F03602C1 /* CourseTitle.swift */,
 				00789498338B32818C6282FE /* DashboardStore.swift */,
 				FBA3E1253E1D0707195E2512 /* Models.swift */,
 				4130A4ED23C8BF8A9677E84A /* SessionStore.swift */,
@@ -283,6 +286,7 @@
 				82034A6D465FAE115757D44E /* ChatStore.swift in Sources */,
 				3CF96F444AD31275A99DE0F1 /* ClassView.swift in Sources */,
 				10297A70CB3CFA1F8E1E00F3 /* CornerChrome.swift in Sources */,
+				003DB71BAC37924600968D15 /* CourseTitle.swift in Sources */,
 				2FD2BEBA7807F3CF62CDED66 /* DashboardStore.swift in Sources */,
 				2EC762A67857140A2D9736AA /* EPSynapseApp.swift in Sources */,
 				290BE63D1F07FEC80832F140 /* GlassChrome.swift in Sources */,
