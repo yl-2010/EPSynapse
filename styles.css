@@ -5,7 +5,7 @@
   --muted: #4a5d73;
   --accent: #eba700;
   --hairline: rgba(0, 70, 127, 0.14);
-  --panel-bg: rgba(255, 255, 255, 0.5);
+  --panel-bg: rgba(255, 255, 255, 0.86);
   --panel-brd: rgba(255, 255, 255, 0.6);
   --rim: rgba(255, 255, 255, 0.75);
   --accent-rgb: 235, 167, 0;
@@ -66,7 +66,7 @@
     --muted: #9aa8b8;
     --accent: #eba700;
     --hairline: rgba(232, 238, 244, 0.12);
-    --panel-bg: rgba(11, 31, 58, 0.48);
+    --panel-bg: rgba(11, 31, 58, 0.88);
     --panel-brd: rgba(255, 255, 255, 0.1);
     --rim: rgba(255, 255, 255, 0.16);
     --accent-rgb: 235, 167, 0;
@@ -93,7 +93,7 @@ html[data-resolved-theme="dark"] {
   --muted: #9aa8b8;
   --accent: #eba700;
   --hairline: rgba(232, 238, 244, 0.12);
-  --panel-bg: rgba(11, 31, 58, 0.48);
+  --panel-bg: rgba(11, 31, 58, 0.88);
   --panel-brd: rgba(255, 255, 255, 0.1);
   --rim: rgba(255, 255, 255, 0.16);
   --accent-rgb: 235, 167, 0;
@@ -358,12 +358,6 @@ a {
 .corner.lg-fallback,
 .yan-chat-close.lg-fallback,
 .yan-chat-send.lg-fallback,
-.edu-panel.lg-fallback,
-.edu-file-tile.lg-fallback,
-.edu-sheet.lg-fallback,
-.edu-sheet-field.lg-fallback,
-.edu-sheet-btn.lg-fallback,
-.edu-sheet-close.lg-fallback,
 .yan-chat-widget.lg-fallback,
 .yan-chat-bubble.lg-fallback,
 .edu-filter.lg-fallback,
@@ -371,6 +365,17 @@ a {
   background-color: rgba(var(--lg-tint-rgb), var(--lg-fallback-tint));
   backdrop-filter: blur(10px) saturate(1.5);
   -webkit-backdrop-filter: blur(10px) saturate(1.5);
+}
+
+.edu-panel.lg-fallback,
+.edu-file-tile.lg-fallback,
+.edu-sheet.lg-fallback,
+.edu-sheet-field.lg-fallback,
+.edu-sheet-btn.lg-fallback,
+.edu-sheet-close.lg-fallback {
+  background-color: rgba(var(--lg-tint-rgb), var(--lg-fallback-tint));
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -812,7 +817,7 @@ html[data-resolved-theme="dark"] .edu-back-shadow feGaussianBlur {
   --lg-filter: none;
   border: 0;
   border-radius: 22px;
-  background: transparent;
+  background: var(--panel-bg);
   padding: 1.15rem 1.2rem 1rem;
   min-height: 8rem;
   box-shadow: 0 6px var(--lg-outer-shadow-blur) var(--lg-outer-shadow);
@@ -847,7 +852,7 @@ html[data-resolved-theme="dark"] .edu-back-shadow feGaussianBlur {
   padding: 0.85rem 1.05rem;
   border: 0;
   border-radius: 22px;
-  background: transparent;
+  background: var(--panel-bg);
   box-shadow: 0 6px var(--lg-outer-shadow-blur) var(--lg-outer-shadow);
   text-align: left;
   cursor: pointer;
@@ -865,8 +870,8 @@ html[data-resolved-theme="dark"] .edu-back-shadow feGaussianBlur {
 }
 
 .edu-file-tile.lg-fallback {
-  backdrop-filter: blur(12px) saturate(1.5);
-  -webkit-backdrop-filter: blur(12px) saturate(1.5);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .edu-file-name {
@@ -900,8 +905,8 @@ html[data-resolved-theme="dark"] .edu-back-shadow feGaussianBlur {
 }
 
 .edu-panel.lg-fallback {
-  backdrop-filter: blur(12px) saturate(1.5);
-  -webkit-backdrop-filter: blur(12px) saturate(1.5);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .edu-panel-head {
@@ -2307,6 +2312,14 @@ a.yan-chat-widget {
   justify-content: center;
   padding: 1.25rem 1rem;
   background: rgba(11, 31, 58, 0.42);
+}
+
+.edu-sheet-backdrop::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
   backdrop-filter: blur(20px) saturate(1.25);
   -webkit-backdrop-filter: blur(20px) saturate(1.25);
 }
@@ -2341,7 +2354,7 @@ html[data-resolved-theme="dark"] .edu-sheet-backdrop {
   border: 1px solid color-mix(in srgb, #fff 70%, var(--panel-brd));
   border-radius: 24px;
   padding: 0;
-  background: color-mix(in srgb, #f4f7fb 86%, transparent);
+  background: #f4f7fb;
   box-shadow:
     0 18px 48px rgba(11, 31, 58, 0.22),
     0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent);
@@ -2352,7 +2365,7 @@ html[data-resolved-theme="dark"] .edu-sheet {
   --lg-tint-rgb: 10, 22, 40;
   --lg-tint-opacity: 0.9;
   --lg-fallback-tint: 0.88;
-  background: color-mix(in srgb, #0b1f3a 88%, transparent);
+  background: #0b1f3a;
   border-color: rgba(255, 255, 255, 0.12);
   box-shadow:
     0 18px 48px rgba(0, 0, 0, 0.48),
@@ -2364,7 +2377,7 @@ html[data-resolved-theme="dark"] .edu-sheet {
     --lg-tint-rgb: 10, 22, 40;
     --lg-tint-opacity: 0.9;
     --lg-fallback-tint: 0.88;
-    background: color-mix(in srgb, #0b1f3a 88%, transparent);
+    background: #0b1f3a;
     border-color: rgba(255, 255, 255, 0.12);
     box-shadow:
       0 18px 48px rgba(0, 0, 0, 0.48),
@@ -2386,18 +2399,16 @@ html[data-resolved-theme="dark"] .edu-sheet {
   margin: 0;
   padding: 1.05rem 1.2rem 0.85rem;
   border-bottom: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
-  background: color-mix(in srgb, #f4f7fb 92%, transparent);
-  backdrop-filter: blur(14px) saturate(1.2);
-  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  background: #f4f7fb;
 }
 
 html[data-resolved-theme="dark"] .edu-sheet-head {
-  background: color-mix(in srgb, #0b1f3a 94%, transparent);
+  background: #0b1f3a;
 }
 
 @media (prefers-color-scheme: dark) {
   html:not([data-resolved-theme="light"]) .edu-sheet-head {
-    background: color-mix(in srgb, #0b1f3a 94%, transparent);
+    background: #0b1f3a;
   }
 }
 
@@ -2621,21 +2632,29 @@ html[data-resolved-theme="dark"] .edu-sheet-btn--gold {
 .edu-sheet-field.lg-refraction::after,
 .edu-sheet-btn.lg-refraction::after,
 .edu-sheet-close.lg-refraction::after,
+.edu-panel.lg-refraction::after,
+.edu-file-tile.lg-refraction::after,
 html.lg-chrome .edu-sheet.lg-static.lg-refraction::after,
 html.lg-chrome .edu-sheet-field.lg-static.lg-refraction::after,
 html.lg-chrome .edu-sheet-btn.lg-static.lg-refraction::after,
+html.lg-chrome .edu-panel.lg-static.lg-refraction::after,
+html.lg-chrome .edu-file-tile.lg-static.lg-refraction::after,
 html.lg-chrome[data-resolved-theme="dark"] .edu-sheet.lg-static.lg-refraction::after,
 html.lg-chrome[data-resolved-theme="dark"] .edu-sheet-field.lg-static.lg-refraction::after,
-html.lg-chrome[data-resolved-theme="dark"] .edu-sheet-btn.lg-static.lg-refraction::after {
-  display: none;
+html.lg-chrome[data-resolved-theme="dark"] .edu-sheet-btn.lg-static.lg-refraction::after,
+html.lg-chrome[data-resolved-theme="dark"] .edu-panel.lg-static.lg-refraction::after,
+html.lg-chrome[data-resolved-theme="dark"] .edu-file-tile.lg-static.lg-refraction::after {
+  display: none !important;
+  mix-blend-mode: normal;
+  background: none;
 }
 
 .edu-sheet.lg-fallback,
 .edu-sheet-field.lg-fallback,
 .edu-sheet-btn.lg-fallback,
 .edu-sheet-close.lg-fallback {
-  backdrop-filter: blur(16px) saturate(1.35);
-  -webkit-backdrop-filter: blur(16px) saturate(1.35);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .edu-tag-CW,
