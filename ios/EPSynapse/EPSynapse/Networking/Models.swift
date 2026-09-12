@@ -934,6 +934,12 @@ struct ScheduleResponse: Codable {
     meetings = (try? c.decodeIfPresent([ScheduleMeeting].self, forKey: .meetings)) ?? []
   }
 
+  func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    try c.encode(classes, forKey: .classes)
+    try c.encode(meetings, forKey: .meetings)
+  }
+
   private enum CodingKeys: String, CodingKey {
     case classes, meetings, schedule
   }
