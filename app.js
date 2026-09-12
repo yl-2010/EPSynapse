@@ -23,6 +23,10 @@
   let olPollInFlight = false;
   const TAGS = ["CW", "HW", "QA", "MA"];
   const typeFilter = new Set(TAGS);
+  const DATES_COLLAPSED_LIMIT = 6;
+  const TODOS_COLLAPSED_LIMIT = 6;
+  let datesExpanded = false;
+  let todoExpanded = true;
   let lastHome = {
     courses: [],
     assignments: [],
@@ -690,11 +694,25 @@
     goTo("/");
   }
 
-  function panelHtml(title, body, filterId, extraClass, filtersHtml) {
+  function panelHtml(title, body, filterId, extraClass, filtersHtml, titleInner) {
     return `<section class="edu-panel${extraClass ? " " + extraClass : ""}" data-filter-id="${escapeHtml(filterId)}">
-      <div class="edu-panel-head"><h2 class="edu-panel-title">${escapeHtml(title)}</h2>${filtersHtml || ""}</div>
+      <div class="edu-panel-head"><h2 class="edu-panel-title">${titleInner || escapeHtml(title)}</h2>${filtersHtml || ""}</div>
       ${body}
     </section>`;
+  }
+
+  function collapseTitle(title, kind, expanded) {
+    const isDates = kind === "dates";
+    const cls = isDates ? "edu-dates-toggle" : "edu-todos-toggle";
+    const attr = isDates ? "data-dates-expand" : "data-todos-expand";
+    const noun = isDates ? "dates" : "todos";
+    return `<button type="button" class="${cls}" ${attr} aria-expanded="${
+      expanded ? "true" : "false"
+    }" aria-label="${expanded ? "Collapse" : "Expand"} ${noun}">${escapeHtml(title)}</button>`;
+  }
+
+  function collapsedSlice(items, expanded, limit) {
+    return expanded ? items : items.slice(0, limit);
   }
 
   function filterBarHtml(kind) {
@@ -884,12 +902,13 @@
       meetings: meetings || lastHome.meetings || [],
       notes: notes || lastHome.notes || [],
     };
-    const open = (lastHome.assignments || []).filter((t) => !t.done && matchesTag(t));
+    const openAll = (lastHome.assignments || []).filter((t) => !t.done && matchesTag(t));
+    const open = collapsedSlice(openAll, todoExpanded, TODOS_COLLAPSED_LIMIT);
     const done = (lastHome.assignments || []).filter((t) => t.done && matchesTag(t));
-    const dates = (lastHome.assignments || [])
+    const datesAll = (lastHome.assignments || [])
       .filter((t) => t.due && matchesTag(t))
-      .sort((a, b) => String(a.due).localeCompare(String(b.due)))
-      .slice(0, 12);
+      .sort((a, b) => String(a.due).localeCompare(String(b.due)));
+    const dates = collapsedSlice(datesAll, datesExpanded, DATES_COLLAPSED_LIMIT);
     const fileTiles = (lastHome.files || []).map(fileTile).join("");
     const classItems = homeClasses();
 
@@ -908,13 +927,13 @@
       <p class="edu-home-mark">EPSynapse <a class="edu-home-research" href="/research">Research</a></p>
       <div class="edu-grid edu-grid--home">
         <div class="edu-col edu-col--main">
-          ${panelHtml("TODO", listOrEmpty(open.map(todoRow).join(""), todoEmpty), "lg-edu-todo", "", filterBarHtml("todo"))}
+          ${panelHtml("TODO", listOrEmpty(open.map(todoRow).join(""), todoEmpty), "lg-edu-todo", "", todoExpanded ? filterBarHtml("todo") : "", collapseTitle("TODO", "todos", todoExpanded))}
           ${panelHtml("Completed", listOrEmpty(done.map(todoRow).join(""), "Nothing completed yet"), "lg-edu-completed", "edu-panel--completed")}
           ${panelHtml("Notes", notesPanelHtml(), "lg-edu-notes", "edu-panel--notes")}
         </div>
         <div class="edu-col edu-col--side">
           ${panelHtml("Classes", listOrEmpty(classItems.map(classRow).join(""), classEmpty), "lg-edu-classes")}
-          ${panelHtml("Dates", listOrEmpty(dates.map(dateRow).join(""), "No upcoming dates"), "lg-edu-dates", "", filterBarHtml("dates"))}
+          ${panelHtml("Dates", listOrEmpty(dates.map(dateRow).join(""), "No upcoming dates"), "lg-edu-dates", "", filterBarHtml("dates"), collapseTitle("Dates", "dates", datesExpanded))}
           ${panelHtml("Files", fileTiles ? `<div class="edu-files">${fileTiles}</div>` : `<p class="edu-empty">${escapeHtml(fileEmpty)}</p>`, "lg-edu-files")}
           ${panelHtml("Mail", mailPanelHtml(lastHome.messages), "lg-edu-mail")}
         </div>
@@ -967,12 +986,13 @@
       return;
     }
     const work = (lastHome.assignments || []).filter((t) => classMatchesWork(klass, t));
-    const open = work.filter((t) => !t.done && matchesTag(t));
+    const openAll = work.filter((t) => !t.done && matchesTag(t));
+    const open = collapsedSlice(openAll, todoExpanded, TODOS_COLLAPSED_LIMIT);
     const done = work.filter((t) => t.done && matchesTag(t));
-    const dates = work
+    const datesAll = work
       .filter((t) => t.due && matchesTag(t))
-      .sort((a, b) => String(a.due).localeCompare(String(b.due)))
-      .slice(0, 12);
+      .sort((a, b) => String(a.due).localeCompare(String(b.due)));
+    const dates = collapsedSlice(datesAll, datesExpanded, DATES_COLLAPSED_LIMIT);
     const nameHint = String(klass.name || "").toLowerCase();
     const files = (lastHome.files || []).filter((f) => {
       if (!nameHint) return false;
@@ -1013,11 +1033,11 @@
       </header>
       <div class="edu-grid edu-grid--home">
         <div class="edu-col edu-col--main">
-          ${panelHtml("TODO", listOrEmpty(open.map(todoRow).join(""), "No open work for this class"), "lg-edu-todo", "", filterBarHtml("todo"))}
+          ${panelHtml("TODO", listOrEmpty(open.map(todoRow).join(""), "No open work for this class"), "lg-edu-todo", "", todoExpanded ? filterBarHtml("todo") : "", collapseTitle("TODO", "todos", todoExpanded))}
           ${panelHtml("Completed", listOrEmpty(done.map(todoRow).join(""), "Nothing completed yet"), "lg-edu-completed", "edu-panel--completed")}
         </div>
         <div class="edu-col edu-col--side">
-          ${panelHtml("Dates", listOrEmpty(dates.map(dateRow).join(""), "No upcoming dates"), "lg-edu-dates", "", filterBarHtml("dates"))}
+          ${panelHtml("Dates", listOrEmpty(dates.map(dateRow).join(""), "No upcoming dates"), "lg-edu-dates", "", filterBarHtml("dates"), collapseTitle("Dates", "dates", datesExpanded))}
           ${panelHtml("Files", fileTiles ? `<div class="edu-files">${fileTiles}</div>` : `<p class="edu-empty">No files for this class</p>`, "lg-edu-files")}
           ${panelHtml("Notes", listOrEmpty(noteRows, "No notes for this class yet"), "lg-edu-class-notes")}
         </div>
@@ -1765,6 +1785,23 @@
       }
     } catch (err) {
       setStatus(olStatus, err.message || "Could not start Outlook.");
+    }
+  });
+
+  appEl.addEventListener("click", (ev) => {
+    const t = ev.target;
+    const datesToggle = t.closest?.("[data-dates-expand]");
+    if (datesToggle) {
+      ev.preventDefault();
+      datesExpanded = !datesExpanded;
+      routeAndRender();
+      return;
+    }
+    const todosToggle = t.closest?.("[data-todos-expand]");
+    if (todosToggle) {
+      ev.preventDefault();
+      todoExpanded = !todoExpanded;
+      routeAndRender();
     }
   });
 

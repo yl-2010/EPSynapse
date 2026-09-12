@@ -39,24 +39,22 @@ struct EPSPanel<Content: View>: View {
     var title: String
     var filters: Bool = false
     var dimmed: Bool = false
+    var expanded: Bool? = nil
+    var onToggleExpanded: (() -> Void)? = nil
     @ViewBuilder var content: () -> Content
 
     @EnvironmentObject private var dashboard: DashboardStore
 
+    private var showFilters: Bool {
+        filters && (expanded ?? true)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center, spacing: 10) {
-                Text(title)
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(EPSTheme.fg)
-                    .padding(.leading, 10)
-                    .overlay(alignment: .leading) {
-                        Capsule()
-                            .fill(EPSTheme.accent)
-                            .frame(width: 3)
-                    }
+                titleView
                 Spacer(minLength: 8)
-                if filters {
+                if showFilters {
                     FilterOrbBar()
                 }
             }
@@ -67,6 +65,35 @@ struct EPSPanel<Content: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .epsGlassRounded(cornerRadius: 22, interactive: true)
         .opacity(dimmed ? 0.78 : 1)
+    }
+
+    private var titleLabel: some View {
+        Text(title)
+            .font(.title3.weight(.bold))
+            .foregroundStyle(EPSTheme.fg)
+            .padding(.leading, 10)
+            .overlay(alignment: .leading) {
+                Capsule()
+                    .fill(EPSTheme.accent)
+                    .frame(width: 3)
+            }
+    }
+
+    @ViewBuilder
+    private var titleView: some View {
+        if let expanded, let onToggleExpanded {
+            Button {
+                EPSHaptics.tap()
+                onToggleExpanded()
+            } label: {
+                titleLabel
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(expanded ? "Collapse \(title.lowercased())" : "Expand \(title.lowercased())")
+            .accessibilityHint("Shows the full list when expanded")
+        } else {
+            titleLabel
+        }
     }
 }
 
@@ -113,13 +140,20 @@ struct FilterOrb: View {
 struct TodoPanel: View {
     @EnvironmentObject private var session: SessionStore
     @EnvironmentObject private var dashboard: DashboardStore
+    @State private var expanded = false
+
+    private static let collapsedLimit = 6
 
     private var items: [Assignment] {
         dashboard.assignments.filter { !$0.done && Self.matches($0, filter: dashboard.typeFilter) }
     }
 
+    private var visible: [Assignment] {
+        expanded ? items : Array(items.prefix(Self.collapsedLimit))
+    }
+
     var body: some View {
-        EPSPanel(title: "TODO", filters: true) {
+        EPSPanel(title: "TODO", filters: true, expanded: expanded, onToggleExpanded: { expanded.toggle() }) {
             if items.isEmpty {
                 EmptyLine(
                     session.profile?.canvasConnected == true
@@ -128,7 +162,7 @@ struct TodoPanel: View {
                 )
             } else {
                 VStack(alignment: .leading, spacing: 4) {
-                    ForEach(items) { item in
+                    ForEach(visible) { item in
                         TodoRow(item: item)
                     }
                 }
@@ -298,22 +332,27 @@ struct ClassRow: View {
 
 struct DatesPanel: View {
     @EnvironmentObject private var dashboard: DashboardStore
+    @State private var expanded = false
+
+    private static let collapsedLimit = 6
 
     private var items: [Assignment] {
         dashboard.assignments
             .filter { !$0.due.isEmpty && TodoPanel.matches($0, filter: dashboard.typeFilter) }
             .sorted { $0.due < $1.due }
-            .prefix(12)
-            .map { $0 }
+    }
+
+    private var visible: [Assignment] {
+        expanded ? items : Array(items.prefix(Self.collapsedLimit))
     }
 
     var body: some View {
-        EPSPanel(title: "Dates", filters: true) {
+        EPSPanel(title: "Dates", filters: true, expanded: expanded, onToggleExpanded: { expanded.toggle() }) {
             if items.isEmpty {
                 EmptyLine("No upcoming dates")
             } else {
                 VStack(alignment: .leading, spacing: 4) {
-                    ForEach(items) { item in
+                    ForEach(visible) { item in
                         DateRow(item: item)
                     }
                 }

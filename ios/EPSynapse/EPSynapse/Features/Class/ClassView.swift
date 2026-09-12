@@ -8,6 +8,8 @@ struct ClassView: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @State private var todoExpanded = false
+    @State private var datesExpanded = false
 
     private var schoolClass: SchoolClass? {
         dashboard.schoolClass(id: classId)
@@ -22,8 +24,14 @@ struct ClassView: View {
         return dashboard.assignments(for: schoolClass)
     }
 
+    private static let collapsedLimit = 6
+
     private var todoItems: [Assignment] {
         items.filter { !$0.done }
+    }
+
+    private var visibleTodos: [Assignment] {
+        todoExpanded ? todoItems : Array(todoItems.prefix(Self.collapsedLimit))
     }
 
     private var doneItems: [Assignment] {
@@ -34,6 +42,10 @@ struct ClassView: View {
         items
             .filter { !$0.due.isEmpty }
             .sorted { $0.due < $1.due }
+    }
+
+    private var visibleDates: [Assignment] {
+        datesExpanded ? datedItems : Array(datedItems.prefix(Self.collapsedLimit))
     }
 
     private var classNotes: [ClassifiedNote] {
@@ -139,12 +151,12 @@ struct ClassView: View {
     }
 
     private var todoPanel: some View {
-        EPSPanel(title: "TODO") {
+        EPSPanel(title: "TODO", expanded: todoExpanded, onToggleExpanded: { todoExpanded.toggle() }) {
             if todoItems.isEmpty {
                 EmptyLine("No open work")
             } else {
                 VStack(alignment: .leading, spacing: 4) {
-                    ForEach(todoItems) { item in
+                    ForEach(visibleTodos) { item in
                         TodoRow(item: item)
                     }
                 }
@@ -167,12 +179,12 @@ struct ClassView: View {
     }
 
     private var datesPanel: some View {
-        EPSPanel(title: "Dates") {
+        EPSPanel(title: "Dates", expanded: datesExpanded, onToggleExpanded: { datesExpanded.toggle() }) {
             if datedItems.isEmpty {
                 EmptyLine("No upcoming dates")
             } else {
                 VStack(alignment: .leading, spacing: 4) {
-                    ForEach(datedItems) { item in
+                    ForEach(visibleDates) { item in
                         DateRow(item: item)
                     }
                 }
