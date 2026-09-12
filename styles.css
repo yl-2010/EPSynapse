@@ -2778,7 +2778,8 @@ html.lg-chrome[data-resolved-theme="dark"] .edu-file-tile.lg-static.lg-refractio
 .home-google-chip[hidden],
 .edu-google-slot[hidden],
 .edu-google-account[hidden],
-.edu-google-redirect[hidden] {
+.edu-google-redirect[hidden],
+.edu-sheet-body:has(#google-profile:not([hidden])) .edu-google-redirect {
   display: none !important;
 }
 

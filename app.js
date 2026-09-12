@@ -179,6 +179,10 @@
     }
     setStatus(statusEl, accountStatusText());
     renderGoogleButtons();
+    queueMicrotask(() => {
+      const again = document.getElementById("google-redirect");
+      if (again) again.hidden = signedInViaGoogle();
+    });
   }
 
   function waitForGis(ms) {
