@@ -12,6 +12,23 @@ enum EPSDueFormat {
         return formatter.string(from: date)
     }
 
+    static func dayKey(_ iso: String) -> String {
+        if let date = parse(iso) {
+            let parts = Calendar.current.dateComponents([.year, .month, .day], from: date)
+            if let year = parts.year, let month = parts.month, let day = parts.day {
+                return String(format: "%04d-%02d-%02d", year, month, day)
+            }
+        }
+        let trimmed = iso.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.count >= 10 {
+            let prefix = String(trimmed.prefix(10))
+            if prefix.range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil {
+                return prefix
+            }
+        }
+        return ""
+    }
+
     private static func parse(_ iso: String) -> Date? {
         let trimmed = iso.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
@@ -154,14 +171,12 @@ struct TodoPanel: View {
                         : "Connect Canvas in settings"
                 )
             } else {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(visible) { item in
-                        TodoRow(item: item)
-                            .transition(.asymmetric(
-                                insertion: .opacity,
-                                removal: .move(edge: .bottom).combined(with: .opacity)
-                            ))
-                    }
+                TodoRows(items: visible) { item in
+                    TodoRow(item: item)
+                        .transition(.asymmetric(
+                            insertion: .opacity,
+                            removal: .move(edge: .bottom).combined(with: .opacity)
+                        ))
                 }
             }
         }
@@ -184,12 +199,41 @@ struct CompletedPanel: View {
             if items.isEmpty {
                 EmptyLine("Nothing completed yet")
             } else {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(items) { item in
-                        TodoRow(item: item)
-                            .transition(.move(edge: .top).combined(with: .opacity))
+                TodoRows(items: items) { item in
+                    TodoRow(item: item)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
+        }
+    }
+}
+
+struct TodoDaySeparator: View {
+    var body: some View {
+        Rectangle()
+            .fill(EPSTheme.fg.opacity(0.12))
+            .frame(height: 1)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 8)
+            .accessibilityHidden(true)
+    }
+}
+
+struct TodoRows<Row: View>: View {
+    var items: [Assignment]
+    @ViewBuilder var row: (Assignment) -> Row
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                if index > 0 {
+                    if EPSDueFormat.dayKey(items[index - 1].due) != EPSDueFormat.dayKey(item.due) {
+                        TodoDaySeparator()
+                    } else {
+                        Color.clear.frame(height: 4)
                     }
                 }
+                row(item)
             }
         }
     }

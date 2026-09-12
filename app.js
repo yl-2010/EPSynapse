@@ -897,6 +897,9 @@
       row.classList.toggle("is-filter-hidden", !typeFilter.has(tag));
     });
     applyCollapseHidden("lg-edu-todo", todoExpanded, TODOS_COLLAPSED_LIMIT);
+    document
+      .querySelectorAll('[data-filter-id="lg-edu-todo"] .edu-list, [data-filter-id="lg-edu-completed"] .edu-list')
+      .forEach(syncTodoDaySeparators);
     document.querySelectorAll(".edu-list").forEach((list) => {
       const rows = [...list.querySelectorAll(":scope > .edu-row[data-tag]")];
       if (!rows.length) return;
@@ -1082,7 +1085,7 @@
     }
 
     const first = row.getBoundingClientRect();
-    dest.appendChild(row);
+    insertTodoRowSorted(dest, row);
     animateFly(row, first);
     writeTodoComplete(id, item, true);
   }
@@ -1106,7 +1109,7 @@
     }
 
     const first = row.getBoundingClientRect();
-    dest.insertBefore(row, dest.firstChild);
+    insertTodoRowSorted(dest, row);
     animateFly(row, first);
     writeTodoComplete(id, item, false);
   }
@@ -1356,6 +1359,74 @@
     });
   }
 
+  function todoDayKey(t) {
+    return todoDayKeyFromIso(t && t.due);
+  }
+
+  function todoDayKeyFromIso(iso) {
+    const raw = String(iso || "").trim();
+    if (!raw) return "";
+    const d = new Date(raw);
+    if (!Number.isNaN(d.getTime())) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${day}`;
+    }
+    const match = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+    return match ? match[1] : "";
+  }
+
+  function todoDaySepHtml() {
+    return `<li class="edu-day-sep" aria-hidden="true"></li>`;
+  }
+
+  function todoListItemsHtml(todos) {
+    const parts = [];
+    let prev = null;
+    for (const t of todos) {
+      const key = todoDayKey(t);
+      if (prev !== null && key !== prev) parts.push(todoDaySepHtml());
+      parts.push(todoRow(t));
+      prev = key;
+    }
+    return parts.join("");
+  }
+
+  function todoRowIsVisible(row) {
+    return (
+      !row.classList.contains("is-filter-hidden") &&
+      !row.classList.contains("is-collapse-hidden")
+    );
+  }
+
+  function syncTodoDaySeparators(list) {
+    if (!list) return;
+    list.querySelectorAll(":scope > .edu-day-sep").forEach((el) => el.remove());
+    const rows = [...list.querySelectorAll(":scope > .edu-todo")].filter(todoRowIsVisible);
+    let prev = null;
+    for (const row of rows) {
+      const key = row.getAttribute("data-due-date") || "";
+      if (prev !== null && key !== prev) {
+        const sep = document.createElement("li");
+        sep.className = "edu-day-sep";
+        sep.setAttribute("aria-hidden", "true");
+        list.insertBefore(sep, row);
+      }
+      prev = key;
+    }
+  }
+
+  function insertTodoRowSorted(list, row) {
+    if (!list || !row) return;
+    const due = row.getAttribute("data-due") || "9999";
+    const next = [...list.querySelectorAll(":scope > .edu-todo")].find(
+      (el) => (el.getAttribute("data-due") || "9999").localeCompare(due) > 0
+    );
+    if (next) list.insertBefore(row, next);
+    else list.appendChild(row);
+  }
+
   function todoRow(t) {
     const tag = t.tag || "HW";
     const due = t.due ? `<span class="edu-meta">${escapeHtml(formatDue(t.due))}</span>` : "";
@@ -1363,7 +1434,8 @@
       ? `<span class="edu-meta edu-course">${escapeHtml(prettyCourseName(t.courseName))}</span>`
       : "";
     const href = canvasHref(t.canvasLink);
-    return `<li class="edu-row edu-todo${t.done ? " is-done" : ""} ${toneClass(workTone(t))}" data-id="${escapeHtml(t.id || t.canvasId || "")}" data-tag="${escapeHtml(tag)}">
+    const day = todoDayKey(t);
+    return `<li class="edu-row edu-todo${t.done ? " is-done" : ""} ${toneClass(workTone(t))}" data-id="${escapeHtml(t.id || t.canvasId || "")}" data-tag="${escapeHtml(tag)}" data-due="${escapeHtml(t.due || "")}" data-due-date="${escapeHtml(day)}">
       <button type="button" class="edu-check${t.done ? " is-checked" : ""}" data-liquid-glass="circle" data-filter-id="lg-check-${escapeHtml(t.id)}" data-todo-id="${escapeHtml(t.id || t.canvasId || "")}" aria-label="${t.done ? "Mark incomplete" : "Mark complete"}"><span class="edu-check-dot"></span></button>
       <a class="edu-row-link" href="${escapeHtml(href)}" target="_blank" rel="noopener">
         <span class="edu-name"><span class="edu-tag edu-tag-${escapeHtml(tag)}">${escapeHtml(tag)}</span> ${escapeHtml(t.title)}</span>
@@ -1610,7 +1682,7 @@
     };
     const open = (lastHome.assignments || []).filter((t) => !t.done);
     const done = (lastHome.assignments || []).filter((t) => t.done);
-    const todoRows = open.map(todoRow).join("");
+    const todoRows = todoListItemsHtml(open);
     const classItems = homeClasses();
 
     const todoEmpty = me?.canvasConnected
@@ -1630,7 +1702,7 @@
       <div class="edu-grid edu-grid--home">
         <div class="edu-col edu-col--main">
           ${panelHtml("TODO", listOrEmpty(todoRows, todoEmpty), "lg-edu-todo", "", todoExpanded ? filterBarHtml("todo") : "", collapseTitle("TODO", todoExpanded))}
-          ${panelHtml("Completed", listOrEmpty(done.map(todoRow).join(""), "Nothing completed yet"), "lg-edu-completed", "edu-panel--completed")}
+          ${panelHtml("Completed", listOrEmpty(todoListItemsHtml(done), "Nothing completed yet"), "lg-edu-completed", "edu-panel--completed")}
         </div>
         <div class="edu-col edu-col--side">
           ${panelHtml("Classes", listOrEmpty(classItems.map(classRow).join(""), classEmpty), "lg-edu-classes")}
@@ -1725,8 +1797,8 @@
       </header>
       <div class="edu-grid edu-grid--home">
         <div class="edu-col edu-col--main">
-          ${panelHtml("TODO", listOrEmpty(open.map(todoRow).join(""), "No open work for this class"), "lg-edu-todo", "", todoExpanded ? filterBarHtml("todo") : "", collapseTitle("TODO", todoExpanded))}
-          ${panelHtml("Completed", listOrEmpty(done.map(todoRow).join(""), "Nothing completed yet"), "lg-edu-completed", "edu-panel--completed")}
+          ${panelHtml("TODO", listOrEmpty(todoListItemsHtml(open), "No open work for this class"), "lg-edu-todo", "", todoExpanded ? filterBarHtml("todo") : "", collapseTitle("TODO", todoExpanded))}
+          ${panelHtml("Completed", listOrEmpty(todoListItemsHtml(done), "Nothing completed yet"), "lg-edu-completed", "edu-panel--completed")}
         </div>
         <div class="edu-col edu-col--side">
           ${panelHtml("Notes", listOrEmpty(noteRows, "No notes for this class yet"), "lg-edu-class-notes")}

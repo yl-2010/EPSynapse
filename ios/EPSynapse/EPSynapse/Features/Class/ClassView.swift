@@ -141,10 +141,8 @@ struct ClassView: View {
             if todoItems.isEmpty {
                 EmptyLine("No open work")
             } else {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(visibleTodos) { item in
-                        TodoRow(item: item)
-                    }
+                TodoRows(items: visibleTodos) { item in
+                    TodoRow(item: item)
                 }
             }
         }
@@ -155,10 +153,8 @@ struct ClassView: View {
             if doneItems.isEmpty {
                 EmptyLine("Nothing completed yet")
             } else {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(doneItems) { item in
-                        TodoRow(item: item)
-                    }
+                TodoRows(items: doneItems) { item in
+                    TodoRow(item: item)
                 }
             }
         }
