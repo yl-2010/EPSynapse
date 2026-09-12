@@ -139,7 +139,23 @@ const COURSE_WORDS = new Set([
   "ap",
   "ab",
   "bc",
+  "speaking",
+  "speech",
+  "public",
+  "introduction",
+  "intro",
+  "mentor",
+  "mentors",
+  "seminar",
+  "research",
+  "journalism",
+  "debate",
+  "rhetoric",
+  "communications",
+  "communication",
 ]);
+
+const NAME_GLUE = new Set(["to", "of", "and", "the", "for", "in", "on", "with", "a", "an"]);
 
 function looksLikePersonName(token) {
   const t = String(token || "");
@@ -147,7 +163,7 @@ function looksLikePersonName(token) {
   return !COURSE_WORDS.has(t.toLowerCase());
 }
 
-function cleanCourseName(raw) {
+export function cleanCourseName(raw) {
   let name = String(raw || "")
     .replace(/\s+/g, " ")
     .replace(/^[\s|:.\-–—]+/, "")
@@ -155,11 +171,9 @@ function cleanCourseName(raw) {
   name = name.replace(/\s+[A-Z]{2,6}-[A-Z0-9]+\s*$/g, "").trim();
   name = name.replace(/\b(teacher|room|instructor)\b.*$/i, "").trim();
   const parts = name.split(/\s+/).filter(Boolean);
-  if (parts.length >= 2 && looksLikePersonName(parts[parts.length - 1])) {
+  while (parts.length >= 2 && looksLikePersonName(parts[parts.length - 1])) {
+    if (NAME_GLUE.has(parts[parts.length - 2].toLowerCase())) break;
     parts.pop();
-    if (parts.length >= 2 && looksLikePersonName(parts[parts.length - 1])) {
-      parts.pop();
-    }
   }
   name = parts.join(" ").trim();
   if (name.length > 80) name = name.slice(0, 80).trim();

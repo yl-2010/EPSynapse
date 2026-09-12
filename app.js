@@ -905,6 +905,22 @@
     return `${trimNum(w.score)}${pts}${letter}`;
   }
 
+  function prettyCourseName(raw) {
+    return String(raw || "")
+      .replace(/\s*\([^)]*\)/g, " ")
+      .replace(/\s*\d{4}-\d{2}\S*/g, " ")
+      .replace(/\s*:[a-z][a-z0-9_-]*$/i, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function fullerClassName(scheduleName, canvasName) {
+    const a = String(scheduleName || "").trim();
+    const b = prettyCourseName(canvasName);
+    if (a && b && courseNamesMatch(a, b) && b.length > a.length) return b;
+    return a || b;
+  }
+
   function gradeForClass(klass) {
     const ids = [
       klass?.canvasCourseId,
@@ -928,7 +944,7 @@
         return {
           ...g,
           id: g.id || klass.id,
-          name: klass.name || g.name,
+          name: fullerClassName(klass.name, g.name),
           period: periodLetter(klass.period),
           currentScore: g.currentScore,
           currentGrade: g.currentGrade,
@@ -1012,7 +1028,7 @@
     const meta = c.courseCode || (c.term ? c.term : "");
     return `<li class="edu-row edu-class-row${highlight ? " is-current" : ""}">
       <a class="edu-row-link" data-route href="${escapeHtml(href)}">
-        <span class="edu-name">${periodTagHtml(c.period)}<span class="edu-hero-class-name">${escapeHtml(c.name)}</span></span>
+        <span class="edu-name">${periodTagHtml(c.period)}<span class="edu-hero-class-name">${escapeHtml(fullerClassName(c.name, gradeForClass(c)?.name))}</span></span>
         <span class="edu-meta">${escapeHtml(meta)}</span>
       </a>
     </li>`;
@@ -1242,7 +1258,7 @@
       <p class="edu-home-mark"><a class="edu-home-research" data-route href="/">Home</a></p>
       <header class="edu-hero edu-hero--detail edu-hero--detail-canvas">
         <div class="edu-hero-lead">
-          <h1 class="edu-hero-title edu-hero-title--class">${period}<span class="edu-hero-class-name">${escapeHtml(klass.name)}</span></h1>
+          <h1 class="edu-hero-title edu-hero-title--class">${period}<span class="edu-hero-class-name">${escapeHtml(fullerClassName(klass.name, courseGrade?.name))}</span></h1>
           <p class="edu-hero-sub">${escapeHtml(sub)}</p>
         </div>
       </header>
@@ -1394,7 +1410,7 @@
         );
         return {
           ...c,
-          name: scheduled?.name || c.name,
+          name: fullerClassName(scheduled?.name, c.name),
           period: periodLetter(scheduled?.period || c.period),
         };
       });
