@@ -8,7 +8,7 @@
   const appEl = document.getElementById("edu-app");
   const sheet = document.getElementById("settings-sheet");
   const form = document.getElementById("settings-form") || sheet.querySelector("form");
-  const keysPanel = document.getElementById("settings-keys");
+  const sideEl = document.getElementById("settings-side");
   const statusEl = document.getElementById("settings-status");
   const odStatus = document.getElementById("onedrive-status");
   const olStatus = document.getElementById("outlook-status");
@@ -398,8 +398,16 @@
     queueMicrotask(() => window.reinitLiquidGlass?.());
   }
 
+  function sideOpen() {
+    return sheet.classList.contains("is-side");
+  }
+
+  function activePane() {
+    return sheet.dataset.pane || "";
+  }
+
   function keysOpen() {
-    return sheet.classList.contains("is-keys");
+    return sideOpen();
   }
 
   function accountHasKey() {
@@ -443,54 +451,109 @@
     applyAgentFromMe();
   }
 
-  function paintKeysSummary() {
-    const el = document.getElementById("keys-summary");
-    if (!el) return;
-    const id = providerSel.value || (me && me.modelProvider) || localStorage.getItem(LS_PROV) || "groq";
-    const bits = [];
-    if (accountHasKey()) {
-      const hint = me.modelKeyHint ? ` · ends ${me.modelKeyHint}` : "";
-      bits.push(`${id}${hint}`);
+  function paintNavSummaries() {
+    const school = document.getElementById("school-summary");
+    if (school) {
+      school.textContent =
+        (form.school && form.school.value.trim()) || (me && me.school) || "Eastside Prep";
     }
-    if (me && me.canvasConnected) bits.push("Canvas");
-    el.textContent = bits.length ? bits.join(" · ") : "Groq and Canvas";
+    const chat = document.getElementById("chat-summary");
+    if (chat) {
+      const id = providerSel.value || (me && me.modelProvider) || localStorage.getItem(LS_PROV) || "groq";
+      if (accountHasKey()) {
+        chat.textContent = me.modelKeyHint ? `${id} · ends ${me.modelKeyHint}` : id;
+      } else {
+        chat.textContent = "Add a Groq key";
+      }
+    }
+    const canvas = document.getElementById("canvas-summary");
+    if (canvas) canvas.textContent = me && me.canvasConnected ? "Connected" : "URL and token";
+    const od = document.getElementById("onedrive-summary");
+    if (od) {
+      od.textContent =
+        me && me.onedriveConnected ? me.onedriveEmail || "Connected" : "School files";
+    }
+    const ol = document.getElementById("outlook-summary");
+    if (ol) {
+      ol.textContent =
+        me && me.outlookConnected ? me.outlookEmail || "Connected" : "School mail";
+    }
+    document.querySelectorAll(".set-nav[data-pane]").forEach((btn) => {
+      btn.classList.toggle("is-on", btn.getAttribute("data-pane") === activePane());
+    });
   }
 
-  function openKeys() {
+  function paintKeysSummary() {
+    paintNavSummaries();
+  }
+
+  function showPane(name) {
+    document.querySelectorAll("#settings-side [data-pane]").forEach((el) => {
+      el.hidden = el.getAttribute("data-pane") !== name;
+    });
+  }
+
+  function openPane(name) {
     if (!signedInViaGoogle()) return;
-    sheet.classList.add("is-keys");
-    if (keysPanel) {
-      keysPanel.setAttribute("aria-hidden", "false");
-      keysPanel.removeAttribute("inert");
+    if (!name) {
+      closePane(true);
+      return;
+    }
+    if (activePane() === name) {
+      closePane();
+      return;
+    }
+    hideSchoolResults();
+    sheet.dataset.pane = name;
+    sheet.classList.add("is-side");
+    showPane(name);
+    if (sideEl) {
+      sideEl.setAttribute("aria-hidden", "false");
+      sideEl.removeAttribute("inert");
     }
     refreshKeyStatus();
     paintCanvasToken();
-    paintKeysSummary();
+    paintOnedrive();
+    paintOutlook();
+    paintNavSummaries();
     glassAfterMove();
     window.setTimeout(glassAfterMove, 320);
     window.setTimeout(glassAfterMove, 680);
   }
 
-  function closeKeys(immediate) {
+  function closePane(immediate) {
+    hideSchoolResults();
     const keyEntry = document.getElementById("key-entry");
     const canvasEntry = document.getElementById("canvas-entry");
     if (keyEntry) delete keyEntry.dataset.replace;
     if (canvasEntry) delete canvasEntry.dataset.replace;
-    sheet.classList.remove("is-keys");
-    if (keysPanel) {
-      keysPanel.setAttribute("aria-hidden", "true");
-      keysPanel.setAttribute("inert", "");
+    sheet.classList.remove("is-side");
+    delete sheet.dataset.pane;
+    document.querySelectorAll("#settings-side [data-pane]").forEach((el) => {
+      el.hidden = true;
+    });
+    if (sideEl) {
+      sideEl.setAttribute("aria-hidden", "true");
+      sideEl.setAttribute("inert", "");
     }
     refreshKeyStatus();
     paintCanvasToken();
-    paintKeysSummary();
+    paintNavSummaries();
     glassAfterMove();
     if (!immediate) window.setTimeout(glassAfterMove, 620);
   }
 
+  function openKeys() {
+    openPane("chat");
+  }
+
+  function closeKeys(immediate) {
+    closePane(immediate);
+  }
+
   function openSheet() {
     if (!signedInViaGoogle()) return;
-    closeKeys(true);
+    closePane(true);
     sheet.hidden = false;
     document.querySelector("#settings-main .edu-sheet-body")?.scrollTo(0, 0);
     const keyEntry = document.getElementById("key-entry");
@@ -501,7 +564,7 @@
     paintAccount();
     refreshKeyStatus();
     paintCanvasToken();
-    paintKeysSummary();
+    paintNavSummaries();
     paintOnedrive();
     paintOutlook();
     glassAfterMove();
@@ -509,7 +572,7 @@
 
   function closeSheet() {
     hideSchoolResults();
-    closeKeys(true);
+    closePane(true);
     sheet.hidden = true;
   }
 
@@ -769,11 +832,13 @@
     if (!signedInViaGoogle()) {
       setStatus(odStatus, NEED_GOOGLE);
       showOnedriveCode("", "");
+      paintNavSummaries();
       return;
     }
     if (!me) {
       setStatus(odStatus, "OneDrive");
       showOnedriveCode("", "");
+      paintNavSummaries();
       return;
     }
     const odBtn = document.getElementById("onedrive-start");
@@ -781,16 +846,19 @@
     if (me.onedriveConnected) {
       setStatus(odStatus, me.onedriveEmail ? `OneDrive · ${me.onedriveEmail}` : "OneDrive connected");
       showOnedriveCode("", "");
+      paintNavSummaries();
       return;
     }
     const p = me.onedrivePending;
     if (p && (p.user_code || p.verification_uri)) {
       setStatus(odStatus, "Enter this code, then sign in with your school email.");
       showOnedriveCode(p.user_code, p.verification_uri || "https://login.microsoft.com/device");
+      paintNavSummaries();
       return;
     }
     setStatus(odStatus, "OneDrive");
     showOnedriveCode("", "");
+    paintNavSummaries();
   }
 
   function showOutlookCode(code, uri) {
@@ -816,11 +884,13 @@
     if (!signedInViaGoogle()) {
       setStatus(olStatus, NEED_GOOGLE);
       showOutlookCode("", "");
+      paintNavSummaries();
       return;
     }
     if (!me) {
       setStatus(olStatus, "Outlook");
       showOutlookCode("", "");
+      paintNavSummaries();
       return;
     }
     const olBtn = document.getElementById("outlook-start");
@@ -828,16 +898,19 @@
     if (me.outlookConnected) {
       setStatus(olStatus, me.outlookEmail ? `Outlook · ${me.outlookEmail}` : "Outlook connected");
       showOutlookCode("", "");
+      paintNavSummaries();
       return;
     }
     const p = me.outlookPending;
     if (p && (p.user_code || p.verification_uri)) {
       setStatus(olStatus, "Enter this code, then sign in with your school email.");
       showOutlookCode(p.user_code, p.verification_uri || "https://login.microsoft.com/device");
+      paintNavSummaries();
       return;
     }
     setStatus(olStatus, "Outlook");
     showOutlookCode("", "");
+    paintNavSummaries();
   }
 
   function paintCanvasToken() {
@@ -956,6 +1029,7 @@
   schoolInput.addEventListener("input", () => {
     const slugEl = document.getElementById("schoolSlug");
     if (slugEl) slugEl.value = "";
+    paintNavSummaries();
     clearTimeout(schoolTimer);
     schoolTimer = setTimeout(() => searchSchools(schoolInput.value), 220);
   });
@@ -1003,11 +1077,15 @@
       closeSheet();
     }
   });
-  document.getElementById("keys-open")?.addEventListener("click", () => {
-    openKeys();
+  document.querySelectorAll(".set-nav[data-pane]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      openPane(btn.getAttribute("data-pane"));
+    });
   });
-  document.getElementById("keys-close")?.addEventListener("click", () => {
-    closeKeys();
+  document.querySelectorAll(".set-pane-close").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      closePane();
+    });
   });
   appEl.addEventListener("change", (ev) => {
     const input = ev.target.closest("input[data-filter]");

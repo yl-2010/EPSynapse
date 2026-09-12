@@ -2413,29 +2413,30 @@ html[data-resolved-theme="dark"] .edu-sheet-backdrop {
   --set-ease: cubic-bezier(0.22, 1, 0.36, 1);
   position: relative;
   z-index: 121;
-  display: grid;
-  grid-template-columns: var(--set-card) 0fr;
-  gap: 0;
+  display: flex;
+  justify-content: center;
   align-items: stretch;
+  width: max-content;
   max-width: 100%;
-  transition:
-    grid-template-columns 0.64s var(--set-ease),
-    gap 0.64s var(--set-ease);
+  gap: 0;
+  transition: gap 0.64s var(--set-ease);
 }
 
-.edu-sheet-backdrop.is-keys .set-stage {
-  grid-template-columns: var(--set-card) var(--set-keys);
+.edu-sheet-backdrop.is-side .set-stage {
   gap: 1rem;
 }
 
-.set-stage > .edu-sheet {
+.set-stage > #settings-main {
+  flex: 0 0 var(--set-card);
   width: var(--set-card);
   max-width: none;
   min-width: 0;
 }
 
-.set-stage > #settings-keys {
-  width: var(--set-keys);
+.set-side {
+  display: flex;
+  flex: 0 0 0;
+  width: 0;
   min-width: 0;
   overflow: hidden;
   opacity: 0;
@@ -2443,21 +2444,40 @@ html[data-resolved-theme="dark"] .edu-sheet-backdrop {
   filter: blur(10px);
   pointer-events: none;
   transition:
+    flex-basis 0.64s var(--set-ease),
+    width 0.64s var(--set-ease),
     opacity 0.48s var(--set-ease),
     transform 0.64s var(--set-ease),
     filter 0.48s ease;
 }
 
-.edu-sheet-backdrop.is-keys #settings-keys {
-  min-width: var(--set-keys);
+.edu-sheet-backdrop.is-side .set-side {
+  flex: 0 0 var(--set-keys);
+  width: var(--set-keys);
   opacity: 1;
   transform: none;
   filter: none;
   pointer-events: auto;
 }
 
-.set-stage > #settings-main {
-  transition: transform 0.64s var(--set-ease), box-shadow 0.64s var(--set-ease);
+.set-side > .edu-sheet {
+  width: var(--set-keys);
+  min-width: var(--set-keys);
+  max-width: none;
+}
+
+.set-side > .edu-sheet[hidden] {
+  display: none !important;
+}
+
+.set-stage .edu-sheet-head {
+  border-bottom: 0;
+  background: transparent;
+  padding: 1.05rem 1.15rem 0.2rem;
+}
+
+.set-stage .edu-sheet-body {
+  padding-top: 0.55rem;
 }
 
 @media (max-width: 62rem) {
@@ -2466,18 +2486,18 @@ html[data-resolved-theme="dark"] .edu-sheet-backdrop {
     --set-keys: min(32rem, calc(100vw - 2rem));
     width: var(--set-card);
     overflow: hidden;
-    grid-template-columns: var(--set-card) var(--set-keys);
+    justify-content: flex-start;
     gap: 1rem;
     transition: transform 0.64s var(--set-ease);
   }
 
-  .edu-sheet-backdrop.is-keys .set-stage {
-    grid-template-columns: var(--set-card) var(--set-keys);
+  .edu-sheet-backdrop.is-side .set-stage {
     transform: translateX(calc(-1 * (var(--set-card) + 1rem)));
   }
 
-  .set-stage > #settings-keys {
-    min-width: var(--set-keys);
+  .set-side {
+    flex: 0 0 var(--set-keys);
+    width: var(--set-keys);
     opacity: 1;
     transform: none;
     filter: none;
@@ -2486,7 +2506,7 @@ html[data-resolved-theme="dark"] .edu-sheet-backdrop {
 
 @media (prefers-reduced-motion: reduce) {
   .set-stage,
-  .set-stage > #settings-keys,
+  .set-side,
   .set-stage > #settings-main {
     transition: none;
   }
@@ -2524,7 +2544,12 @@ html[data-resolved-theme="dark"] .set-nav {
   }
 }
 
-.set-nav:hover {
+.set-nav + .set-nav {
+  margin-top: 0.45rem;
+}
+
+.set-nav:hover,
+.set-nav.is-on {
   border-color: color-mix(in srgb, var(--accent) 42%, transparent);
 }
 
@@ -2630,6 +2655,18 @@ html[data-resolved-theme="dark"] .edu-sheet-head {
 @media (prefers-color-scheme: dark) {
   html:not([data-resolved-theme="light"]) .edu-sheet-head {
     background: #0b1f3a;
+  }
+}
+
+.set-stage .edu-sheet-head,
+html[data-resolved-theme="dark"] .set-stage .edu-sheet-head {
+  border-bottom: 0;
+  background: transparent;
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-resolved-theme="light"]) .set-stage .edu-sheet-head {
+    background: transparent;
   }
 }
 

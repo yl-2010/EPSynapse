@@ -18,7 +18,7 @@
     <title>EPSynapse</title>
     <meta name="description" content="EPSynapse student dashboard" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/styles.css?v=glass18" />
+    <link rel="stylesheet" href="/styles.css?v=glass19" />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
       .od-code {
@@ -283,54 +283,46 @@
 
         <div id="settings-gated" class="edu-sheet-gated">
         <section class="set-block">
-          <h3>School</h3>
-          <div class="edu-school-search">
-            <label for="school">School</label>
-            <div class="edu-sheet-field">
-              <input id="school" name="school" value="Eastside Prep" maxlength="80" autocomplete="off" />
-            </div>
-            <input type="hidden" id="schoolSlug" name="schoolSlug" value="" />
-            <ul id="school-results" class="edu-school-results" hidden role="listbox" aria-label="Schools"></ul>
-          </div>
-
-          <label for="studentId">Student ID</label>
-          <div class="edu-sheet-field">
-            <input id="studentId" name="studentId" maxlength="80" placeholder="Optional" />
-          </div>
-
-          <label for="canvasHost">Canvas URL</label>
-          <div class="edu-sheet-field">
-            <input id="canvasHost" name="canvasHost" value="https://eastsideprep.instructure.com" />
-          </div>
-
-          <div class="edu-sheet-actions">
-            <button type="submit" id="settings-save" class="edu-sheet-btn edu-sheet-btn--gold">Save</button>
-          </div>
-        </section>
-
-        <section class="set-block">
-          <h3>Microsoft</h3>
-          <div class="set-row">
-            <p class="set-hint" id="onedrive-status">OneDrive</p>
-            <button type="button" id="onedrive-start" class="edu-sheet-btn">Connect</button>
-          </div>
-          <p id="onedrive-code" class="od-code" hidden></p>
-          <a id="onedrive-open" class="set-link" href="https://login.microsoft.com/device" target="_blank" rel="noopener" hidden>Open Microsoft sign-in</a>
-
-          <div class="set-row">
-            <p class="set-hint" id="outlook-status">Outlook</p>
-            <button type="button" id="outlook-start" class="edu-sheet-btn">Connect</button>
-          </div>
-          <p id="outlook-code" class="od-code" hidden></p>
-          <a id="outlook-open" class="set-link" href="https://login.microsoft.com/device" target="_blank" rel="noopener" hidden>Open Microsoft sign-in</a>
-        </section>
-
-        <section class="set-block">
-          <h3>Keys</h3>
-          <button type="button" id="keys-open" class="set-nav">
+          <button type="button" class="set-nav" data-pane="school">
             <span class="set-nav-copy">
-              <span class="set-nav-title">API keys</span>
-              <span class="set-nav-meta" id="keys-summary">Groq and Canvas</span>
+              <span class="set-nav-title">School</span>
+              <span class="set-nav-meta" id="school-summary">Eastside Prep</span>
+            </span>
+            <svg class="set-nav-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M9 6.2L15.2 12L9 17.8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <button type="button" class="set-nav" data-pane="chat">
+            <span class="set-nav-copy">
+              <span class="set-nav-title">Chat key</span>
+              <span class="set-nav-meta" id="chat-summary">Groq</span>
+            </span>
+            <svg class="set-nav-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M9 6.2L15.2 12L9 17.8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <button type="button" class="set-nav" data-pane="canvas">
+            <span class="set-nav-copy">
+              <span class="set-nav-title">Canvas</span>
+              <span class="set-nav-meta" id="canvas-summary">URL and token</span>
+            </span>
+            <svg class="set-nav-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M9 6.2L15.2 12L9 17.8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <button type="button" class="set-nav" data-pane="onedrive">
+            <span class="set-nav-copy">
+              <span class="set-nav-title">OneDrive</span>
+              <span class="set-nav-meta" id="onedrive-summary">School files</span>
+            </span>
+            <svg class="set-nav-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M9 6.2L15.2 12L9 17.8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <button type="button" class="set-nav" data-pane="outlook">
+            <span class="set-nav-copy">
+              <span class="set-nav-title">Outlook</span>
+              <span class="set-nav-meta" id="outlook-summary">School mail</span>
             </span>
             <svg class="set-nav-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path d="M9 6.2L15.2 12L9 17.8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -341,25 +333,45 @@
         </div>
       </div>
 
-      <div class="edu-sheet edu-sheet--set edu-sheet--keys" id="settings-keys" aria-hidden="true" inert>
-        <div class="edu-sheet-head">
-          <h2 class="edu-sheet-title">API keys</h2>
-          <button
-            type="button"
-            id="keys-close"
-            class="edu-sheet-close"
-            aria-label="Close API keys"
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor" shape-rendering="geometricPrecision" aria-hidden="true">
-              <path
-                d="M5.448 7.252 16.748 18.552a1.275 1.275 0 0 0 1.804-1.804L7.252 5.448a1.275 1.275 0 0 0-1.804 1.804Zm11.3-1.804L5.448 16.748a1.275 1.275 0 0 0 1.804 1.804L18.552 7.252a1.275 1.275 0 0 0-1.804-1.804Z"
-              />
-            </svg>
-          </button>
+      <div class="set-side" id="settings-side" aria-hidden="true" inert>
+        <div class="edu-sheet edu-sheet--set" data-pane="school" hidden>
+          <div class="edu-sheet-head">
+            <h2 class="edu-sheet-title">School</h2>
+            <button type="button" class="edu-sheet-close set-pane-close" aria-label="Close school">
+              <svg viewBox="0 0 24 24" fill="currentColor" shape-rendering="geometricPrecision" aria-hidden="true">
+                <path d="M5.448 7.252 16.748 18.552a1.275 1.275 0 0 0 1.804-1.804L7.252 5.448a1.275 1.275 0 0 0-1.804 1.804Zm11.3-1.804L5.448 16.748a1.275 1.275 0 0 0 1.804 1.804L18.552 7.252a1.275 1.275 0 0 0-1.804-1.804Z"/>
+              </svg>
+            </button>
+          </div>
+          <div class="edu-sheet-body">
+            <div class="edu-school-search">
+              <label for="school">School</label>
+              <div class="edu-sheet-field">
+                <input id="school" name="school" value="Eastside Prep" maxlength="80" autocomplete="off" />
+              </div>
+              <input type="hidden" id="schoolSlug" name="schoolSlug" value="" />
+              <ul id="school-results" class="edu-school-results" hidden role="listbox" aria-label="Schools"></ul>
+            </div>
+            <label for="studentId">Student ID</label>
+            <div class="edu-sheet-field">
+              <input id="studentId" name="studentId" maxlength="80" placeholder="Optional" />
+            </div>
+            <div class="edu-sheet-actions">
+              <button type="submit" id="settings-save" class="edu-sheet-btn edu-sheet-btn--gold">Save</button>
+            </div>
+          </div>
         </div>
-        <div class="edu-sheet-body">
-          <section class="set-block">
-            <h3>Chat</h3>
+
+        <div class="edu-sheet edu-sheet--set" data-pane="chat" hidden>
+          <div class="edu-sheet-head">
+            <h2 class="edu-sheet-title">Chat key</h2>
+            <button type="button" class="edu-sheet-close set-pane-close" aria-label="Close chat key">
+              <svg viewBox="0 0 24 24" fill="currentColor" shape-rendering="geometricPrecision" aria-hidden="true">
+                <path d="M5.448 7.252 16.748 18.552a1.275 1.275 0 0 0 1.804-1.804L7.252 5.448a1.275 1.275 0 0 0-1.804 1.804Zm11.3-1.804L5.448 16.748a1.275 1.275 0 0 0 1.804 1.804L18.552 7.252a1.275 1.275 0 0 0-1.804-1.804Z"/>
+              </svg>
+            </button>
+          </div>
+          <div class="edu-sheet-body">
             <div id="key-ready" hidden>
               <div class="set-row">
                 <p class="set-ready" id="key-ready-label"></p>
@@ -384,10 +396,23 @@
             </div>
             <p class="set-hint" id="key-status"></p>
             <a class="set-link" href="/groq">How to get a Groq key</a>
-          </section>
+          </div>
+        </div>
 
-          <section class="set-block">
-            <h3>Canvas</h3>
+        <div class="edu-sheet edu-sheet--set" data-pane="canvas" hidden>
+          <div class="edu-sheet-head">
+            <h2 class="edu-sheet-title">Canvas</h2>
+            <button type="button" class="edu-sheet-close set-pane-close" aria-label="Close Canvas">
+              <svg viewBox="0 0 24 24" fill="currentColor" shape-rendering="geometricPrecision" aria-hidden="true">
+                <path d="M5.448 7.252 16.748 18.552a1.275 1.275 0 0 0 1.804-1.804L7.252 5.448a1.275 1.275 0 0 0-1.804 1.804Zm11.3-1.804L5.448 16.748a1.275 1.275 0 0 0 1.804 1.804L18.552 7.252a1.275 1.275 0 0 0-1.804-1.804Z"/>
+              </svg>
+            </button>
+          </div>
+          <div class="edu-sheet-body">
+            <label for="canvasHost">Canvas URL</label>
+            <div class="edu-sheet-field">
+              <input id="canvasHost" name="canvasHost" value="https://eastsideprep.instructure.com" />
+            </div>
             <div id="canvas-ready" hidden>
               <div class="set-row">
                 <p class="set-ready">Canvas connected</p>
@@ -402,9 +427,47 @@
               <p class="set-hint">Canvas → Account → Settings → New Access Token</p>
             </div>
             <div class="edu-sheet-actions">
-              <button type="submit" class="edu-sheet-btn edu-sheet-btn--gold">Save token</button>
+              <button type="submit" class="edu-sheet-btn edu-sheet-btn--gold">Save</button>
             </div>
-          </section>
+          </div>
+        </div>
+
+        <div class="edu-sheet edu-sheet--set" data-pane="onedrive" hidden>
+          <div class="edu-sheet-head">
+            <h2 class="edu-sheet-title">OneDrive</h2>
+            <button type="button" class="edu-sheet-close set-pane-close" aria-label="Close OneDrive">
+              <svg viewBox="0 0 24 24" fill="currentColor" shape-rendering="geometricPrecision" aria-hidden="true">
+                <path d="M5.448 7.252 16.748 18.552a1.275 1.275 0 0 0 1.804-1.804L7.252 5.448a1.275 1.275 0 0 0-1.804 1.804Zm11.3-1.804L5.448 16.748a1.275 1.275 0 0 0 1.804 1.804L18.552 7.252a1.275 1.275 0 0 0-1.804-1.804Z"/>
+              </svg>
+            </button>
+          </div>
+          <div class="edu-sheet-body">
+            <p class="set-hint" id="onedrive-status">School OneDrive. Connect with @eastsideprep.org.</p>
+            <div class="edu-sheet-actions">
+              <button type="button" id="onedrive-start" class="edu-sheet-btn">Connect</button>
+            </div>
+            <p id="onedrive-code" class="od-code" hidden></p>
+            <a id="onedrive-open" class="set-link" href="https://login.microsoft.com/device" target="_blank" rel="noopener" hidden>Open Microsoft sign-in</a>
+          </div>
+        </div>
+
+        <div class="edu-sheet edu-sheet--set" data-pane="outlook" hidden>
+          <div class="edu-sheet-head">
+            <h2 class="edu-sheet-title">Outlook</h2>
+            <button type="button" class="edu-sheet-close set-pane-close" aria-label="Close Outlook">
+              <svg viewBox="0 0 24 24" fill="currentColor" shape-rendering="geometricPrecision" aria-hidden="true">
+                <path d="M5.448 7.252 16.748 18.552a1.275 1.275 0 0 0 1.804-1.804L7.252 5.448a1.275 1.275 0 0 0-1.804 1.804Zm11.3-1.804L5.448 16.748a1.275 1.275 0 0 0 1.804 1.804L18.552 7.252a1.275 1.275 0 0 0-1.804-1.804Z"/>
+              </svg>
+            </button>
+          </div>
+          <div class="edu-sheet-body">
+            <p class="set-hint" id="outlook-status">School Outlook. Same Microsoft sign-in, mail only.</p>
+            <div class="edu-sheet-actions">
+              <button type="button" id="outlook-start" class="edu-sheet-btn">Connect</button>
+            </div>
+            <p id="outlook-code" class="od-code" hidden></p>
+            <a id="outlook-open" class="set-link" href="https://login.microsoft.com/device" target="_blank" rel="noopener" hidden>Open Microsoft sign-in</a>
+          </div>
         </div>
       </div>
       </form>
@@ -425,7 +488,7 @@
 
     <script src="/liquid-glass.js?v=glass9"></script>
     <script src="/theme-orb.js?v=glass9"></script>
-    <script src="/app.js?v=glass18"></script>
+    <script src="/app.js?v=glass19"></script>
     <script src="/chatbot.js?v=glass10"></script>
   </body>
 </html>
