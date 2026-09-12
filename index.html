@@ -145,7 +145,12 @@
           var cfg = await fetch("/runtime-config.json", { cache: "no-store" }).then(function (r) {
             return r.json();
           });
-          var res = await fetch(cfg.apiBase + "/health", { cache: "no-store" });
+          var host = location.hostname;
+          var apiBase =
+            host === "localhost" || host === "127.0.0.1"
+              ? cfg.localApiBase || "http://127.0.0.1:3006"
+              : cfg.apiBase;
+          var res = await fetch(apiBase + "/health", { cache: "no-store" });
           var body = await res.json();
           if (body && body.ok) {
             dot.className = "dot up";

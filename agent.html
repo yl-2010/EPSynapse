@@ -436,7 +436,11 @@
             var runtime = await fetch("/runtime-config.json", { cache: "no-store" }).then(function (r) {
               return r.json();
             });
-            apiBase = runtime.apiBase || "";
+            var host = location.hostname;
+            apiBase =
+              host === "localhost" || host === "127.0.0.1"
+                ? runtime.localApiBase || "http://127.0.0.1:3006"
+                : runtime.apiBase || "";
             config = await fetch(apiBase + "/v1/agent/config", { cache: "no-store" }).then(function (r) {
               return r.json();
             });
