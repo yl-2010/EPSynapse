@@ -1,10 +1,8 @@
 import SwiftUI
+import UIKit
 
 struct ChatHistoryOverlay: View {
     @EnvironmentObject private var chat: ChatStore
-    @State private var interceptClose = false
-    @State private var closeStart: CGFloat = 0
-    @State private var closeEngaged = false
     @State private var panelMounted = false
     @State private var panelWarming = false
     @State private var didWarm = false
@@ -51,20 +49,15 @@ struct ChatHistoryOverlay: View {
             }
             .onChange(of: chat.historyReveal) { _, value in
                 if value >= 1 {
-                    interceptClose = true
                     panelMounted = true
                 }
-                if value <= 0 {
-                    interceptClose = false
-                    if !chat.historyDragging && !panelWarming {
-                        panelMounted = false
-                    }
+                if value <= 0, !chat.historyDragging, !panelWarming {
+                    panelMounted = false
                 }
             }
             .onChange(of: chat.historyDragging) { _, dragging in
                 if dragging { panelMounted = true }
             }
-            .simultaneousGesture(closeDrag(travel: travel))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ignoresSafeArea()
@@ -77,10 +70,7 @@ struct ChatHistoryOverlay: View {
     }
 
     private var overlayHits: Bool {
-        if chat.historyDragging {
-            return interceptClose || chat.historyReveal > 0.5
-        }
-        return chat.historyReveal > 0.5
+        chat.historyDragging || chat.historyReveal > 0.5
     }
 
     static let hideExtra: CGFloat = 64
@@ -137,56 +127,6 @@ struct ChatHistoryOverlay: View {
         }
     }
 
-    private func closeDrag(travel: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 12, coordinateSpace: .local)
-            .onChanged { value in
-                let dx = value.translation.width
-                let dy = value.translation.height
-                if !closeEngaged {
-                    guard dx < 0, abs(dx) > 8, abs(dx) > abs(dy) * 1.15 else { return }
-                    closeEngaged = true
-                    closeStart = chat.historyReveal
-                    chat.historyDragging = true
-                    panelMounted = true
-                    hapticGate.reset()
-                    EPSHaptics.swipeBegin()
-                    hapticGate.handle(closeStart)
-                }
-                follow(start: closeStart, dx: dx, travel: travel)
-                hapticGate.handle(min(max(chat.historyReveal, 0), 1))
-            }
-            .onEnded { value in
-                guard closeEngaged else { return }
-                closeEngaged = false
-                commit(velocity: value.velocity.width)
-            }
-    }
-
-    private func follow(start: CGFloat, dx: CGFloat, travel: CGFloat) {
-        let raw = start + dx / max(travel, 1)
-        var transaction = Transaction()
-        transaction.disablesAnimations = true
-        withTransaction(transaction) {
-            chat.historyReveal = Self.rubber(raw)
-        }
-    }
-
-    private func commit(velocity vx: CGFloat) {
-        chat.historyDragging = false
-        let open: Bool
-        if vx >= Self.commitVelocity, chat.historyReveal > 0.08 {
-            open = true
-        } else if vx <= -Self.commitVelocity, chat.historyReveal < 0.92 {
-            open = false
-        } else {
-            open = Self.linear(chat.historyReveal) >= 0.5
-        }
-        chat.setHistoryOpen(open)
-        if !open {
-            panelMounted = chat.historyReveal > 0.01
-        }
-    }
-
     static func rubber(_ raw: CGFloat) -> CGFloat {
         if raw < 0 { return raw * 0.22 }
         if raw > 1 { return 1 + (raw - 1) * 0.22 }
@@ -203,12 +143,17 @@ struct ChatHistoryOverlay: View {
 struct ChatHistoryOpenModifier: ViewModifier {
     @EnvironmentObject private var chat: ChatStore
     @EnvironmentObject private var dashboard: DashboardStore
-    @State private var startReveal: CGFloat = 0
-    @State private var engaged = false
-    @State private var hapticGate = EPSHalfwayHapticGate(threshold: 0.5)
 
     func body(content: Content) -> some View {
-        content.simultaneousGesture(openDrag)
+        content.background {
+            ChatHistoryPanBridge(
+                travel: max(chat.historyPanelWidth, 1),
+                blocksOpen: blocksHistoryOpen
+            )
+            .frame(width: 0, height: 0)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
     }
 
     private var blocksHistoryOpen: Bool {
@@ -216,52 +161,186 @@ struct ChatHistoryOpenModifier: ViewModifier {
         let view = dashboard.uiContext.view.lowercased()
         return view == "class" || view == "note" || view == "todo"
     }
-
-    private var openDrag: some Gesture {
-        DragGesture(minimumDistance: 12)
-            .onChanged { value in
-                guard !blocksHistoryOpen else { return }
-                let dx = value.translation.width
-                let dy = value.translation.height
-                if !engaged {
-                    guard dx > 8, abs(dx) > abs(dy) * 1.15 else { return }
-                    engaged = true
-                    startReveal = chat.historyReveal
-                    chat.historyDragging = true
-                    hapticGate.reset()
-                    EPSHaptics.swipeBegin()
-                    hapticGate.handle(startReveal)
-                    Task { await chat.loadList() }
-                }
-                let travel = max(chat.historyPanelWidth, 1)
-                let raw = startReveal + dx / travel
-                var transaction = Transaction()
-                transaction.disablesAnimations = true
-                withTransaction(transaction) {
-                    chat.historyReveal = ChatHistoryOverlay.rubber(raw)
-                }
-                hapticGate.handle(min(max(chat.historyReveal, 0), 1))
-            }
-            .onEnded { value in
-                guard engaged else { return }
-                engaged = false
-                chat.historyDragging = false
-                let vx = value.velocity.width
-                let open: Bool
-                if vx >= ChatHistoryOverlay.commitVelocity, chat.historyReveal > 0.08 {
-                    open = true
-                } else if vx <= -ChatHistoryOverlay.commitVelocity, chat.historyReveal < 0.92 {
-                    open = false
-                } else {
-                    open = ChatHistoryOverlay.linear(chat.historyReveal) >= 0.5
-                }
-                chat.setHistoryOpen(open)
-            }
-    }
 }
 
 extension View {
     func chatHistoryOpenGesture() -> some View {
         modifier(ChatHistoryOpenModifier())
+    }
+}
+
+/// Window pan so a left-to-right swipe opens past chats even when the home
+/// scroll or the iOS 26 full-content back gesture would eat a SwiftUI drag.
+private struct ChatHistoryPanBridge: UIViewRepresentable {
+    var travel: CGFloat
+    var blocksOpen: Bool
+
+    func makeUIView(context: Context) -> ChatHistoryPanInstaller {
+        let view = ChatHistoryPanInstaller()
+        view.travel = travel
+        view.blocksOpen = blocksOpen
+        return view
+    }
+
+    func updateUIView(_ view: ChatHistoryPanInstaller, context: Context) {
+        view.travel = travel
+        view.blocksOpen = blocksOpen
+        view.attach(to: view.window)
+        view.syncNavPop()
+    }
+
+    static func dismantleUIView(_ view: ChatHistoryPanInstaller, coordinator: ()) {
+        view.detach()
+    }
+}
+
+final class ChatHistoryPanInstaller: UIView, UIGestureRecognizerDelegate {
+    var travel: CGFloat = 280
+    var blocksOpen = false
+
+    private let pan = UIPanGestureRecognizer()
+    private var engaged = false
+    private var startReveal: CGFloat = 0
+    private var hapticGate = EPSHalfwayHapticGate(threshold: 0.5)
+    private weak var hostView: UIView?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false
+        backgroundColor = .clear
+        pan.addTarget(self, action: #selector(handlePan))
+        pan.cancelsTouchesInView = false
+        pan.maximumNumberOfTouches = 1
+        pan.delegate = self
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        attach(to: window)
+        syncNavPop()
+    }
+
+    func detach() {
+        hostView?.removeGestureRecognizer(pan)
+        hostView = nil
+    }
+
+    func attach(to window: UIWindow?) {
+        if hostView === window { return }
+        hostView?.removeGestureRecognizer(pan)
+        hostView = window
+        window?.addGestureRecognizer(pan)
+    }
+
+    /// On home, turn off system swipe-back so it cannot swallow the history swipe.
+    /// Pushed pages keep the system pop.
+    func syncNavPop() {
+        guard let nav = findHomeNavigation() else { return }
+        nav.interactivePopGestureRecognizer?.isEnabled = blocksOpen
+        if #available(iOS 26, *) {
+            nav.interactiveContentPopGestureRecognizer.isEnabled = blocksOpen
+        }
+    }
+
+    @objc private func handlePan(_ gesture: UIPanGestureRecognizer) {
+        guard let view = gesture.view else { return }
+        if view.window?.rootViewController?.presentedViewController != nil { return }
+
+        let translation = gesture.translation(in: view)
+        let velocity = gesture.velocity(in: view)
+
+        switch gesture.state {
+        case .began, .changed:
+            applyDrag(dx: translation.width)
+        case .ended, .cancelled, .failed:
+            finishDrag(velocityX: velocity.x)
+        default:
+            break
+        }
+    }
+
+    private func applyDrag(dx: CGFloat) {
+        MainActor.assumeIsolated {
+            let chat = ChatStore.shared
+            if !engaged {
+                engaged = true
+                startReveal = chat.historyReveal
+                chat.historyDragging = true
+                hapticGate.reset()
+                EPSHaptics.swipeBegin()
+                hapticGate.handle(startReveal)
+                Task { await chat.loadList() }
+            }
+            let raw = startReveal + dx / max(travel, 1)
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                chat.historyReveal = ChatHistoryOverlay.rubber(raw)
+            }
+            hapticGate.handle(min(max(chat.historyReveal, 0), 1))
+        }
+    }
+
+    private func finishDrag(velocityX: CGFloat) {
+        MainActor.assumeIsolated {
+            guard engaged else { return }
+            engaged = false
+            let chat = ChatStore.shared
+            chat.historyDragging = false
+            let open: Bool
+            if velocityX >= ChatHistoryOverlay.commitVelocity, chat.historyReveal > 0.08 {
+                open = true
+            } else if velocityX <= -ChatHistoryOverlay.commitVelocity, chat.historyReveal < 0.92 {
+                open = false
+            } else {
+                open = ChatHistoryOverlay.linear(chat.historyReveal) >= 0.5
+            }
+            chat.setHistoryOpen(open)
+        }
+    }
+
+    override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard let pan = gestureRecognizer as? UIPanGestureRecognizer else { return false }
+        if window?.rootViewController?.presentedViewController != nil { return false }
+        let reveal = MainActor.assumeIsolated { ChatStore.shared.historyReveal }
+        if blocksOpen && reveal < 0.5 { return false }
+        let velocity = pan.velocity(in: pan.view)
+        let translation = pan.translation(in: pan.view)
+        let dx = hypot(velocity.x, velocity.y) > 8 ? velocity.x : translation.x
+        let dy = hypot(velocity.x, velocity.y) > 8 ? velocity.y : translation.y
+        if reveal < 0.08 {
+            return dx > 0 && abs(dx) > abs(dy) * 1.15
+        }
+        return abs(dx) > abs(dy) * 1.15
+    }
+
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+        true
+    }
+
+    private func findHomeNavigation() -> UINavigationController? {
+        guard let root = window?.rootViewController else { return nil }
+        return deepestNavigation(from: root)
+    }
+
+    private func deepestNavigation(from root: UIViewController) -> UINavigationController? {
+        if let nav = root as? UINavigationController {
+            for child in root.children.reversed() {
+                if let found = deepestNavigation(from: child) { return found }
+            }
+            return nav
+        }
+        for child in root.children.reversed() {
+            if let found = deepestNavigation(from: child) { return found }
+        }
+        return nil
     }
 }

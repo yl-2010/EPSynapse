@@ -105,17 +105,6 @@ struct ChatOverlay: View {
     private var composer: some View {
         HStack(spacing: 8) {
             if isOpen {
-                Button {
-                    minimize()
-                } label: {
-                    minusGlyph
-                        .foregroundStyle(EPSTheme.fg)
-                        .frame(width: 36, height: 36)
-                }
-                .buttonStyle(.plain)
-                .epsSizedGlassCircle(side: 36)
-                .accessibilityLabel("Hide chat")
-
                 TextField("Ask your personal agent…", text: $draft, axis: .vertical)
                     .lineLimit(1 ... 4)
                     .font(.body)
@@ -137,12 +126,15 @@ struct ChatOverlay: View {
                 } label: {
                     Image(systemName: "arrow.up")
                         .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(Color.white)
+                        .foregroundStyle(EPSTheme.fg)
                         .frame(width: 36, height: 36)
                 }
                 .buttonStyle(.plain)
                 .disabled(chat.busy || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .epsSizedGlassCircle(side: 36, tint: EPSTheme.accent)
+                .epsSizedGlassCircle(
+                    side: 36,
+                    tint: EPSTheme.accent.opacity(colorScheme == .dark ? 0.12 : 0.42)
+                )
                 .accessibilityLabel("Send")
             } else {
                 Button {
@@ -169,24 +161,7 @@ struct ChatOverlay: View {
     }
 
     private var messagePanel: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Spacer(minLength: 0)
-                Button {
-                    clearChat()
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 14, weight: .bold))
-                        .rotationEffect(.degrees(45))
-                        .foregroundStyle(EPSTheme.fg)
-                        .frame(width: 36, height: 36)
-                }
-                .buttonStyle(.plain)
-                .epsSizedGlassCircle(side: 36)
-                .accessibilityLabel("New chat")
-            }
-            .padding(.bottom, 8)
-
+        ZStack(alignment: .top) {
             if chat.turns.isEmpty {
                 ScrollView(.vertical) {
                     if hasChatKey {
@@ -200,7 +175,7 @@ struct ChatOverlay: View {
                     }
                 }
                 .epsVerticalScrollOnly()
-                .padding(.vertical, 8)
+                .padding(.top, 28)
             } else {
                 ScrollViewReader { proxy in
                     ScrollView(.vertical) {
@@ -210,6 +185,7 @@ struct ChatOverlay: View {
                                     .id(turn.id)
                             }
                         }
+                        .padding(.top, 28)
                         .padding(.bottom, 4)
                     }
                     .epsVerticalScrollOnly()
@@ -226,11 +202,43 @@ struct ChatOverlay: View {
                     }
                 }
             }
+
+            panelButtons
         }
         .padding(16)
         .frame(maxWidth: .infinity)
         .frame(maxHeight: panelMaxHeight)
         .epsGlassRounded(cornerRadius: 22, interactive: false)
+    }
+
+    private var panelButtons: some View {
+        HStack {
+            Button {
+                minimize()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(EPSTheme.fg)
+                    .frame(width: 36, height: 36)
+            }
+            .buttonStyle(.plain)
+            .epsSizedGlassCircle(side: 36)
+            .accessibilityLabel("Hide chat")
+
+            Spacer(minLength: 0)
+
+            Button {
+                clearChat()
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(EPSTheme.fg)
+                    .frame(width: 36, height: 36)
+            }
+            .buttonStyle(.plain)
+            .epsSizedGlassCircle(side: 36)
+            .accessibilityLabel("New chat")
+        }
     }
 
     private func scrollToLatest(_ proxy: ScrollViewProxy) {
@@ -281,11 +289,6 @@ struct ChatOverlay: View {
             if !isUser { Spacer(minLength: 36) }
         }
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
-    }
-
-    private var minusGlyph: some View {
-        Capsule()
-            .frame(width: 13, height: 3)
     }
 
     private func finishDismissDrag(offset: CGFloat, velocity: CGFloat, travel: CGFloat) {
