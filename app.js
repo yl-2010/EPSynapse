@@ -21,6 +21,7 @@
   const TAGS = ["CW", "HW", "QA", "MA"];
   const typeFilter = new Set(TAGS);
   let lastHome = { courses: [], assignments: [], files: [], messages: [] };
+  let lastPulse = null;
   let openMail = null;
   let mailBusy = false;
   let googleClientId = "";
@@ -89,11 +90,16 @@
   function applyAuthGate() {
     const on = signedInViaGoogle();
     document.documentElement.dataset.auth = on ? "in" : "out";
-    if (on) return;
+    const out = document.getElementById("stage-out");
+    if (on) {
+      if (out) out.hidden = true;
+      return;
+    }
     closeSheet();
     closeChatOverlay();
     if (loading) loading.hidden = true;
     if (stage) stage.hidden = true;
+    if (out) out.hidden = false;
   }
 
   function accountStatusText() {
@@ -425,6 +431,7 @@
     localStorage.removeItem(LS_SID);
     me = null;
     lastHome = { courses: [], assignments: [], files: [], messages: [] };
+    lastPulse = null;
     if (window.google?.accounts?.id) {
       try {
         window.google.accounts.id.disableAutoSelect();
@@ -649,6 +656,7 @@
     appEl.classList.add("is-settled");
     appEl.innerHTML = `
       <p class="edu-home-mark">EPSynapse</p>
+      <div id="home-pulse" class="edu-pulse-strip" hidden></div>
       <div class="edu-grid edu-grid--home">
         <div class="edu-col edu-col--main">
           ${panelHtml("TODO", listOrEmpty(open.map(todoRow).join(""), todoEmpty), "lg-edu-todo", "", filterBarHtml("todo"))}
@@ -663,6 +671,75 @@
       </div>
     `;
     if (typeof window.reinitLiquidGlass === "function") window.reinitLiquidGlass();
+    fillPulseStrip();
+  }
+
+  function pulseVoted(data) {
+    const pulse = data && (data.pulse || data);
+    return Boolean(
+      data && (data.voted || data.hasVoted || data.alreadyVoted || pulse.voted)
+    );
+  }
+
+  function pulseIsOpen(data) {
+    if (!data) return false;
+    const pulse = data.pulse || data;
+    if (data.open === false || pulse.open === false) return false;
+    const status = String(data.status || pulse.status || "").toLowerCase();
+    if (status && !["open", "live", "active"].includes(status)) return false;
+    return (
+      data.open === true ||
+      pulse.open === true ||
+      ["open", "live", "active"].includes(status) ||
+      Boolean(pulse.id || data.id || pulse.questions || data.questions)
+    );
+  }
+
+  function pulsePrompt(data) {
+    const pulse = (data && data.pulse) || data || {};
+    const questions = pulse.questions || data.questions || [];
+    const first = questions[0] || {};
+    return first.prompt || first.text || first.question || pulse.prompt || data.prompt || "";
+  }
+
+  function pulseStripHtml(data) {
+    if (pulseVoted(data)) {
+      return `<div class="edu-pulse-card">
+        <p class="edu-pulse-kicker">You answered this week's LPC</p>
+        <a class="edu-pulse-go" href="/board">See counts →</a>
+      </div>`;
+    }
+    if (!pulseIsOpen(data)) return "";
+    const prompt = pulsePrompt(data);
+    return `<div class="edu-pulse-card">
+      <div class="edu-pulse-copy">
+        <p class="edu-pulse-kicker">This week's LPC</p>
+        ${prompt ? `<p class="edu-pulse-prompt">${escapeHtml(prompt)}</p>` : ""}
+      </div>
+      <a class="edu-pulse-go" href="/pulse">Answer →</a>
+    </div>`;
+  }
+
+  async function fillPulseStrip() {
+    const slot = document.getElementById("home-pulse");
+    if (!slot) return;
+    try {
+      if (!lastPulse) {
+        lastPulse = await api("/v1/pulses/current?school=eastside-prep", { timeoutMs: 5000 });
+      }
+      const html = pulseStripHtml(lastPulse);
+      if (!html) {
+        slot.hidden = true;
+        slot.innerHTML = "";
+        return;
+      }
+      slot.hidden = false;
+      slot.innerHTML = html;
+    } catch {
+      lastPulse = null;
+      slot.hidden = true;
+      slot.innerHTML = "";
+    }
   }
 
   async function loadDashboard() {

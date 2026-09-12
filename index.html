@@ -18,7 +18,7 @@
     <title>EPSynapse</title>
     <meta name="description" content="EPSynapse student dashboard" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/styles.css?v=glass9" />
+    <link rel="stylesheet" href="/styles.css?v=glass10" />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
       .od-code {
@@ -120,6 +120,16 @@
     </div>
 
     <div id="stage-loading" class="stage stage-loading" aria-live="polite">…</div>
+
+    <div id="stage-out" class="stage stage-out" hidden>
+      <div class="stage-out-card">
+        <p class="stage-out-mark">EPSynapse</p>
+        <p class="stage-out-lead">School pulses for Eastside Prep. Students answer. Adults get counts.</p>
+        <a class="stage-out-go" href="/pulse">This week's LPC</a>
+        <a class="stage-out-counts" href="/board">Live counts</a>
+        <a class="stage-out-foot" href="/privacy.html">Privacy</a>
+      </div>
+    </div>
 
     <div id="stage-full" class="stage stage-full" hidden>
       <main id="edu-app" class="edu-app" aria-live="polite"></main>
@@ -313,6 +323,7 @@
           <button type="button" id="key-clear" class="edu-sheet-btn">Clear key</button>
         </div>
         <p class="edu-empty" id="key-status"></p>
+        <p class="edu-empty stage-pulse-links">School pulses: <a href="/pulse">this week's LPC</a> · <a href="/board">live counts</a></p>
         </div>
         </div>
       </form>
@@ -333,7 +344,7 @@
 
     <script src="/liquid-glass.js?v=glass8"></script>
     <script src="/theme-orb.js?v=glass6"></script>
-    <script src="/app.js?v=glass8"></script>
+    <script src="/app.js?v=glass10"></script>
     <script src="/chatbot.js?v=glass7"></script>
   </body>
 </html>
