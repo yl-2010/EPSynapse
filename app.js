@@ -630,16 +630,6 @@
     }
     const canvas = document.getElementById("canvas-summary");
     if (canvas) canvas.textContent = me && me.canvasConnected ? "Connected" : "URL and token";
-    const od = document.getElementById("onedrive-summary");
-    if (od) {
-      const n = localFiles().length;
-      od.textContent = n ? `${n} on Home` : "Open or upload";
-    }
-    const ol = document.getElementById("outlook-summary");
-    if (ol) {
-      const n = localMail().length + localEvents().length;
-      ol.textContent = n ? `${n} on Home` : "Open and send";
-    }
     document.querySelectorAll(".set-nav[data-pane]").forEach((btn) => {
       btn.classList.toggle("is-on", btn.getAttribute("data-pane") === activePane());
     });
@@ -1374,9 +1364,7 @@
     };
     const open = (lastHome.assignments || []).filter((t) => !t.done);
     const done = (lastHome.assignments || []).filter((t) => t.done);
-    const mailTodos = mailTodoItems(lastHome.messages, lastHome.assignments);
-    const todoRows = [...open.map(todoRow), ...mailTodos.map(mailTodoRow)].join("");
-    const fileTiles = (lastHome.files || []).map(fileTile).join("");
+    const todoRows = open.map(todoRow).join("");
     const classItems = homeClasses();
 
     const todoEmpty = me?.canvasConnected
@@ -1385,7 +1373,6 @@
     const classEmpty = classItems.length
       ? "No classes"
       : "Upload a term schedule PDF in settings";
-    const fileEmpty = "Upload a file or add a OneDrive link in settings";
     const gradeItems = homeGradeItems();
     const gradeEmpty = me?.canvasConnected
       ? "No course grades yet"
@@ -1403,8 +1390,6 @@
         <div class="edu-col edu-col--side">
           ${panelHtml("Classes", listOrEmpty(classItems.map(classRow).join(""), classEmpty), "lg-edu-classes")}
           ${panelHtml("Grades", listOrEmpty(gradeItems.map(gradeRow).join(""), gradeEmpty), "lg-edu-grades")}
-          ${panelHtml("Files", filesPanelBody(fileTiles, fileEmpty, lastHome.filesError), "lg-edu-files")}
-          ${panelHtml("Mail", mailPanelHtml(lastHome.messages), "lg-edu-mail")}
         </div>
       </div>
     `;
@@ -1456,30 +1441,6 @@
     const open = work.filter((t) => !t.done);
     const done = work.filter((t) => t.done);
     const nameHint = String(klass.name || "").toLowerCase();
-    const nameFiltered = (lastHome.files || []).filter((f) => {
-      if (!nameHint) return false;
-      return String(f.name || "").toLowerCase().includes(nameHint);
-    });
-    let qFiles = lastHome.classFilesFor === String(klass.name || "") ? lastHome.classFiles || [] : [];
-    if (
-      nameHint &&
-      qFiles.length &&
-      (lastHome.files || []).length &&
-      qFiles.length === lastHome.files.length
-    ) {
-      qFiles = qFiles.filter((f) => String(f.name || "").toLowerCase().includes(nameHint));
-    }
-    const seen = new Set();
-    const files = [];
-    for (const f of [...qFiles, ...nameFiltered]) {
-      const key = String(f.id || f.name || "");
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-      files.push(f);
-    }
-    const fileTiles = files.map(fileTile).join("");
-    const fileError = lastHome.classFilesError || lastHome.filesError || "";
-    refreshClassFiles(klass);
     const notes = (lastHome.notes || []).filter((n) => {
       if (n.classId && n.classId === klass.id) return true;
       if (klass.subject && n.subject === klass.subject) return true;
@@ -1522,8 +1483,6 @@
           ${panelHtml("Completed", listOrEmpty(done.map(todoRow).join(""), "Nothing completed yet"), "lg-edu-completed", "edu-panel--completed")}
         </div>
         <div class="edu-col edu-col--side">
-          ${panelHtml("Files", filesPanelBody(fileTiles, "No files for this class", fileError), "lg-edu-files")}
-          ${panelHtml("Mail", classMailHtml(klass), "lg-edu-mail")}
           ${panelHtml("Notes", listOrEmpty(noteRows, "No notes for this class yet"), "lg-edu-class-notes")}
         </div>
       </div>
@@ -1725,15 +1684,6 @@
     const assignments = me?.canvasConnected
       ? api("/v1/me/canvas/assignments").then((r) => r.assignments || []).catch(() => [])
       : Promise.resolve([]);
-    const files = api("/v1/me/onedrive/files", { timeoutMs: 20000 })
-      .then((r) => ({ files: r.files || [], error: r.error || "" }))
-      .catch((err) => ({ files: [], error: err.message || "" }));
-    const messages = api("/v1/me/outlook/messages?limit=12", { timeoutMs: 20000 })
-      .then((r) => ({ messages: r.messages || [], error: r.error || "" }))
-      .catch((err) => ({ messages: [], error: err.message || "" }));
-    const events = api("/v1/me/outlook/events", { timeoutMs: 15000 })
-      .then((r) => r.events || [])
-      .catch(() => []);
     const schedule = api("/v1/me/schedule")
       .then((r) => r)
       .catch(() => ({ classes: [], meetings: [] }));
@@ -1759,17 +1709,14 @@
         htmlUrl: c.htmlUrl || g.htmlUrl,
       };
     });
-    const filesPayload = await files;
-    const mailPayload = await messages;
-    const remoteEvents = await events;
     lastHome = {
       courses: mergedCourses,
       assignments: await assignments,
-      files: mergeById(localFiles(), filesPayload.files || []),
-      filesError: uselessMsError(filesPayload.error) ? "" : filesPayload.error || "",
-      messages: mergeById(localMail(), mailPayload.messages || []),
-      mailError: uselessMsError(mailPayload.error) ? "" : mailPayload.error || "",
-      events: mergeById(localEvents(), remoteEvents),
+      files: [],
+      filesError: "",
+      messages: [],
+      mailError: "",
+      events: [],
       classes: sched.classes || [],
       meetings: sched.meetings || [],
       notes: await notes,

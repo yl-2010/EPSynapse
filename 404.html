@@ -72,21 +72,6 @@
       tabindex="-1"
       aria-hidden="true"
     />
-    <input
-      id="onedrive-upload"
-      class="edu-sr-file"
-      type="file"
-      tabindex="-1"
-      aria-hidden="true"
-    />
-    <input
-      id="outlook-ics"
-      class="edu-sr-file"
-      type="file"
-      accept=".ics,text/calendar"
-      tabindex="-1"
-      aria-hidden="true"
-    />
     <button
       type="button"
       class="corner c-tl squircle"
@@ -355,24 +340,6 @@
               <path d="M9 6.2L15.2 12L9 17.8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </button>
-          <button type="button" class="set-nav" data-pane="onedrive">
-            <span class="set-nav-copy">
-              <span class="set-nav-title">OneDrive</span>
-              <span class="set-nav-meta" id="onedrive-summary">School files</span>
-            </span>
-            <svg class="set-nav-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M9 6.2L15.2 12L9 17.8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </button>
-          <button type="button" class="set-nav" data-pane="outlook">
-            <span class="set-nav-copy">
-              <span class="set-nav-title">Outlook</span>
-              <span class="set-nav-meta" id="outlook-summary">School mail</span>
-            </span>
-            <svg class="set-nav-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M9 6.2L15.2 12L9 17.8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </button>
         </section>
         </div>
         </div>
@@ -512,61 +479,6 @@
           </div>
         </div>
 
-        <div class="edu-sheet edu-sheet--set" data-pane="onedrive" hidden>
-          <div class="edu-sheet-head">
-            <h2 class="edu-sheet-title">OneDrive</h2>
-            <button type="button" class="edu-sheet-close set-pane-close" aria-label="Close OneDrive">
-              <svg viewBox="0 0 24 24" fill="currentColor" shape-rendering="geometricPrecision" aria-hidden="true">
-                <path d="M5.448 7.252 16.748 18.552a1.275 1.275 0 0 0 1.804-1.804L7.252 5.448a1.275 1.275 0 0 0-1.804 1.804Zm11.3-1.804L5.448 16.748a1.275 1.275 0 0 0 1.804 1.804L18.552 7.252a1.275 1.275 0 0 0-1.804-1.804Z"/>
-              </svg>
-            </button>
-          </div>
-          <div class="edu-sheet-body">
-            <p class="set-hint" id="onedrive-status">School IT blocks app sign-in. Open OneDrive, or upload files here.</p>
-            <div class="edu-sheet-actions">
-              <a class="edu-sheet-btn edu-sheet-btn--gold" href="https://eastsideprep-my.sharepoint.com/" target="_blank" rel="noopener">Open OneDrive</a>
-              <button type="button" id="onedrive-upload-btn" class="edu-sheet-btn">Upload a file</button>
-            </div>
-            <label for="onedrive-link">Folder or file link</label>
-            <div class="edu-sheet-field">
-              <input id="onedrive-link" name="onedriveLink" type="url" placeholder="https://eastsideprep-my.sharepoint.com/..." autocomplete="off" />
-            </div>
-            <div class="edu-sheet-actions">
-              <button type="button" id="onedrive-link-add" class="edu-sheet-btn">Add link</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="edu-sheet edu-sheet--set" data-pane="outlook" hidden>
-          <div class="edu-sheet-head">
-            <h2 class="edu-sheet-title">Outlook</h2>
-            <button type="button" class="edu-sheet-close set-pane-close" aria-label="Close Outlook">
-              <svg viewBox="0 0 24 24" fill="currentColor" shape-rendering="geometricPrecision" aria-hidden="true">
-                <path d="M5.448 7.252 16.748 18.552a1.275 1.275 0 0 0 1.804-1.804L7.252 5.448a1.275 1.275 0 0 0-1.804 1.804Zm11.3-1.804L5.448 16.748a1.275 1.275 0 0 0 1.804 1.804L18.552 7.252a1.275 1.275 0 0 0-1.804-1.804Z"/>
-              </svg>
-            </button>
-          </div>
-          <div class="edu-sheet-body">
-            <p class="set-hint" id="outlook-status">School IT blocks app sign-in. Open Outlook. Send uses your mail app.</p>
-            <div class="edu-sheet-actions">
-              <a class="edu-sheet-btn edu-sheet-btn--gold" href="https://outlook.office.com/mail/" target="_blank" rel="noopener">Open Outlook</a>
-              <button type="button" id="outlook-ics-btn" class="edu-sheet-btn">Add calendar .ics</button>
-            </div>
-            <label for="outlook-save-from">Save a message to Home</label>
-            <div class="edu-sheet-field">
-              <input id="outlook-save-from" type="text" placeholder="From" autocomplete="off" />
-            </div>
-            <div class="edu-sheet-field">
-              <input id="outlook-save-subject" type="text" placeholder="Subject" autocomplete="off" />
-            </div>
-            <div class="edu-sheet-field">
-              <textarea id="outlook-save-body" placeholder="Message" rows="4"></textarea>
-            </div>
-            <div class="edu-sheet-actions">
-              <button type="button" id="outlook-save-msg" class="edu-sheet-btn">Save message</button>
-            </div>
-          </div>
-        </div>
       </div>
       </form>
     </div>
@@ -586,7 +498,7 @@
 
     <script src="/liquid-glass.js?v=glass14"></script>
     <script src="/theme-orb.js?v=moon5"></script>
-    <script src="/app.js?v=files2"></script>
+    <script src="/app.js?v=nomail1"></script>
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js" crossorigin="anonymous"></script>
     <script src="/markdown.js?v=2"></script>
     <script src="/chatbot.js?v=math1"></script>

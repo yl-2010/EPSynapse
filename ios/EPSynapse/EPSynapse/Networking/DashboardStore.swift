@@ -67,8 +67,6 @@ final class DashboardStore: ObservableObject {
       guard me.canvasConnected else { return [] }
       return await self.loadAssignments(sessionId: sid)
     }()
-    async let fetchedFiles: (files: [DriveFile], error: String) = self.loadFiles(sessionId: sid)
-    async let fetchedMessages: (messages: [MailMessage], error: String) = self.loadMessages(sessionId: sid)
     async let fetchedSchedule: (classes: [SchoolClass], meetings: [ScheduleMeeting]) = self.loadSchedule(
       sessionId: sid
     )
@@ -76,12 +74,10 @@ final class DashboardStore: ObservableObject {
 
     courses = await fetchedCourses
     assignments = await fetchedAssignments
-    let fileResult = await fetchedFiles
-    files = fileResult.files
-    filesError = fileResult.error
-    let mailResult = await fetchedMessages
-    messages = mailResult.messages
-    mailError = mailResult.error
+    files = []
+    messages = []
+    filesError = ""
+    mailError = ""
     let schedule = await fetchedSchedule
     scheduleClasses = schedule.classes
     meetings = schedule.meetings
@@ -354,45 +350,6 @@ final class DashboardStore: ObservableObject {
   private func loadAssignments(sessionId: String) async -> [Assignment] {
     let wrapped: AssignmentsResponse? = try? await api.request("/v1/me/canvas/assignments", sessionId: sessionId)
     return wrapped?.assignments ?? []
-  }
-
-  private func loadFiles(sessionId: String) async -> (files: [DriveFile], error: String) {
-    do {
-      let wrapped: FilesResponse = try await api.request("/v1/me/onedrive/files", sessionId: sessionId, timeout: 20)
-      return (wrapped.files, Self.sanitizeGraphError(wrapped.error))
-    } catch {
-      return ([], Self.sanitizeGraphError((error as? APIError)?.message ?? ""))
-    }
-  }
-
-  private func loadMessages(sessionId: String) async -> (messages: [MailMessage], error: String) {
-    do {
-      let wrapped: MessagesResponse = try await api.request(
-        "/v1/me/outlook/messages?limit=12",
-        sessionId: sessionId,
-        timeout: 20
-      )
-      return (wrapped.messages, Self.sanitizeGraphError(wrapped.error))
-    } catch {
-      return ([], Self.sanitizeGraphError((error as? APIError)?.message ?? ""))
-    }
-  }
-
-  private static func sanitizeGraphError(_ raw: String) -> String {
-    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-    if trimmed.isEmpty { return "" }
-    if isIgnoredGraphMessage(trimmed) { return "" }
-    return trimmed
-  }
-
-  private static func isIgnoredGraphMessage(_ message: String) -> Bool {
-    let lower = message.lowercased()
-    return lower.contains("connect outlook")
-      || lower.contains("connect onedrive")
-      || lower.contains("settings first")
-      || lower.contains("not connected")
-      || lower.contains("sign-in")
-      || lower.contains("device code")
   }
 
   private static let importedIndexKey = "epsynapse.imported.files"

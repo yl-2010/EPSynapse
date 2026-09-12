@@ -6,7 +6,6 @@ struct SettingsSheet: View {
     @EnvironmentObject private var session: SessionStore
     @EnvironmentObject private var dashboard: DashboardStore
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.openURL) private var openURL
 
     @State private var school = "Eastside Prep"
     @State private var studentId = ""
@@ -25,7 +24,6 @@ struct SettingsSheet: View {
                     statusLine
                     accountSection
                     if session.isSignedIn {
-                        microsoftSection
                         agentSection
                     }
                 }
@@ -190,35 +188,6 @@ struct SettingsSheet: View {
                     }
                 }
             }
-        }
-    }
-
-    private var microsoftSection: some View {
-        settingsGroup("Microsoft") {
-            Text("School IT blocks app sign-in. Open the real apps.")
-                .font(.footnote)
-                .foregroundStyle(EPSTheme.muted)
-
-            fieldLabel("OneDrive")
-            actionRow {
-                glassAction("Open OneDrive") {
-                    openURL(EPSLinks.onedriveWeb)
-                }
-            }
-            Text("Opens school OneDrive in the browser")
-                .font(.footnote)
-                .foregroundStyle(EPSTheme.muted)
-
-            fieldLabel("Outlook")
-                .padding(.top, 6)
-            actionRow {
-                glassAction("Open Outlook") {
-                    openURL(EPSLinks.outlookWeb)
-                }
-            }
-            Text("Opens school Outlook in the browser")
-                .font(.footnote)
-                .foregroundStyle(EPSTheme.muted)
         }
     }
 
@@ -405,10 +374,6 @@ struct SettingsSheet: View {
         .buttonStyle(.plain)
         .epsGlassRounded(cornerRadius: 14, interactive: true)
         .epsHapticOnTap()
-    }
-
-    private func actionRow<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        HStack { content(); Spacer(minLength: 0) }
     }
 
     private var goldLabel: Color {

@@ -53,7 +53,6 @@ struct ClassView: View {
                     }
                     todoPanel
                     completedPanel
-                    FilesPanel(schoolClass: schoolClass)
                     notesPanel
                 } else {
                     EmptyLine("This class is gone from the schedule.")

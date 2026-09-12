@@ -105,8 +105,6 @@ struct HomeView: View {
                 .frame(maxWidth: .infinity, alignment: .top)
                 VStack(spacing: 16) {
                     ClassesPanel()
-                    FilesPanel()
-                    MailPanel()
                 }
                 .frame(maxWidth: .infinity, alignment: .top)
             }
@@ -115,8 +113,6 @@ struct HomeView: View {
                 TodoPanel()
                 NotesPanel(path: $path)
                 ClassesPanel()
-                FilesPanel()
-                MailPanel()
                 CompletedPanel()
             }
         }
