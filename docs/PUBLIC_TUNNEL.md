@@ -1,6 +1,6 @@
 # Public API tunnel (`api.epsynapse.com`)
 
-Same pattern as NoteLMs / yanylevin / SocketHR. A dedicated tunnel exposes only the Mac Express API.
+A dedicated Cloudflare Tunnel exposes only the Mac Express API.
 
 ```
 Browser
@@ -25,7 +25,7 @@ Browser
 
 Do **not** attach `api.epsynapse.com` as a Vercel project domain.
 
-SocketHR, NoteLMs, and Yan Levin keep their own tunnels. Four `cloudflared` processes.
+Other apps on this Mac keep their own tunnels. Four `cloudflared` processes. Do not combine them.
 
 ## Runtime
 

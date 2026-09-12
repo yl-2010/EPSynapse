@@ -1,6 +1,6 @@
 # Cloudflare Tunnel (JYPE / EPSynapse)
 
-`epsynapse.com` is registered on the **JYPE** Vercel team. Nameservers are Cloudflare (`hayes` / `mallory`). The site still lives on Vercel. Same layout as `yanylevin.com` / `notelms.com`.
+`epsynapse.com` is registered on the **JYPE** Vercel team. Nameservers are Cloudflare (`hayes` / `mallory`). The site still lives on Vercel.
 
 Do **not** put LM Studio (`:1234`) on this tunnel.
 

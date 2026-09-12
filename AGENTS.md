@@ -34,6 +34,16 @@ The clock is running. Do not do sequential solo work when you can launch paralle
 
 The always-apply Cursor rule `.cursor/rules/hackathon-speed.mdc` repeats this so new sessions cannot miss it.
 
+## Git-facing text is for judges
+
+Judges can open this GitHub repo. Never write in any git-facing place that EPSynapse is inspired by, cloned from, based on, ported from, or the same as another personal site.
+
+Banned in commits, commit messages, README, site copy, `docs/`, issues, PRs, changelogs, and committed comments: `yanylevin`, `yanylevin.com`, `api.yanylevin.com`, `yl-2010/yanylevin`, local paths to that repo, and "same pattern / same layout / same DOM as" that site.
+
+Yan Levin as a teammate on the roster is fine. Do not rewrite old git history.
+
+Write EPSynapse as a new product. If you need to protect port 3004, say "another local API, port 3004, leave it alone." This file and `.cursor/rules/no-prior-site-in-git.mdc` may name the ban. Nowhere else in git.
+
 ## Git (do this every session)
 
 ### Always pull first. Always pull again.
@@ -132,7 +142,7 @@ Public API health: https://api.epsynapse.com/health
 
 ## Architecture
 
-Same pattern as NoteLMs / SocketHR / yanylevin. Separate accounts, separate tunnel, separate port.
+JYPE owns its own accounts, tunnel, and port.
 
 ```
 Browser
@@ -141,7 +151,7 @@ Browser
      └─ http://127.0.0.1:3006 → Express (server/)
 ```
 
-JYPE has its own Vercel team (`jype1`) and its own Cloudflare account. Do not merge this tunnel with SocketHR (`api.sockethr.com` → `:3000`), NoteLMs (`api.notelms.com` → `:3002`), or Yan Levin (`api.yanylevin.com` → `:3004`).
+JYPE has its own Vercel team (`jype1`) and its own Cloudflare account. Do not merge this tunnel with the other `cloudflared` processes on this Mac (ports 3000, 3002, 3004).
 
 Port 3006 is JYPE. Leave the others alone.
 
@@ -224,7 +234,7 @@ Logs: `/tmp/jype-server.log`, `/tmp/cloudflared-jype.log`.
 ## Hard rules
 
 - Do not expose LM Studio publicly if one gets added later. Localhost only. Never put it on the Cloudflare Tunnel.
-- SocketHR, NoteLMs, Yan Levin, and JYPE each own a Cloudflare Tunnel. Four `cloudflared` processes on the Mac. Do not combine them.
+- Four `cloudflared` processes run on this Mac. Do not combine them. JYPE is port 3006 only.
 - Never commit `server/.env`, `.env`, or auth secrets.
 - Do not connect the GitHub repo to Vercel Git. Manual `deploy:web` only.
 - Do not force-push `main`.

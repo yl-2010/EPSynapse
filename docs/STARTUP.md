@@ -20,7 +20,7 @@ curl -sS https://api.epsynapse.com/health
 | `com.jype.server` | JYPE Express `:3006` |
 | `com.jype.cloudflared` | Tunnel → `api.epsynapse.com` |
 
-Plists live in `~/Library/LaunchAgents/`. SocketHR, NoteLMs, and Yan Levin keep their own pairs. Do not merge tunnels.
+Plists live in `~/Library/LaunchAgents/`. Other apps on this Mac keep their own pairs. Do not merge tunnels.
 
 Install / reload:
 
@@ -64,6 +64,6 @@ First-time tunnel setup: [`deploy/cloudflared/README.md`](../deploy/cloudflared/
 |------|---------|---------|
 | 3000 | SocketHR Express | via `api.sockethr.com` |
 | 3002 | NoteLMs Express | via `api.notelms.com` |
-| 3004 | Yan Levin Express | via `api.yanylevin.com` |
+| 3004 | another local API | leave this port alone |
 | 3006 | JYPE Express | via `api.epsynapse.com` |
 | 1234 | LM Studio | **never** (localhost only) |
