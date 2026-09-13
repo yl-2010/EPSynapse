@@ -43,13 +43,33 @@ final class SessionStore: ObservableObject {
   static let msCallbackHost = "ms"
   static let keyIdle = "Paste the gsk_ key here, tap Save key, wait until Chat key says Groq, then ask in chat. Do not paste the key in the chat box."
   static let googleFirst = "Sign in with Google first."
-  static let signedInHint = "Signed in with Google. School and student ID let us match you at school."
+  static let signedInHint = "Signed in with Google."
+
+  /// Front doors on the logged-out screen. Raw values match the server's `door` field.
+  enum Door: String {
+    /// Eastside Prep. Microsoft school sign-in, four11 schedule and Microsoft apps. Not live yet.
+    case eps
+    /// Any other school. Google sign-in, upload your own schedule, bring your own keys.
+    case other
+  }
 
   @Published var sessionId: String {
     didSet { UserDefaults.standard.set(sessionId, forKey: Keys.sid) }
   }
 
   @Published var profile: Profile?
+
+  /// Which door the student last picked on this device. nil until they choose.
+  /// Only "other" is restored on launch, so the EPS panel never opens by itself.
+  @Published var door: Door? {
+    didSet {
+      if let door {
+        UserDefaults.standard.set(door.rawValue, forKey: Keys.door)
+      } else {
+        UserDefaults.standard.removeObject(forKey: Keys.door)
+      }
+    }
+  }
 
   @Published var modelKey: String {
     didSet { UserDefaults.standard.set(modelKey, forKey: Keys.key) }
@@ -81,11 +101,22 @@ final class SessionStore: ObservableObject {
   private var msForcedOff = false
   private var authSession: ASWebAuthenticationSession?
   private let authPresenter = MSAuthPresenter()
+  private var pausedObserver: AnyCancellable?
 
   var isSignedIn: Bool {
     guard !sessionId.isEmpty, let profile else { return false }
     return !profile.email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
       || !profile.googleName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+
+  /// Signed in, but the server is holding the account back. Show the paused card.
+  var isPaused: Bool {
+    isSignedIn && profile?.paused == true
+  }
+
+  /// Signed in and allowed past /v1/me. Gates the dashboard, chat, and settings.
+  var canUseDashboard: Bool {
+    isSignedIn && !isPaused
   }
 
   private let api = APIClient.shared
@@ -94,6 +125,7 @@ final class SessionStore: ObservableObject {
     static let sid = "epsynapse.sid"
     static let key = "epsynapse.agent.key"
     static let provider = "epsynapse.agent.provider"
+    static let door = "epsynapse.door"
   }
 
   init() {
@@ -101,7 +133,36 @@ final class SessionStore: ObservableObject {
     sessionId = defaults.string(forKey: Keys.sid) ?? ""
     modelKey = defaults.string(forKey: Keys.key) ?? ""
     provider = defaults.string(forKey: Keys.provider) ?? "groq"
+    door = defaults.string(forKey: Keys.door).flatMap(Door.init(rawValue:))
     refreshKeyStatus()
+    pausedObserver = NotificationCenter.default.publisher(for: .epsAccountPaused)
+      .receive(on: RunLoop.main)
+      .sink { [weak self] note in
+        let info = note.userInfo ?? [:]
+        let message = (info["error"] as? String) ?? ""
+        let door = (info["door"] as? String) ?? ""
+        Task { @MainActor [weak self] in
+          await self?.markPaused(message: message, door: door)
+        }
+      }
+  }
+
+  /// Remembers which front door the student tapped. Only "other" is auto-restored.
+  func chooseDoor(_ next: Door?) {
+    door = next
+  }
+
+  /// Called when any authenticated route returns 423 `paused: true`. Flips the
+  /// profile into the paused state right away, then re-reads /v1/me (which still
+  /// works while paused) so the card shows the server's `pausedMessage` verbatim.
+  func markPaused(message: String, door rawDoor: String) async {
+    guard !sessionId.isEmpty, var me = profile else { return }
+    if me.paused, !me.pausedMessage.isEmpty { return }
+    me.paused = true
+    if !message.isEmpty { me.pausedMessage = message }
+    if rawDoor == "eps" || rawDoor == "other" { me.door = rawDoor }
+    profile = me
+    await reloadMe()
   }
 
   func boot() async {
@@ -149,6 +210,7 @@ final class SessionStore: ObservableObject {
     do {
       let result = try await GIDSignIn.sharedInstance.signIn(withPresenting: presenter)
       try await exchangeGoogleUser(result.user)
+      door = .other
       settingsStatus = Self.signedInHint
       paintConnections()
       await syncAgentFromAccount()
@@ -161,18 +223,14 @@ final class SessionStore: ObservableObject {
     }
   }
 
-  func save(school: String, studentId: String, canvasHost: String, canvasToken: String) async {
+  /// POST /v1/me with Canvas fields only. School and student ID are gone from the API.
+  func saveCanvas(canvasHost: String, canvasToken: String) async {
     if sessionId.isEmpty {
       settingsStatus = Self.googleFirst
       return
     }
-    let id = studentId.trimmingCharacters(in: .whitespacesAndNewlines)
     settingsStatus = "Saving…"
     let body = SaveMeBody(
-      school: school.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        ? "Eastside Prep"
-        : school.trimmingCharacters(in: .whitespacesAndNewlines),
-      studentId: id,
       canvasHost: canvasHost.trimmingCharacters(in: .whitespacesAndNewlines),
       canvasToken: canvasToken.trimmingCharacters(in: .whitespacesAndNewlines)
     )
@@ -184,24 +242,10 @@ final class SessionStore: ObservableObject {
       paintConnections()
     } catch let error as APIError where error.status == 401 {
       settingsStatus = Self.googleFirst
+    } catch let error as APIError where error.isPaused {
+      settingsStatus = ""
     } catch {
       settingsStatus = (error as? APIError)?.message ?? "Could not save."
-    }
-  }
-
-  func searchSchools(query: String) async -> [SchoolHit] {
-    let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-    let path: String
-    if trimmed.isEmpty {
-      path = "/v1/schools"
-    } else {
-      path = "/v1/schools?q=\(Self.queryValue(trimmed))"
-    }
-    do {
-      let wrapped: SchoolsResponse = try await api.request(path, sessionId: sessionId)
-      return wrapped.schools
-    } catch {
-      return []
     }
   }
 
@@ -690,12 +734,6 @@ final class SessionStore: ObservableObject {
     guard let raw = Bundle.main.object(forInfoDictionaryKey: key) as? String else { return nil }
     let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
     return trimmed.isEmpty ? nil : trimmed
-  }
-
-  private static func queryValue(_ raw: String) -> String {
-    var allowed = CharacterSet.alphanumerics
-    allowed.insert(charactersIn: "-._~")
-    return raw.addingPercentEncoding(withAllowedCharacters: allowed) ?? raw
   }
 
   private static func isGoogleCancel(_ error: Error) -> Bool {

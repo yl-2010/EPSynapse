@@ -2,7 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 private enum SettingsPane: String, Hashable {
-    case school
+    case schedule
     case chat
     case canvas
     case onedrive
@@ -12,7 +12,7 @@ private enum SettingsPane: String, Hashable {
 
     var title: String {
         switch self {
-        case .school: "School"
+        case .schedule: "Schedule"
         case .chat: "Chat key"
         case .canvas: "Canvas"
         case .onedrive: "OneDrive"
@@ -41,12 +41,9 @@ struct SettingsSheet: View {
     @Environment(\.openURL) private var openURL
 
     @State private var path: [SettingsPane] = []
-    @State private var school = "Eastside Prep"
-    @State private var studentId = ""
     @State private var canvasHost = "https://eastsideprep.instructure.com"
     @State private var canvasToken = ""
     @State private var draftKey = ""
-    @State private var schoolHits: [SchoolHit] = []
     @State private var pickingPDF = false
     @State private var pickedPDF: URL?
     @State private var replacingKey = false
@@ -64,7 +61,7 @@ struct SettingsSheet: View {
                     .navigationDestination(for: SettingsPane.self) { pane in
                         paneScroll {
                             switch pane {
-                            case .school: schoolPane
+                            case .schedule: schedulePane
                             case .chat: chatPane
                             case .canvas: canvasPane
                             case .onedrive: microsoftPane(.onedrive)
@@ -87,17 +84,6 @@ struct SettingsSheet: View {
         .onChange(of: session.provider) { old, new in
             guard old != new, session.isSignedIn else { return }
             Task { await session.saveProvider(new) }
-        }
-        .task(id: school) {
-            guard session.isSignedIn else { return }
-            try? await Task.sleep(nanoseconds: 280_000_000)
-            guard !Task.isCancelled else { return }
-            let hits = await session.searchSchools(query: school)
-            if hits.count == 1, hits[0].name.caseInsensitiveCompare(school) == .orderedSame {
-                schoolHits = []
-            } else {
-                schoolHits = hits
-            }
         }
         .fileImporter(
             isPresented: $pickingPDF,
@@ -175,7 +161,7 @@ struct SettingsSheet: View {
                     .foregroundStyle(EPSTheme.muted)
                 if session.isSignedIn {
                     VStack(spacing: 8) {
-                        navRow(.school, meta: schoolMeta)
+                        navRow(.schedule, meta: scheduleMeta)
                         navRow(.chat, meta: chatMeta)
                         navRow(.canvas, meta: canvasMeta)
                         navRow(.onedrive, meta: onedriveMeta)
@@ -235,15 +221,8 @@ struct SettingsSheet: View {
         .accessibilityHint(meta)
     }
 
-    private var schoolPane: some View {
+    private var schedulePane: some View {
         VStack(alignment: .leading, spacing: 12) {
-            fieldLabel("School")
-            glassField { TextField("Eastside Prep", text: $school) }
-            schoolSuggestions
-
-            fieldLabel("Student ID")
-            glassField { TextField("Optional", text: $studentId) }
-
             fieldLabel("four11 schedule")
             Text("Upload this trimester's four11 schedule so your classes and grades can line up. Use the printed term card with periods A-H from after the latest add/drop, the same classes you have in Canvas right now. EPSynapse syncs schedule, classes, and grades with Canvas, so the PDF you add has to match.")
                 .font(.footnote)
@@ -260,15 +239,6 @@ struct SettingsSheet: View {
             }
             if !dashboard.scheduleStatus.isEmpty {
                 Text(dashboard.scheduleStatus)
-                    .font(.footnote)
-                    .foregroundStyle(EPSTheme.muted)
-            }
-
-            goldButton("Save") {
-                Task { await saveSchool() }
-            }
-            if !session.settingsStatus.isEmpty {
-                Text(session.settingsStatus)
                     .font(.footnote)
                     .foregroundStyle(EPSTheme.muted)
             }
@@ -550,39 +520,6 @@ struct SettingsSheet: View {
     }
 
     @ViewBuilder
-    private var schoolSuggestions: some View {
-        if !schoolHits.isEmpty {
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(schoolHits.prefix(8)) { hit in
-                    Button {
-                        school = hit.name
-                        if !hit.canvasHost.isEmpty {
-                            canvasHost = Self.normalizedCanvasHost(hit.canvasHost)
-                        }
-                        schoolHits = []
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(hit.name)
-                                .font(.body)
-                                .foregroundStyle(EPSTheme.fg)
-                            if !hit.shortName.isEmpty, hit.shortName != hit.name {
-                                Text(hit.shortName)
-                                    .font(.caption)
-                                    .foregroundStyle(EPSTheme.muted)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .epsGlassField(interactive: false, cornerRadius: 14)
-        }
-    }
-
-    @ViewBuilder
     private func googlePicture(_ raw: String) -> some View {
         if let url = URL(string: raw), !raw.isEmpty {
             AsyncImage(url: url) { phase in
@@ -671,11 +608,9 @@ struct SettingsSheet: View {
         return SessionStore.googleFirst
     }
 
-    private var schoolMeta: String {
-        let name = school.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !name.isEmpty { return name }
-        let saved = session.profile?.school.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return saved.isEmpty ? "Eastside Prep" : saved
+    private var scheduleMeta: String {
+        if dashboard.scheduleBusy { return "Uploading" }
+        return dashboard.scheduleClasses.isEmpty ? "Upload your four11 PDF" : "Uploaded"
     }
 
     private var isCursorAgent: Bool {
@@ -755,25 +690,8 @@ struct SettingsSheet: View {
         return hint.isEmpty ? [] : [hint]
     }
 
-    private func saveSchool() async {
-        await session.save(
-            school: school,
-            studentId: studentId,
-            canvasHost: canvasHost,
-            canvasToken: ""
-        )
-        if session.settingsStatus.hasPrefix("Saved") {
-            await dashboard.load(from: session)
-        }
-    }
-
     private func saveCanvas() async {
-        await session.save(
-            school: school,
-            studentId: studentId,
-            canvasHost: canvasHost,
-            canvasToken: canvasToken
-        )
+        await session.saveCanvas(canvasHost: canvasHost, canvasToken: canvasToken)
         if session.settingsStatus.hasPrefix("Saved") {
             canvasToken = ""
             replacingCanvas = false
@@ -782,10 +700,8 @@ struct SettingsSheet: View {
     }
 
     private func hydrate() {
-        if let profile = session.profile {
-            if !profile.school.isEmpty { school = profile.school }
-            studentId = profile.studentId
-            if !profile.canvasHost.isEmpty { canvasHost = profile.canvasHost }
+        if let profile = session.profile, !profile.canvasHost.isEmpty {
+            canvasHost = profile.canvasHost
         }
         draftKey = ""
     }
@@ -794,7 +710,7 @@ struct SettingsSheet: View {
         "Sign in with Google on this page if you have not already.",
         "Get a free Groq key at [console.groq.com/keys](https://console.groq.com/keys). Sign up with Google. No credit card. Create API Key, then copy the value that starts with gsk_. Groq shows it only once.",
         "Paste it in the API key field below. Leave Model on Groq.",
-        "Tap Save key. Enter also saves. Do not use the School Save button for this.",
+        "Tap Save key. Enter also saves. Do not use the Canvas Save button for this.",
         "You can save more than one key. Chat switches if a key hits its free limit.",
         "Chat key on the settings list must say Groq. Then close settings and ask in the chat pill. Do not paste the key in chat.",
     ]
@@ -844,13 +760,5 @@ struct SettingsSheet: View {
         } catch {
             return url
         }
-    }
-
-    private static func normalizedCanvasHost(_ raw: String) -> String {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://") {
-            return trimmed
-        }
-        return "https://\(trimmed)"
     }
 }

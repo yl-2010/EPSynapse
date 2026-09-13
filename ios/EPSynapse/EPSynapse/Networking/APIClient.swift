@@ -3,8 +3,20 @@ import Foundation
 struct APIError: LocalizedError {
   var status: Int
   var message: String
+  /// True for a 423 whose body says `paused: true`. The account is held back,
+  /// not broken. SessionStore hears about it through `.epsAccountPaused`.
+  var paused: Bool = false
+  var door: String = ""
 
   var errorDescription: String? { message }
+
+  var isPaused: Bool { status == 423 && paused }
+}
+
+extension Notification.Name {
+  /// Posted on the main queue when any authenticated call returns 423 with
+  /// `paused: true`. userInfo: `error` (String) and `door` (String).
+  static let epsAccountPaused = Notification.Name("eps.accountPaused")
 }
 
 struct APIClient {
@@ -393,9 +405,27 @@ struct APIClient {
   }
 
   private func apiError(status: Int, data: Data) -> APIError {
-    if let parsed = try? decoder.decode(ServerErrorBody.self, from: data),
-       let message = parsed.error, !message.isEmpty
-    {
+    let parsed = try? decoder.decode(ServerErrorBody.self, from: data)
+    if status == 423, parsed?.paused == true {
+      // Paused account. Same shape as the 401 path: the session store owns the
+      // state change, callers just see an error they can ignore.
+      let message = parsed?.error ?? ""
+      let door = parsed?.door ?? ""
+      DispatchQueue.main.async {
+        NotificationCenter.default.post(
+          name: .epsAccountPaused,
+          object: nil,
+          userInfo: ["error": message, "door": door]
+        )
+      }
+      return APIError(
+        status: status,
+        message: message.isEmpty ? "This account is paused." : message,
+        paused: true,
+        door: door
+      )
+    }
+    if let message = parsed?.error, !message.isEmpty {
       return APIError(status: status, message: message)
     }
     if let text = String(data: data, encoding: .utf8) {
@@ -485,4 +515,6 @@ private struct AnyEncodable: Encodable {
 
 private struct ServerErrorBody: Decodable {
   var error: String?
+  var paused: Bool?
+  var door: String?
 }

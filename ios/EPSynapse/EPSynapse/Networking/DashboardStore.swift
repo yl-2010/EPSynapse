@@ -58,28 +58,34 @@ final class DashboardStore: ObservableObject {
     localFiles + files
   }
 
+  /// Drops every list. Used on sign-out and when the server pauses the account.
+  func clear() {
+    courses = []
+    scheduleClasses = []
+    meetings = []
+    assignments = []
+    files = []
+    classFiles = []
+    todoFiles = []
+    messages = []
+    filesError = ""
+    mailError = ""
+    notes = []
+    openMail = nil
+    notesStatus = ""
+    scheduleStatus = ""
+    sendStatus = ""
+  }
+
   func load(from session: SessionStore) async {
     isLoading = true
     defer { isLoading = false }
 
     let sid = session.sessionId
     let me = session.profile
-    guard !sid.isEmpty, let me else {
-      courses = []
-      scheduleClasses = []
-      meetings = []
-      assignments = []
-      files = []
-      classFiles = []
-      todoFiles = []
-      messages = []
-      filesError = ""
-      mailError = ""
-      notes = []
-      openMail = nil
-      notesStatus = ""
-      scheduleStatus = ""
-      sendStatus = ""
+    // Paused accounts get 423 from every route below. Nothing to fetch.
+    guard !sid.isEmpty, let me, !me.paused else {
+      clear()
       return
     }
 

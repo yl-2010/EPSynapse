@@ -33,7 +33,8 @@ struct CornerChrome: View {
             .safeAreaPadding(.horizontal)
             .ignoresSafeArea(.keyboard, edges: .bottom)
 
-            if session.isSignedIn {
+            // Paused accounts get 423 from settings and chat routes, so hide both.
+            if session.canUseDashboard {
                 VStack {
                     Spacer(minLength: 0)
                         .allowsHitTesting(false)

@@ -27,6 +27,15 @@ private extension KeyedDecodingContainer {
 }
 
 struct Profile: Codable, Equatable {
+  /// Which front door this account came through. "eps" (school Microsoft sign-in,
+  /// not live yet) or "other" (Google). Defaults to "other" when the server omits it.
+  var door: String
+  /// True while the server holds this account back from the dashboard. Every
+  /// authenticated route except GET /v1/me and POST /v1/me/logout returns 423.
+  var paused: Bool
+  /// Shown verbatim on the paused card. Empty unless `paused` is true.
+  var pausedMessage: String
+  /// Dead fields. Still on the wire, no longer shown or edited.
   var school: String
   var studentId: String
   var canvasHost: String
@@ -75,6 +84,9 @@ struct Profile: Codable, Equatable {
   }
 
   init(
+    door: String = "other",
+    paused: Bool = false,
+    pausedMessage: String = "",
     school: String = "",
     studentId: String = "",
     canvasHost: String = "",
@@ -101,6 +113,9 @@ struct Profile: Codable, Equatable {
     modelKeyCount: Int = 0,
     sessionId: String? = nil
   ) {
+    self.door = door
+    self.paused = paused
+    self.pausedMessage = pausedMessage
     self.school = school
     self.studentId = studentId
     self.canvasHost = canvasHost
@@ -130,6 +145,10 @@ struct Profile: Codable, Equatable {
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
+    let rawDoor = c.string(.door).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    door = rawDoor == "eps" ? "eps" : "other"
+    paused = c.bool(.paused)
+    pausedMessage = paused ? c.string(.pausedMessage) : ""
     school = c.string(.school)
     studentId = c.string(.studentId)
     canvasHost = c.string(.canvasHost)
@@ -723,20 +742,17 @@ struct SaveAgentBody: Encodable {
   }
 }
 
+/// POST /v1/me. Canvas only. The server no longer accepts `school` or `studentId`.
 struct SaveMeBody: Encodable {
-  var school: String
-  var studentId: String
   var canvasHost: String
   var canvasToken: String?
 
   enum CodingKeys: String, CodingKey {
-    case school, studentId, canvasHost, canvasToken
+    case canvasHost, canvasToken
   }
 
   func encode(to encoder: Encoder) throws {
     var c = encoder.container(keyedBy: CodingKeys.self)
-    try c.encode(school, forKey: .school)
-    try c.encode(studentId, forKey: .studentId)
     try c.encode(canvasHost, forKey: .canvasHost)
     if let canvasToken, !canvasToken.isEmpty {
       try c.encode(canvasToken, forKey: .canvasToken)
