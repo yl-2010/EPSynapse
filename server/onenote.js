@@ -88,7 +88,7 @@ function notesDenied(err) {
 
 export function onenoteError(err) {
   if (notesDenied(err)) {
-    return "OneNote needs Notes access on this Microsoft sign-in. Connect OneDrive again after school IT accepts the app.";
+    return "This Microsoft sign-in has no OneNote read access. School IT has to approve EPSynapse, then connect OneNote again.";
   }
   return String(err?.message || "OneNote request failed.");
 }

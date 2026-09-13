@@ -1,21 +1,148 @@
 /**
- * School OneDrive via Microsoft Graph.
- * Microsoft Office is already on the school tenant. Graph Explorer asks for
- * new Files/Mail consent and Eastside Prep blocks that behind admin approval.
- * Override with MICROSOFT_CLIENT_ID if we later register EPSynapse itself.
+ * School Microsoft 365 via Microsoft Graph.
+ *
+ * Two client modes:
+ * - "office": the Microsoft Office first-party client with device code. Pre-consented on
+ *   the school tenant, so Microsoft never asks, but the token only carries whatever
+ *   Office already has (no OneNote read at Eastside Prep).
+ * - "app": our own registration (MICROSOFT_CLIENT_ID). Authorization code + PKCE with
+ *   named delegated scopes. School IT approves it once through adminConsentUrl().
  */
+
+import { createHash, randomBytes } from "node:crypto";
 
 export const OFFICE_CLIENT_ID = "d3590ed6-52b3-4102-aeff-aad2292ab01c";
 export const EPS_TENANT_ID = "b2681e8b-dd20-46cf-b163-371a2d7c6014";
 export const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
 export const WRITE_FOLDER = "EPSynapse";
+export const MS_TENANT = String(process.env.MICROSOFT_TENANT || "").trim() || EPS_TENANT_ID;
+export const APP_SCOPES =
+  "User.Read Files.ReadWrite Notes.ReadWrite Mail.ReadWrite Mail.Send Chat.ReadWrite offline_access openid profile email";
+export const ADMIN_CONSENT_REDIRECT = "https://epsynapse.com/?ms=admin-consent";
 
-const LOGIN = `https://login.microsoftonline.com/${EPS_TENANT_ID}/oauth2/v2.0`;
+const LOGIN = `https://login.microsoftonline.com/${MS_TENANT}/oauth2/v2.0`;
 const DEVICE_SCOPE =
   "https://graph.microsoft.com/.default offline_access openid profile";
 
 export function graphClientId() {
   return String(process.env.MICROSOFT_CLIENT_ID || "").trim() || OFFICE_CLIENT_ID;
+}
+
+export function msClientSecret() {
+  return String(process.env.MICROSOFT_CLIENT_SECRET || "").trim();
+}
+
+export function msClientMode() {
+  const id = graphClientId();
+  return id && id.toLowerCase() !== OFFICE_CLIENT_ID ? "app" : "office";
+}
+
+export function msScopes() {
+  const override = String(process.env.MICROSOFT_SCOPES || "").trim();
+  return override || APP_SCOPES;
+}
+
+function refreshScope() {
+  return msClientMode() === "app" ? msScopes() : DEVICE_SCOPE;
+}
+
+export function adminConsentUrl() {
+  const q = new URLSearchParams({
+    client_id: graphClientId(),
+    scope: "https://graph.microsoft.com/.default",
+    redirect_uri: ADMIN_CONSENT_REDIRECT,
+  });
+  return `https://login.microsoftonline.com/${MS_TENANT}/v2.0/adminconsent?${q}`;
+}
+
+export function newPkcePair() {
+  const codeVerifier = randomBytes(32).toString("base64url");
+  const codeChallenge = createHash("sha256").update(codeVerifier).digest("base64url");
+  return { codeVerifier, codeChallenge };
+}
+
+export function newOauthState() {
+  return randomBytes(32).toString("hex");
+}
+
+export function buildAuthorizeUrl({ state, codeChallenge, redirectUri, loginHint } = {}) {
+  const q = new URLSearchParams({
+    client_id: graphClientId(),
+    response_type: "code",
+    redirect_uri: String(redirectUri || ""),
+    response_mode: "query",
+    scope: msScopes(),
+    state: String(state || ""),
+    code_challenge: String(codeChallenge || ""),
+    code_challenge_method: "S256",
+    prompt: "select_account",
+  });
+  const hint = String(loginHint || "").trim();
+  if (hint) q.set("login_hint", hint);
+  return `${LOGIN}/authorize?${q}`;
+}
+
+export function needsAdminApprovalText(text) {
+  const t = String(text || "").toLowerCase();
+  return (
+    t.includes("aadsts65001") ||
+    t.includes("aadsts90094") ||
+    t.includes("consent_required") ||
+    t.includes("admin consent") ||
+    t.includes("admin approval") ||
+    t.includes("needs permission to access resources")
+  );
+}
+
+export function userDeclinedText(text) {
+  const t = String(text || "").toLowerCase();
+  return t.includes("aadsts65004") || t.includes("authorization_declined");
+}
+
+export async function exchangeAuthCode({ code, codeVerifier, redirectUri } = {}) {
+  const authCode = String(code || "").trim();
+  if (!authCode) return { ok: false, error: "missing code" };
+  const clientId = graphClientId();
+  const body = new URLSearchParams({
+    client_id: clientId,
+    grant_type: "authorization_code",
+    code: authCode,
+    redirect_uri: String(redirectUri || ""),
+    code_verifier: String(codeVerifier || ""),
+    scope: msScopes(),
+  });
+  const secret = msClientSecret();
+  if (secret) body.set("client_secret", secret);
+  let data;
+  try {
+    const res = await fetch(`${LOGIN}/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+    });
+    data = await readOauthJson(res);
+    if (res.ok && data.access_token) {
+      return {
+        ...tokenPayload(data.access_token, data.refresh_token),
+        clientId,
+        scope: msScopes(),
+      };
+    }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "token exchange failed" };
+  }
+  const error = String(data?.error || "token exchange failed");
+  const errorDescription = redactSecrets(data?.error_description || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 300);
+  return {
+    ok: false,
+    error,
+    errorDescription,
+    needsAdminApproval: needsAdminApprovalText(`${error} ${errorDescription}`),
+    declined: userDeclinedText(`${error} ${errorDescription}`),
+  };
 }
 
 export function completeDeviceUrl(userCode, uri) {
@@ -231,19 +358,25 @@ export function acceptPastedToken(accessToken) {
   return tokenPayload(token, "");
 }
 
-export async function refreshAccessToken(refreshToken) {
+export async function refreshAccessToken(refreshToken, { clientId, scope } = {}) {
   const rt = String(refreshToken || "").trim();
   if (!rt) return { ok: false, error: "no refresh token" };
+  const id = String(clientId || "").trim() || graphClientId();
+  const body = new URLSearchParams({
+    client_id: id,
+    grant_type: "refresh_token",
+    refresh_token: rt,
+    scope: String(scope || "").trim() || refreshScope(),
+  });
+  const secret = msClientSecret();
+  if (secret && id === graphClientId() && msClientMode() === "app") {
+    body.set("client_secret", secret);
+  }
   try {
     const res = await fetch(`${LOGIN}/token`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: graphClientId(),
-        grant_type: "refresh_token",
-        refresh_token: rt,
-        scope: DEVICE_SCOPE,
-      }),
+      body,
     });
     const data = await readOauthJson(res);
     if (!res.ok || !data.access_token) {
@@ -260,7 +393,10 @@ export async function ensureFreshToken(graph) {
   if (!access) throw new Error("not connected to OneDrive");
   const exp = Number(graph.exp) || jwtExp(access);
   if (exp * 1000 > Date.now() + TOKEN_SKEW_S * 1000) return graph;
-  const refreshed = await refreshAccessToken(graph.refreshToken);
+  const refreshed = await refreshAccessToken(graph.refreshToken, {
+    clientId: graph.clientId,
+    scope: graph.scope,
+  });
   if (!refreshed.ok) {
     throw new Error(refreshed.error || "OneDrive token expired");
   }
@@ -351,24 +487,90 @@ function dedupeDriveItems(rows) {
   return out;
 }
 
+function graphErrorCode(err) {
+  const m = /"code"\s*:\s*"([A-Za-z0-9_.-]+)"/.exec(String(err?.message || ""));
+  return m ? m[1] : "";
+}
+
+/** Continuous Access Evaluation pulled the token for this service. A fresh sign-in fixes it. */
+export function needsReauth(err) {
+  const msg = String(err?.message || "");
+  return /claims required|ConditionalAccess|InvalidAuthenticationToken.*expired/i.test(msg);
+}
+
+/** "401 denied (accessDenied)", "401 reauth", "500 unavailable", "404 not found". Never the token. */
+export function probeErrorText(err) {
+  const status = Number(err?.status) || 0;
+  let label = "failed";
+  if (needsReauth(err)) label = "reauth";
+  else if (status === 401 || status === 403) label = "denied";
+  else if (status >= 500) label = "unavailable";
+  else if (status === 404) label = "not found";
+  else if (status === 429) label = "rate limited";
+  const code = graphErrorCode(err);
+  const head = status ? `${status} ${label}` : label;
+  if (code) return `${head} (${code})`;
+  if (!status) return `${label}: ${shortProbeError(err).slice(0, 80)}`;
+  return head;
+}
+
+export function probeDenied(text) {
+  return /\bdenied\b/i.test(String(text || ""));
+}
+
+export function probeReauth(text) {
+  return /\breauth\b/i.test(String(text || ""));
+}
+
+export function tokenHasNotesRead(token) {
+  const s = tokenScopes(token);
+  if (!s) return true;
+  return /notes\.read/.test(s);
+}
+
+/**
+ * One call per service, in parallel. files/notes/mail/chats are true only when Graph
+ * answered 2xx. out.errors holds a short per-service reason when it did not.
+ */
 export async function probeGraph(token) {
   const out = {
     user: false,
     files: false,
+    notes: false,
     mail: false,
+    chats: false,
     calendar: false,
     email: "",
     error: "",
+    errors: {},
   };
   const jobs = [
     ["user", "/me?$select=userPrincipalName,mail,displayName"],
     ["files", "/me/drive/root?$select=id"],
+    ["notes", "/me/onenote/notebooks?$top=1&$select=id"],
     ["mail", "/me/mailFolders/Inbox?$select=id"],
+    ["chats", "/me/chats?$top=1&$select=id"],
     ["calendar", "/me/calendar?$select=id"],
   ];
   const results = await Promise.allSettled(
     jobs.map(([, path]) => graphGet(token, path))
   );
+  // /me/chats answers 401 "Unauthorized" now and then for a token that works a second
+  // later. One retry for that and for 5xx keeps a flake from being recorded as denial.
+  const flaky = (r) => {
+    if (r.status !== "rejected") return false;
+    if (needsReauth(r.reason)) return false;
+    const status = Number(r.reason?.status) || 0;
+    return status >= 500 || (status === 401 && graphErrorCode(r.reason) === "Unauthorized");
+  };
+  const retry = [];
+  for (let i = 0; i < jobs.length; i += 1) if (flaky(results[i])) retry.push(i);
+  if (retry.length) {
+    await new Promise((r) => setTimeout(r, 700));
+    for (const i of retry) {
+      results[i] = (await Promise.allSettled([graphGet(token, jobs[i][1])]))[0];
+    }
+  }
   for (let i = 0; i < jobs.length; i += 1) {
     const [key] = jobs[i];
     const result = results[i];
@@ -380,7 +582,13 @@ export async function probeGraph(token) {
       }
       continue;
     }
+    const text = probeErrorText(result.reason);
+    if (key !== "user" && key !== "calendar") out.errors[key] = text;
     if (!out.error) out.error = shortProbeError(result.reason);
+  }
+  if (!out.notes && !out.errors.notes) out.errors.notes = "no answer";
+  if (!out.notes && !tokenHasNotesRead(token)) {
+    out.errors.notes = `${out.errors.notes} (token has no Notes.Read scope)`;
   }
   return out;
 }
@@ -504,10 +712,17 @@ export function publicPending(graph) {
   };
 }
 
-export function isConnected(graph) {
+/** Token present and not expired. Ignores the denied flag. */
+export function hasLiveToken(graph) {
   const token = String(graph?.accessToken || "").trim();
   if (!token) return false;
   const exp = Number(graph.exp) || jwtExp(token);
   if (!exp) return true;
   return exp * 1000 > Date.now();
+}
+
+/** Live token and Graph did not deny the service this bag is for. */
+export function isConnected(graph) {
+  if (!hasLiveToken(graph)) return false;
+  return !graph?.denied;
 }

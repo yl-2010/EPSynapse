@@ -5,13 +5,19 @@
  * Override with MICROSOFT_CLIENT_ID if we later register EPSynapse itself.
  */
 
-import { completeDeviceUrl, OFFICE_CLIENT_ID } from "./onedrive.js";
+import {
+  completeDeviceUrl,
+  msClientMode,
+  msClientSecret,
+  MS_TENANT,
+  OFFICE_CLIENT_ID,
+} from "./onedrive.js";
 
 export const EPS_TENANT_ID = "b2681e8b-dd20-46cf-b163-371a2d7c6014";
 export const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
 export const OUTLOOK_REST_BASE = "https://outlook.office.com/api/v2.0";
 
-const LOGIN = `https://login.microsoftonline.com/${EPS_TENANT_ID}/oauth2/v2.0`;
+const LOGIN = `https://login.microsoftonline.com/${MS_TENANT}/oauth2/v2.0`;
 const GRAPH_SCOPE =
   "https://graph.microsoft.com/.default offline_access openid profile";
 
@@ -204,16 +210,21 @@ export async function refreshAccessToken(refreshToken, clientId, scope) {
   const id = String(clientId || "").trim() || outlookClientId();
   const scp = String(scope || "").trim() || GRAPH_SCOPE;
   if (!rt) return { ok: false, error: "no refresh token" };
+  const body = new URLSearchParams({
+    client_id: id,
+    grant_type: "refresh_token",
+    refresh_token: rt,
+    scope: scp,
+  });
+  const secret = msClientSecret();
+  if (secret && msClientMode() === "app" && id === outlookClientId()) {
+    body.set("client_secret", secret);
+  }
   try {
     const res = await fetch(`${LOGIN}/token`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: id,
-        grant_type: "refresh_token",
-        refresh_token: rt,
-        scope: scp,
-      }),
+      body,
     });
     const data = await readOauthJson(res);
     if (!res.ok || !data.access_token) {
@@ -462,6 +473,7 @@ export function publicPending(outlook) {
 export function isConnected(outlook) {
   const token = String(outlook?.accessToken || "").trim();
   if (!token) return false;
+  if (outlook?.denied) return false;
   const exp = Number(outlook.exp) || jwtExp(token);
   if (!exp) return true;
   return exp * 1000 > Date.now();

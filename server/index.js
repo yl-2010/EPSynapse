@@ -39,17 +39,30 @@ import {
 } from "./canvas.js";
 import {
   acceptPastedToken,
+  adminConsentUrl,
+  buildAuthorizeUrl,
   completeDeviceUrl,
   downloadFile,
   ensureFreshToken,
+  exchangeAuthCode,
+  hasLiveToken,
   isConnected,
   listDashboardFiles,
+  msClientMode,
+  msScopes,
+  needsAdminApprovalText,
+  newOauthState,
+  newPkcePair,
   pollDeviceCode,
+  probeDenied,
   probeGraph,
+  probeReauth,
   publicPending,
   searchFiles,
   startDeviceCode,
+  tokenHasNotesRead,
   uploadFile,
+  userDeclinedText,
   WRITE_FOLDER,
 } from "./onedrive.js";
 import {
@@ -75,7 +88,6 @@ import {
   startDeviceCode as startOutlookCode,
 } from "./outlook.js";
 import {
-  adminConsentUrl,
   acceptPastedToken as acceptTeamsToken,
   ensureFreshToken as ensureTeamsToken,
   isConnected as teamsGraphConnected,
@@ -94,6 +106,7 @@ import {
   readStudioFile,
   sendStudioChat,
   studioFlags,
+  studioOnenoteToken,
   studioOutlookToken,
   writeStudioFile,
 } from "./studio-ms.js";
@@ -110,9 +123,12 @@ import {
   clearSessionCookie,
   createSession,
   destroySession,
+  findStudentByMsAuthState,
   googleFileId,
   loadStudentByFileId,
   mergeGraph,
+  mergeMsAuth,
+  mergeMsServices,
   mergeOutlook,
   mergeTeams,
   publicProfile,
@@ -220,21 +236,198 @@ async function requireStudent(req, res) {
   return student;
 }
 
+const MS_REDIRECT_URI =
+  String(process.env.MICROSOFT_REDIRECT_URI || "").trim() ||
+  "https://api.epsynapse.com/v1/ms/callback";
+const MS_DEFAULT_RETURN = "https://epsynapse.com";
+const MS_AUTH_TTL_MS = 15 * 60 * 1000;
+const MS_REPROBE_MS = 30 * 60 * 1000;
+const MS_SERVICES = ["onedrive", "onenote", "outlook", "teams"];
+const MS_SERVICE_KEY = { onedrive: "files", onenote: "notes", outlook: "mail", teams: "chats" };
+const MS_SERVICE_LABEL = { onedrive: "OneDrive", onenote: "OneNote", outlook: "Outlook", teams: "Teams" };
+const MS_ACCESS_LABEL = { files: "Files", notes: "OneNote", mail: "Mail", chats: "Teams chat" };
+
+/** state -> { fileId, createdAt }. Callback has no cookie, so this finds the student. */
+const msAuthStates = new Map();
+
+function msServiceName(raw) {
+  const s = String(raw || "").trim().toLowerCase();
+  return MS_SERVICES.includes(s) ? s : "";
+}
+
+function msServicesOf(student) {
+  const src = student?.msServices && typeof student.msServices === "object" ? student.msServices : {};
+  return {
+    email: String(src.email || ""),
+    files: src.files === true ? true : src.files === false ? false : null,
+    notes: src.notes === true ? true : src.notes === false ? false : null,
+    mail: src.mail === true ? true : src.mail === false ? false : null,
+    chats: src.chats === true ? true : src.chats === false ? false : null,
+    errors: src.errors && typeof src.errors === "object" ? src.errors : {},
+    needsAdminApproval: Boolean(src.needsAdminApproval),
+    checkedAt: String(src.checkedAt || ""),
+  };
+}
+
+/** Plain sentence for one denied service, or "" when it works or was never checked. */
+function msDeniedReason(ms, key, token) {
+  if (ms[key] !== false) return "";
+  const err = String(ms.errors?.[key] || "");
+  const label = MS_ACCESS_LABEL[key] || key;
+  if (key === "notes" && /no Notes\.Read scope/i.test(err)) {
+    return "This Microsoft sign-in has no OneNote read access. School IT has to approve EPSynapse.";
+  }
+  if (probeReauth(err)) {
+    return `Microsoft wants a fresh sign-in before ${label} works again. Connect again.`;
+  }
+  if (probeDenied(err)) {
+    return `Microsoft denied ${label} access. School IT has to approve EPSynapse.`;
+  }
+  if (/unavailable|5\d\d/.test(err)) {
+    return `Microsoft did not answer for ${label} (${err.split(" ")[0] || "server error"}). Try again later.`;
+  }
+  if (!token) return `${label} is not connected.`;
+  return `Microsoft refused ${label} access (${err || "unknown error"}).`;
+}
+
+function msNeedsAdminApproval(ms) {
+  if (ms.needsAdminApproval) return true;
+  for (const key of ["files", "notes", "mail", "chats"]) {
+    if (ms[key] === false && probeDenied(ms.errors?.[key])) return true;
+    if (key === "notes" && ms.notes === false && /no Notes\.Read/i.test(ms.errors?.notes || "")) return true;
+  }
+  return false;
+}
+
+function msSignedInEmail(student) {
+  const ms = msServicesOf(student);
+  return (
+    ms.email ||
+    student?.graph?.email ||
+    student?.outlook?.email ||
+    student?.teams?.email ||
+    ""
+  );
+}
+
+function onenoteGraphConnected(student, ms) {
+  return hasLiveToken(student?.graph) && ms.notes === true;
+}
+
+function outlookReallyConnected(student, ms) {
+  return outlookConnected(student?.outlook) && ms.mail !== false;
+}
+
+function teamsReallyConnected(student, ms) {
+  return teamsGraphConnected(student?.teams) && ms.chats !== false;
+}
+
+function onedriveReallyConnected(student, ms) {
+  return isConnected(student?.graph) && ms.files !== false;
+}
+
 function publicMe(student) {
   const flags = studioFlags(student);
   const base = publicProfile(student);
+  const ms = msServicesOf(student);
+  const graphTok = hasLiveToken(student?.graph);
+  const denied = {
+    onedrive: flags.onedrive ? "" : msDeniedReason(ms, "files", graphTok),
+    onenote: flags.onenote ? "" : msDeniedReason(ms, "notes", graphTok),
+    outlook: flags.outlook ? "" : msDeniedReason(ms, "mail", hasLiveToken(student?.outlook)),
+    teams: flags.teams ? "" : msDeniedReason(ms, "chats", hasLiveToken(student?.teams)),
+  };
+  const needsApproval = msNeedsAdminApproval(ms);
   return {
     ...base,
-    onedriveConnected: Boolean(base.onedriveConnected || flags.onedrive),
-    onenoteConnected: Boolean(base.onedriveConnected || flags.onedrive),
+    onedriveConnected: Boolean(onedriveReallyConnected(student, ms) || flags.onedrive),
+    onenoteConnected: Boolean(onenoteGraphConnected(student, ms) || flags.onenote),
     onenoteEmail: base.onedriveEmail || "",
-    outlookConnected: Boolean(base.outlookConnected || flags.outlook),
-    teamsConnected: Boolean(base.teamsConnected || flags.teams),
+    outlookConnected: Boolean(outlookReallyConnected(student, ms) || flags.outlook),
+    teamsConnected: Boolean(teamsReallyConnected(student, ms) || flags.teams),
     studioOnedrive: flags.onedrive,
+    studioOnenote: flags.onenote,
     studioOutlook: flags.outlook,
     studioTeams: flags.teams,
+    msClientMode: msClientMode(),
+    msSignedInEmail: msSignedInEmail(student),
+    msDenied: denied,
+    msNeedsAdminApproval: needsApproval,
+    msCheckedAt: ms.checkedAt,
     adminConsentUrl: adminConsentUrl(),
+    consentRequest: consentRequestFor(student, "onenote"),
   };
+}
+
+function safeReturnTo(raw) {
+  const s = String(raw || "").trim();
+  if (!s) return MS_DEFAULT_RETURN;
+  if (/^epsynapse:\/\//i.test(s)) return "epsynapse://";
+  let url;
+  try {
+    url = new URL(s);
+  } catch {
+    return MS_DEFAULT_RETURN;
+  }
+  const origin = url.origin;
+  const allowedOrigins = new Set([
+    "https://epsynapse.com",
+    "https://www.epsynapse.com",
+    "https://jype-six.vercel.app",
+  ]);
+  if (allowedOrigins.has(origin)) return origin;
+  if (url.protocol === "http:" && (url.hostname === "localhost" || url.hostname === "127.0.0.1")) {
+    return origin;
+  }
+  return MS_DEFAULT_RETURN;
+}
+
+function liveMsAuth(student) {
+  const auth = student?.msAuth;
+  if (!auth?.state || !auth.codeVerifier) return null;
+  const created = Date.parse(auth.createdAt || "") || 0;
+  if (!created || Date.now() - created > MS_AUTH_TTL_MS) return null;
+  return auth;
+}
+
+function studentSchoolEmail(student) {
+  const ms = msSignedInEmail(student);
+  if (ms) return ms;
+  const email = String(student?.email || "");
+  return /@eastsideprep\.org$/i.test(email) ? email : "";
+}
+
+/** Email the student can send to school IT. Never depends on the demo path. */
+function consentRequestFor(student, service) {
+  const to = String(process.env.SCHOOL_IT_EMAIL || "").trim();
+  const svc = msServiceName(service) || "onenote";
+  const label = MS_SERVICE_LABEL[svc];
+  const name = String(student?.displayName || student?.googleName || "A student").trim();
+  const schoolEmail = studentSchoolEmail(student);
+  const who = schoolEmail ? `${name} (${schoolEmail})` : name;
+  const consent = adminConsentUrl();
+  const subject = "Please approve EPSynapse for Microsoft 365 (OneNote, OneDrive, Outlook, Teams)";
+  const body = [
+    "Hi,",
+    "",
+    `${who} is asking for EPSynapse to be approved on the Eastside Prep Microsoft 365 tenant. ${label} is what I need right now.`,
+    "",
+    "EPSynapse is a student home for EPS. It puts Canvas, OneNote, OneDrive, Outlook, and Teams on one page so a student can see their own work in one place.",
+    "",
+    "It asks for these delegated Microsoft Graph permissions (signed-in user only):",
+    `  ${msScopes()}`,
+    "",
+    "Admin consent link (opens the Microsoft approval page for this app):",
+    consent,
+    "",
+    "Each student signs in with their own school account and EPSynapse can only read that student's own data. Nothing is shared across students.",
+    "",
+    "Thank you,",
+    name,
+  ].join("\n");
+  const q = new URLSearchParams({ subject, body });
+  const mailto = `mailto:${encodeURIComponent(to)}?${q.toString().replace(/\+/g, "%20")}`;
+  return { to, subject, body, mailto, adminConsentUrl: consent };
 }
 
 function sessionJson(req, res, student, sid) {
@@ -346,7 +539,44 @@ function mergeListedFiles(...lists) {
   return out;
 }
 
-async function applyMicrosoftToken(current, poll, pending) {
+async function safeProbe(accessToken) {
+  const empty = {
+    user: false,
+    files: false,
+    notes: false,
+    mail: false,
+    chats: false,
+    calendar: false,
+    email: "",
+    error: "",
+    errors: {},
+  };
+  try {
+    return await probeGraph(accessToken);
+  } catch (err) {
+    const text = shortMsError(err);
+    return {
+      ...empty,
+      error: text,
+      errors: { files: text, notes: text, mail: text, chats: text },
+    };
+  }
+}
+
+function logProbe(email, probe) {
+  console.log(
+    `[ms-oauth] probe email=${email || ""} files=${probe.files} notes=${probe.notes} mail=${probe.mail} chats=${probe.chats} calendar=${probe.calendar}` +
+      (Object.keys(probe.errors || {}).length ? ` errors=${JSON.stringify(probe.errors)}` : "")
+  );
+}
+
+/**
+ * Store a fresh Microsoft token only where Graph proved it works.
+ * graph gets it when Files or OneNote answered (OneNote rides on the graph bag).
+ * outlook gets it when the Inbox answered. teams gets it when /me/chats answered.
+ * If nothing answered, graph keeps it with denied=true so we can refresh and re-probe.
+ */
+async function applyMicrosoftToken(current, poll, pending, extra = {}) {
   const bag = {
     accessToken: poll.accessToken,
     refreshToken: poll.refreshToken,
@@ -355,33 +585,150 @@ async function applyMicrosoftToken(current, poll, pending) {
     clientId: poll.clientId || pending?.clientId || "",
     scope: poll.scope || pending?.scope || "",
     pending: null,
+    denied: false,
   };
-  let probe = { user: false, files: false, mail: false, calendar: false, email: "", error: "" };
-  try {
-    probe = await probeGraph(poll.accessToken);
-  } catch (err) {
-    probe.error = shortMsError(err);
-  }
+  const probe = await safeProbe(poll.accessToken);
   if (probe.email) bag.email = probe.email;
-  const files = Boolean(probe.files || probe.user);
-  const mail = Boolean(probe.mail || probe.user);
-  let chats = false;
-  try {
-    await listTeamsChats(poll.accessToken, { limit: 1 });
-    chats = true;
-  } catch {
-    chats = false;
+  const { files, notes, mail, chats } = probe;
+  const prev = msServicesOf(current);
+  const patch = {
+    email: bag.email || "",
+    errors: { ...prev.errors },
+    needsAdminApproval: Boolean(extra.needsAdminApproval),
+    checkedAt: new Date().toISOString(),
+  };
+  // A bag that already holds a different working token keeps its flag. This new token
+  // may be a narrower one (Teams-only device code) that says nothing about that service.
+  const keepOther = (bagName) => hasLiveToken(current[bagName]) && !current[bagName].denied;
+  const record = (key, ok) => {
+    patch[key] = ok;
+    if (ok) delete patch.errors[key];
+    else patch.errors[key] = probe.errors?.[key] || probe.error || "no answer";
+  };
+
+  if (files || notes) {
+    mergeGraph(current, { ...bag, denied: !files });
+    record("files", files);
+    record("notes", notes);
+  } else if (!mail && !chats) {
+    mergeGraph(current, { ...bag, denied: true });
+    record("files", false);
+    record("notes", false);
+  } else {
+    mergeGraph(current, { pending: null });
+    if (!keepOther("graph")) {
+      record("files", false);
+      record("notes", false);
+    }
   }
-  if (files) await persistGraph(current, bag);
-  if (mail) await persistOutlook(current, bag);
-  if (chats) await persistTeams(current, bag);
-  if (!files && !mail && !chats) await persistGraph(current, bag);
+  if (mail) {
+    mergeOutlook(current, bag);
+    record("mail", true);
+  } else {
+    mergeOutlook(current, { pending: null });
+    if (!keepOther("outlook")) {
+      if (hasLiveToken(current.outlook)) mergeOutlook(current, { denied: true });
+      record("mail", false);
+    }
+  }
+  if (chats) {
+    mergeTeams(current, bag);
+    record("chats", true);
+  } else {
+    mergeTeams(current, { pending: null });
+    if (!keepOther("teams")) {
+      if (hasLiveToken(current.teams)) mergeTeams(current, { denied: true });
+      record("chats", false);
+    }
+  }
+
+  mergeMsServices(current, patch);
+  await saveStudent(current);
+  logProbe(bag.email, probe);
+  return probe;
+}
+
+/**
+ * Re-run the honest probe on tokens we already hold. Used when a status call finds
+ * a token that was stored before per-service checks existed, or a stale check.
+ */
+async function reprobeMicrosoft(student) {
+  const jobs = [];
+  const seen = new Map();
+  for (const key of ["graph", "outlook", "teams"]) {
+    const bag = student[key];
+    if (!hasLiveToken(bag)) continue;
+    const token = String(bag.accessToken);
+    if (!seen.has(token)) {
+      seen.set(token, safeProbe(token));
+    }
+    jobs.push([key, token]);
+  }
+  if (!jobs.length) return null;
+  const results = new Map();
+  for (const [token, p] of seen) results.set(token, await p);
+  const patch = { errors: {}, checkedAt: new Date().toISOString() };
+  let email = "";
+  for (const [key, token] of jobs) {
+    const probe = results.get(token);
+    if (!probe) continue;
+    if (probe.email) email = probe.email;
+    if (key === "graph") {
+      patch.files = probe.files;
+      patch.notes = probe.notes;
+      if (probe.errors.files) patch.errors.files = probe.errors.files;
+      if (probe.errors.notes) patch.errors.notes = probe.errors.notes;
+      mergeGraph(student, { denied: !probe.files });
+    } else if (key === "outlook") {
+      patch.mail = probe.mail;
+      if (probe.errors.mail) patch.errors.mail = probe.errors.mail;
+      mergeOutlook(student, { denied: !probe.mail });
+    } else if (key === "teams") {
+      patch.chats = probe.chats;
+      if (probe.errors.chats) patch.errors.chats = probe.errors.chats;
+      mergeTeams(student, { denied: !probe.chats });
+    }
+  }
+  if (email) patch.email = email;
+  mergeMsServices(student, patch);
+  await saveStudent(student);
+  const ms = msServicesOf(student);
   console.log(
-    `[ms-oauth] probe email=${bag.email || ""} files=${probe.files} mail=${probe.mail} calendar=${probe.calendar} chats=${chats}`
+    `[ms-oauth] reprobe email=${ms.email} files=${ms.files} notes=${ms.notes} mail=${ms.mail} chats=${ms.chats}` +
+      (Object.keys(ms.errors).length ? ` errors=${JSON.stringify(ms.errors)}` : "")
   );
+  return ms;
+}
+
+function probeIsStale(student) {
+  const ms = msServicesOf(student);
+  const at = Date.parse(ms.checkedAt || "") || 0;
+  return !at || Date.now() - at > MS_REPROBE_MS;
+}
+
+async function reprobeIfStale(student) {
+  if (!probeIsStale(student)) return student;
+  const hasAny = hasLiveToken(student.graph) || hasLiveToken(student.outlook) || hasLiveToken(student.teams);
+  if (!hasAny) return student;
+  try {
+    await reprobeMicrosoft(student);
+  } catch (err) {
+    console.warn("[ms-oauth] reprobe failed", shortMsError(err));
+  }
+  return student;
+}
+
+function deniedError(student, key, label) {
+  const ms = msServicesOf(student);
+  const reason = msDeniedReason(ms, key, true) || `Microsoft denied ${label} access.`;
+  const err = new Error(reason);
+  err.status = 403;
+  err.denied = true;
+  return err;
 }
 
 async function graphToken(student) {
+  if (student.graph?.denied) throw deniedError(student, "files", "Files");
   const fresh = await ensureFreshToken(student.graph);
   if (fresh !== student.graph) {
     mergeGraph(student, fresh);
@@ -391,6 +738,7 @@ async function graphToken(student) {
 }
 
 async function outlookToken(student) {
+  if (student.outlook?.denied) throw deniedError(student, "mail", "Mail");
   const fresh = await ensureOutlookToken(student.outlook);
   if (fresh !== student.outlook) {
     mergeOutlook(student, fresh);
@@ -400,6 +748,7 @@ async function outlookToken(student) {
 }
 
 async function teamsToken(student) {
+  if (student.teams?.denied) throw deniedError(student, "chats", "Teams chat");
   const fresh = await ensureTeamsToken(student.teams);
   if (fresh !== student.teams) {
     mergeTeams(student, fresh);
@@ -869,76 +1218,428 @@ app.get("/v1/me/canvas/grades", async (req, res) => {
   }
 });
 
-app.post("/v1/me/onedrive/start", async (req, res) => {
+/* ---------- Microsoft sign-in: app mode (auth code + PKCE) or office mode (device code) ---------- */
+
+async function startAppAuth(student, service, returnTo) {
+  const state = newOauthState();
+  const { codeVerifier, codeChallenge } = newPkcePair();
+  const authorizeUrl = buildAuthorizeUrl({
+    state,
+    codeChallenge,
+    redirectUri: MS_REDIRECT_URI,
+    loginHint: studentSchoolEmail(student),
+  });
+  const fileId = googleFileId(student.googleSub);
+  mergeMsAuth(student, {
+    state,
+    codeVerifier,
+    service,
+    returnTo: safeReturnTo(returnTo),
+    authorizeUrl,
+    createdAt: new Date().toISOString(),
+  });
+  await saveStudent(student);
+  msAuthStates.set(state, { fileId, createdAt: Date.now() });
+  for (const [k, v] of msAuthStates) {
+    if (Date.now() - v.createdAt > MS_AUTH_TTL_MS) msAuthStates.delete(k);
+  }
+  return {
+    mode: "app",
+    service,
+    authorizeUrl,
+    state,
+    adminConsentUrl: adminConsentUrl(),
+    consentRequest: consentRequestFor(student, service),
+    user_code: "",
+    verification_uri: authorizeUrl,
+    verification_uri_complete: authorizeUrl,
+    message: `Open the link to sign in with your school Microsoft account and allow ${MS_SERVICE_LABEL[service]}.`,
+    interval: 3,
+  };
+}
+
+function deviceStartFailed(service, started) {
+  return {
+    mode: "office",
+    service,
+    user_code: "",
+    verification_uri: "",
+    message: started?.error || `Microsoft would not start ${MS_SERVICE_LABEL[service]} sign-in.`,
+    adminConsentUrl: started?.adminConsentUrl || adminConsentUrl(),
+  };
+}
+
+function devicePending(started) {
+  return {
+    device_code: started.device_code,
+    clientId: started.clientId,
+    scope: started.scope || "",
+    interval: started.interval,
+    expiresAt: started.expiresAt,
+    user_code: started.user_code,
+    verification_uri: started.verification_uri,
+    verification_uri_complete: started.verification_uri_complete || "",
+    message: started.message,
+  };
+}
+
+async function startOfficeAuth(student, service) {
+  if (service === "outlook") {
+    const started = await startOutlookCode();
+    if (!started.ok) return deviceStartFailed(service, started);
+    await persistOutlook(student, { pending: devicePending(started) });
+    return { ...pendingStartPayload(started), mode: "office", service };
+  }
+  if (service === "teams") {
+    const started = await startTeamsCode();
+    if (!started.ok) return deviceStartFailed(service, started);
+    await persistTeams(student, { pending: devicePending(started) });
+    return { ...pendingStartPayload(started), mode: "office", service };
+  }
+  const started = await startDeviceCode();
+  if (!started.ok) return deviceStartFailed(service, started);
+  await persistGraph(student, { pending: devicePending(started) });
+  return { ...pendingStartPayload(started), mode: "office", service };
+}
+
+async function startMicrosoft(student, service, returnTo) {
+  if (msClientMode() === "app") return startAppAuth(student, service, returnTo);
+  return startOfficeAuth(student, service);
+}
+
+app.post("/v1/me/ms/start", async (req, res) => {
   try {
     const student = await requireStudent(req, res);
     if (!student) return;
-    const started = await startDeviceCode();
-    if (!started.ok) {
-      return res.json({
-        user_code: "",
-        verification_uri: "",
-        message: started.error || "Microsoft would not start school sign-in.",
-        adminConsentUrl: adminConsentUrl(),
-      });
+    const service = msServiceName(req.body?.service);
+    if (!service) {
+      return res.status(400).json({ error: "service must be onedrive, onenote, outlook, or teams." });
     }
-    await persistGraph(student, {
-      pending: {
-        device_code: started.device_code,
-        clientId: started.clientId,
-        interval: started.interval,
-        expiresAt: started.expiresAt,
-        user_code: started.user_code,
-        verification_uri: started.verification_uri,
-        verification_uri_complete: started.verification_uri_complete || "",
-        message: started.message,
-      },
-    });
-    return res.json(pendingStartPayload(started));
+    return res.json(await startMicrosoft(student, service, req.body?.returnTo));
   } catch (err) {
     return fail(res, err);
   }
 });
 
+app.post("/v1/me/onedrive/start", async (req, res) => {
+  try {
+    const student = await requireStudent(req, res);
+    if (!student) return;
+    return res.json(await startMicrosoft(student, "onedrive", req.body?.returnTo));
+  } catch (err) {
+    return fail(res, err);
+  }
+});
+
+function appPendingFor(student) {
+  const auth = liveMsAuth(student);
+  if (!auth) return null;
+  return { authorizeUrl: auth.authorizeUrl, service: auth.service, state: auth.state };
+}
+
+function statusExtras(student, service, flags) {
+  const ms = msServicesOf(student);
+  const key = MS_SERVICE_KEY[service];
+  const studio = Boolean(flags[service]);
+  const reason = studio ? "" : msDeniedReason(ms, key, true);
+  return {
+    denied: Boolean(reason),
+    deniedReason: reason,
+    needsAdminApproval: studio ? false : msNeedsAdminApproval(ms),
+    consentRequest: consentRequestFor(student, service),
+    mode: msClientMode(),
+    msSignedInEmail: msSignedInEmail(student),
+    adminConsentUrl: adminConsentUrl(),
+  };
+}
+
+/** Device-code poll for one bag. Returns the freshest student plus any terminal error. */
+async function pollDeviceBag(student, bagKey, pollFn, persistFn) {
+  const fileId = googleFileId(student.googleSub);
+  return withStudentLock(fileId, async () => {
+    const current = (await loadStudentByFileId(fileId)) || student;
+    const pending = current[bagKey]?.pending;
+    if (!pending?.device_code) return { current, pollError: "" };
+    if (!livePending(pending)) {
+      await persistFn(current, { pending: null });
+      return { current, pollError: "That Microsoft sign-in expired. Connect again." };
+    }
+    const poll = await pollFn(pending.device_code, pending.clientId);
+    if (poll.ok) {
+      await applyMicrosoftToken(current, poll, pending);
+      return { current, pollError: "" };
+    }
+    if (poll.pending || waitingDeviceError(poll.error)) {
+      return { current, pollError: "" };
+    }
+    console.warn(`[ms-oauth] ${bagKey} poll`, poll.error);
+    if (terminalDeviceError(poll.error)) {
+      await persistFn(current, { pending: null });
+      return { current, pollError: poll.error };
+    }
+    return { current, pollError: poll.error || "" };
+  });
+}
+
 app.get("/v1/me/onedrive/status", async (req, res) => {
   try {
     const student = await requireStudent(req, res);
     if (!student) return;
-    const fileId = googleFileId(student.googleSub);
-    const { current, pollError } = await withStudentLock(fileId, async () => {
-      const current = (await loadStudentByFileId(fileId)) || student;
-      const pending = current.graph?.pending;
-      if (!pending?.device_code) return { current, pollError: "" };
-      if (!livePending(pending)) {
-        await persistGraph(current, { pending: null });
-        return { current, pollError: "That Microsoft sign-in expired. Connect again." };
-      }
-      const poll = await pollDeviceCode(pending.device_code, pending.clientId);
-      if (poll.ok) {
-        await applyMicrosoftToken(current, poll, pending);
-        return { current, pollError: "" };
-      }
-      if (poll.pending || waitingDeviceError(poll.error)) {
-        return { current, pollError: "" };
-      }
-      console.warn("[ms-oauth] onedrive poll", poll.error);
-      if (terminalDeviceError(poll.error)) {
-        await persistGraph(current, { pending: null });
-        return { current, pollError: poll.error };
-      }
-      return { current, pollError: poll.error || "" };
-    });
+    const { current, pollError } = await pollDeviceBag(student, "graph", pollDeviceCode, persistGraph);
+    await reprobeIfStale(current);
     const flags = studioFlags(current);
+    const ms = msServicesOf(current);
     return res.json({
-      connected: isConnected(current.graph) || flags.onedrive,
-      pending: publicPending(current.graph),
+      connected: Boolean(onedriveReallyConnected(current, ms) || flags.onedrive),
+      pending: publicPending(current.graph) || appPendingFor(current),
       email: current.graph?.email || "",
       error: pollError || "",
       studio: flags.onedrive,
-      adminConsentUrl: adminConsentUrl(),
-      outlookConnected: outlookConnected(current.outlook) || flags.outlook,
+      ...statusExtras(current, "onedrive", flags),
+      outlookConnected: Boolean(outlookReallyConnected(current, ms) || flags.outlook),
       outlookEmail: current.outlook?.email || "",
     });
+  } catch (err) {
+    return fail(res, err);
+  }
+});
+
+function callbackResult(student, service, exchange) {
+  const ms = msServicesOf(student);
+  const key = MS_SERVICE_KEY[service] || "files";
+  if (exchange && !exchange.ok) {
+    if (exchange.declined) {
+      return { result: "denied", reason: "You cancelled the Microsoft sign-in.", needsAdminApproval: false };
+    }
+    if (exchange.needsAdminApproval) {
+      return {
+        result: "denied",
+        reason: "Microsoft needs school IT to approve EPSynapse first.",
+        needsAdminApproval: true,
+      };
+    }
+    return {
+      result: "error",
+      reason: `Microsoft sign-in failed (${exchange.error || "unknown"}).`,
+      needsAdminApproval: false,
+    };
+  }
+  if (ms[key] === true) return { result: "connected", reason: "", needsAdminApproval: false };
+  const reason = msDeniedReason(ms, key, true) || `Microsoft did not grant ${MS_SERVICE_LABEL[service]} access.`;
+  return { result: "denied", reason, needsAdminApproval: msNeedsAdminApproval(ms) };
+}
+
+function escapeHtml(s) {
+  return String(s || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function callbackPage({ service, result, reason, email, returnTo }) {
+  const label = MS_SERVICE_LABEL[service] || "Microsoft";
+  let line;
+  if (result === "connected") {
+    line = `${label} connected${email ? ` as ${email}` : ""}. You can close this tab.`;
+  } else if (result === "denied") {
+    line = reason || "Microsoft needs school IT to approve EPSynapse first.";
+  } else {
+    line = reason || "Microsoft sign-in failed. Close this tab and try again.";
+  }
+  const jsSafe = (v) => JSON.stringify(v).replace(/</g, "\\u003c");
+  const payload = jsSafe({ type: "epsynapse-ms", service, result, reason, email });
+  const fallbackUrl =
+    `${returnTo}/?ms=${encodeURIComponent(result)}&service=${encodeURIComponent(service)}` +
+    (reason ? `&reason=${encodeURIComponent(reason)}` : "");
+  const fallback = jsSafe(fallbackUrl);
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>EPSynapse</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0f1115;color:#f3f4f6}
+main{max-width:28rem;padding:2rem;text-align:center}
+h1{font-size:1.1rem;font-weight:600;margin:0 0 .5rem}
+p{margin:.25rem 0;color:#c9ccd3}
+a{color:#8ab4ff}
+</style></head>
+<body><main>
+<h1>EPSynapse</h1>
+<p>${escapeHtml(line)}</p>
+<p><a id="back" href="${escapeHtml(fallbackUrl)}">Back to EPSynapse</a></p>
+</main>
+<script>
+(function(){
+  var msg=${payload};
+  try{ if(window.opener && !window.opener.closed){ window.opener.postMessage(msg,"*"); } }catch(e){}
+  try{ window.close(); }catch(e){}
+  setTimeout(function(){ if(!window.closed){ location.replace(${fallback}); } },400);
+})();
+</script>
+</body></html>`;
+}
+
+async function findMsAuthStudent(state) {
+  const key = String(state || "").trim();
+  if (!key) return null;
+  const hit = msAuthStates.get(key);
+  if (hit?.fileId) {
+    const s = await loadStudentByFileId(hit.fileId).catch(() => null);
+    if (s?.msAuth?.state === key) return s;
+  }
+  return findStudentByMsAuthState(key);
+}
+
+app.get("/v1/ms/callback", async (req, res) => {
+  const state = String(req.query.state || "").trim();
+  const code = String(req.query.code || "").trim();
+  const oauthError = String(req.query.error || "").trim();
+  const oauthDesc = String(req.query.error_description || "").trim();
+  let service = "onedrive";
+  let returnTo = MS_DEFAULT_RETURN;
+  let email = "";
+  let outcome = { result: "error", reason: "", needsAdminApproval: false };
+  try {
+    const student = await findMsAuthStudent(state);
+    if (!student) {
+      outcome = { result: "error", reason: "This sign-in link is stale. Start again from EPSynapse.", needsAdminApproval: false };
+    } else {
+      const auth = student.msAuth || {};
+      service = msServiceName(auth.service) || "onedrive";
+      returnTo = safeReturnTo(auth.returnTo);
+      const fileId = googleFileId(student.googleSub);
+      await withStudentLock(fileId, async () => {
+        const current = (await loadStudentByFileId(fileId)) || student;
+        if (oauthError) {
+          const text = `${oauthError} ${oauthDesc}`;
+          const exchange = {
+            ok: false,
+            error: oauthError,
+            errorDescription: oauthDesc,
+            declined: oauthError === "access_denied" && (userDeclinedText(text) || !needsAdminApprovalText(text)),
+            needsAdminApproval: needsAdminApprovalText(text),
+          };
+          if (exchange.needsAdminApproval) {
+            mergeMsServices(current, { needsAdminApproval: true, checkedAt: new Date().toISOString() });
+          }
+          mergeMsAuth(current, null);
+          await saveStudent(current);
+          console.warn(`[ms-oauth] callback error service=${service} error=${oauthError} ${oauthDesc.slice(0, 160)}`);
+          outcome = callbackResult(current, service, exchange);
+          return;
+        }
+        const exchange = await exchangeAuthCode({
+          code,
+          codeVerifier: auth.codeVerifier,
+          redirectUri: MS_REDIRECT_URI,
+        });
+        if (!exchange.ok) {
+          if (exchange.needsAdminApproval) {
+            mergeMsServices(current, { needsAdminApproval: true, checkedAt: new Date().toISOString() });
+          }
+          mergeMsAuth(current, null);
+          await saveStudent(current);
+          console.warn(`[ms-oauth] exchange failed service=${service} ${exchange.error} ${exchange.errorDescription || ""}`);
+          outcome = callbackResult(current, service, exchange);
+          return;
+        }
+        mergeMsAuth(current, null);
+        await applyMicrosoftToken(current, exchange, null);
+        email = msSignedInEmail(current);
+        outcome = callbackResult(current, service, null);
+      });
+      msAuthStates.delete(state);
+    }
+  } catch (err) {
+    console.warn("[ms-oauth] callback", shortMsError(err));
+    outcome = { result: "error", reason: shortMsError(err), needsAdminApproval: false };
+  }
+  const { result, reason } = outcome;
+  if (returnTo === "epsynapse://") {
+    // encodeURIComponent, not URLSearchParams: iOS URLComponents does not turn "+" into a space.
+    const parts = [`service=${encodeURIComponent(service)}`, `result=${encodeURIComponent(result)}`];
+    if (reason) parts.push(`reason=${encodeURIComponent(reason)}`);
+    if (email) parts.push(`email=${encodeURIComponent(email)}`);
+    return res.redirect(302, `epsynapse://ms?${parts.join("&")}`);
+  }
+  res.setHeader("Cache-Control", "no-store");
+  res.type("html");
+  return res.send(callbackPage({ service, result, reason, email, returnTo }));
+});
+
+function clearBag(student, key) {
+  const patch = { accessToken: "", refreshToken: "", exp: 0, email: "", pending: null, denied: false, clientId: "", scope: "" };
+  if (key === "graph") mergeGraph(student, patch);
+  if (key === "outlook") mergeOutlook(student, patch);
+  if (key === "teams") mergeTeams(student, patch);
+}
+
+app.post("/v1/me/ms/disconnect", async (req, res) => {
+  try {
+    const student = await requireStudent(req, res);
+    if (!student) return;
+    const raw = String(req.body?.service || "").trim().toLowerCase();
+    const service = raw === "all" ? "all" : msServiceName(raw);
+    if (!service) {
+      return res.status(400).json({ error: "service must be onedrive, onenote, outlook, teams, or all." });
+    }
+    if (service === "all") {
+      clearBag(student, "graph");
+      clearBag(student, "outlook");
+      clearBag(student, "teams");
+      mergeMsServices(student, null);
+    } else if (service === "onedrive" || service === "onenote") {
+      clearBag(student, "graph");
+      mergeMsServices(student, { files: null, notes: null });
+    } else if (service === "outlook") {
+      clearBag(student, "outlook");
+      mergeMsServices(student, { mail: null });
+    } else if (service === "teams") {
+      clearBag(student, "teams");
+      mergeMsServices(student, { chats: null });
+    }
+    mergeMsAuth(student, null);
+    await saveStudent(student);
+    return res.json(publicMe(student));
+  } catch (err) {
+    return fail(res, err);
+  }
+});
+
+app.post("/v1/me/ms/consent-request", async (req, res) => {
+  try {
+    const student = await requireStudent(req, res);
+    if (!student) return;
+    const service = msServiceName(req.body?.service) || "onenote";
+    const note = String(req.body?.note || "").trim().slice(0, 500);
+    const request = consentRequestFor(student, service);
+    if (note) {
+      request.body = `${request.body}\n\nNote from the student:\n${note}`;
+      const q = new URLSearchParams({ subject: request.subject, body: request.body });
+      request.mailto = `mailto:${encodeURIComponent(request.to)}?${q.toString().replace(/\+/g, "%20")}`;
+    }
+    student.msConsentRequestedAt = new Date().toISOString();
+    await saveStudent(student);
+    console.log(
+      `[ms-consent] requested service=${service} student=${student.email || student.googleSub} to=${request.to || "(no SCHOOL_IT_EMAIL)"}`
+    );
+    let sent = false;
+    let sendError = "";
+    const ms = msServicesOf(student);
+    const canMail = ms.mail === true || studioFlags(student).outlook;
+    if (request.to && canMail) {
+      try {
+        const token = await outlookAccessToken(student);
+        if (token) {
+          await sendMessage(token, { to: request.to, subject: request.subject, body: request.body });
+          sent = true;
+        }
+      } catch (err) {
+        sendError = shortMsError(err);
+        console.warn("[ms-consent] send failed", sendError);
+      }
+    }
+    return res.json({ ok: true, sent, sendError, ...request });
   } catch (err) {
     return fail(res, err);
   }
@@ -1041,13 +1742,31 @@ app.get("/v1/me/onedrive/file", async (req, res) => {
   }
 });
 
+/** OneNote rides on the graph bag. Uses the token even when Files was denied. */
+async function onenoteGraphToken(student) {
+  const fresh = await ensureFreshToken(student.graph);
+  if (fresh !== student.graph) {
+    mergeGraph(student, fresh);
+    await saveStudent(student);
+  }
+  return fresh.accessToken;
+}
+
 async function onenoteAccess(student) {
+  if (studioFlags(student).onenote) {
+    const tok = await studioOnenoteToken();
+    if (tok) return tok;
+  }
+  const ms = msServicesOf(student);
+  if (hasLiveToken(student?.graph) && ms.notes === false) {
+    throw deniedError(student, "notes", "OneNote");
+  }
   if (!student?.graph?.accessToken) {
-    const err = new Error("Connect OneDrive in settings first. OneNote uses that sign-in.");
+    const err = new Error("Connect OneNote in settings first.");
     err.status = 400;
     throw err;
   }
-  return graphToken(student);
+  return onenoteGraphToken(student);
 }
 
 app.get("/v1/me/onenote/status", async (req, res) => {
@@ -1055,24 +1774,63 @@ app.get("/v1/me/onenote/status", async (req, res) => {
     const student = await requireStudent(req, res);
     if (!student) return;
     const flags = studioFlags(student);
-    const connected = isConnected(student.graph) || flags.onedrive;
     let notebooks = [];
     let error = "";
-    if (student.graph?.accessToken) {
+    let listed = false;
+    if (flags.onenote) {
       try {
-        const token = await graphToken(student);
-        notebooks = await listNotebooks(token);
+        const token = await studioOnenoteToken();
+        if (token) {
+          notebooks = await listNotebooks(token);
+          listed = true;
+        }
       } catch (err) {
         error = onenoteError(err);
       }
+    }
+    if (!listed && hasLiveToken(student.graph)) {
+      try {
+        const token = await onenoteGraphToken(student);
+        notebooks = await listNotebooks(token);
+        listed = true;
+        if (msServicesOf(student).notes !== true) {
+          mergeMsServices(student, { notes: true, errors: { ...msServicesOf(student).errors, notes: "" } });
+          await saveStudent(student);
+        }
+      } catch (err) {
+        const status = Number(err?.status) || 0;
+        const ms = msServicesOf(student);
+        if (status === 401 || status === 403) {
+          const text = tokenHasNotesRead(student.graph?.accessToken)
+            ? `${status} denied`
+            : `${status} denied (token has no Notes.Read scope)`;
+          const errors = { ...ms.errors, notes: ms.errors.notes || text };
+          mergeMsServices(student, { notes: false, errors, checkedAt: ms.checkedAt || new Date().toISOString() });
+          await saveStudent(student);
+        }
+        error = msDeniedReason(msServicesOf(student), "notes", true) || onenoteError(err);
+      }
+    }
+    const ms = msServicesOf(student);
+    const connected = Boolean(listed || flags.onenote);
+    const reason = flags.onenote ? "" : msDeniedReason(ms, "notes", hasLiveToken(student.graph));
+    if (!connected && !error) {
+      error = reason || (hasLiveToken(student.graph) ? "OneNote did not answer." : "");
     }
     return res.json({
       connected,
       email: student.graph?.email || "",
       notebooks,
       error,
-      studio: flags.onedrive,
+      denied: Boolean(reason),
+      deniedReason: reason,
+      needsAdminApproval: flags.onenote ? false : msNeedsAdminApproval(ms),
+      studio: flags.onenote,
+      pending: connected ? null : appPendingFor(student),
       adminConsentUrl: adminConsentUrl(),
+      consentRequest: consentRequestFor(student, "onenote"),
+      mode: msClientMode(),
+      msSignedInEmail: msSignedInEmail(student),
     });
   } catch (err) {
     return fail(res, err);
@@ -1157,29 +1915,7 @@ app.post("/v1/me/outlook/start", async (req, res) => {
   try {
     const student = await requireStudent(req, res);
     if (!student) return;
-    const started = await startOutlookCode();
-    if (!started.ok) {
-      return res.json({
-        user_code: "",
-        verification_uri: "",
-        message: started.error || "Microsoft would not start Outlook sign-in.",
-        adminConsentUrl: adminConsentUrl(),
-      });
-    }
-    await persistOutlook(student, {
-      pending: {
-        device_code: started.device_code,
-        clientId: started.clientId,
-        scope: started.scope,
-        interval: started.interval,
-        expiresAt: started.expiresAt,
-        user_code: started.user_code,
-        verification_uri: started.verification_uri,
-        verification_uri_complete: started.verification_uri_complete || "",
-        message: started.message,
-      },
-    });
-    return res.json(pendingStartPayload(started));
+    return res.json(await startMicrosoft(student, "outlook", req.body?.returnTo));
   } catch (err) {
     return fail(res, err);
   }
@@ -1189,39 +1925,18 @@ app.get("/v1/me/outlook/status", async (req, res) => {
   try {
     const student = await requireStudent(req, res);
     if (!student) return;
-    const fileId = googleFileId(student.googleSub);
-    const { current, pollError } = await withStudentLock(fileId, async () => {
-      const current = (await loadStudentByFileId(fileId)) || student;
-      const pending = current.outlook?.pending;
-      if (!pending?.device_code) return { current, pollError: "" };
-      if (!livePending(pending)) {
-        await persistOutlook(current, { pending: null });
-        return { current, pollError: "That Microsoft sign-in expired. Connect again." };
-      }
-      const poll = await pollOutlookCode(pending.device_code, pending.clientId);
-      if (poll.ok) {
-        await applyMicrosoftToken(current, poll, pending);
-        return { current, pollError: "" };
-      }
-      if (poll.pending || waitingDeviceError(poll.error)) {
-        return { current, pollError: "" };
-      }
-      console.warn("[ms-oauth] outlook poll", poll.error);
-      if (terminalDeviceError(poll.error)) {
-        await persistOutlook(current, { pending: null });
-        return { current, pollError: poll.error };
-      }
-      return { current, pollError: poll.error || "" };
-    });
+    const { current, pollError } = await pollDeviceBag(student, "outlook", pollOutlookCode, persistOutlook);
+    await reprobeIfStale(current);
     const flags = studioFlags(current);
+    const ms = msServicesOf(current);
     return res.json({
-      connected: outlookConnected(current.outlook) || flags.outlook,
-      pending: outlookPending(current.outlook),
+      connected: Boolean(outlookReallyConnected(current, ms) || flags.outlook),
+      pending: outlookPending(current.outlook) || appPendingFor(current),
       email: current.outlook?.email || "",
       error: pollError || "",
       studio: flags.outlook,
-      adminConsentUrl: adminConsentUrl(),
-      onedriveConnected: isConnected(current.graph) || flags.onedrive,
+      ...statusExtras(current, "outlook", flags),
+      onedriveConnected: Boolean(onedriveReallyConnected(current, ms) || flags.onedrive),
       onedriveEmail: current.graph?.email || "",
     });
   } catch (err) {
@@ -1335,29 +2050,7 @@ app.post("/v1/me/teams/start", async (req, res) => {
   try {
     const student = await requireStudent(req, res);
     if (!student) return;
-    const started = await startTeamsCode();
-    if (!started.ok) {
-      return res.json({
-        user_code: "",
-        verification_uri: "",
-        message: started.error || "Microsoft would not start Teams sign-in.",
-        adminConsentUrl: started.adminConsentUrl || adminConsentUrl(),
-      });
-    }
-    await persistTeams(student, {
-      pending: {
-        device_code: started.device_code,
-        clientId: started.clientId,
-        scope: started.scope,
-        interval: started.interval,
-        expiresAt: started.expiresAt,
-        user_code: started.user_code,
-        verification_uri: started.verification_uri,
-        verification_uri_complete: started.verification_uri_complete || "",
-        message: started.message,
-      },
-    });
-    return res.json(pendingStartPayload(started));
+    return res.json(await startMicrosoft(student, "teams", req.body?.returnTo));
   } catch (err) {
     return fail(res, err);
   }
@@ -1367,46 +2060,17 @@ app.get("/v1/me/teams/status", async (req, res) => {
   try {
     const student = await requireStudent(req, res);
     if (!student) return;
-    const fileId = googleFileId(student.googleSub);
-    const { current, pollError } = await withStudentLock(fileId, async () => {
-      const current = (await loadStudentByFileId(fileId)) || student;
-      const pending = current.teams?.pending;
-      if (!pending?.device_code) return { current, pollError: "" };
-      if (!livePending(pending)) {
-        await persistTeams(current, { pending: null });
-        return { current, pollError: "That Microsoft sign-in expired. Connect again." };
-      }
-      const poll = await pollTeamsCode(pending.device_code, pending.clientId);
-      if (poll.ok) {
-        await persistTeams(current, {
-          accessToken: poll.accessToken,
-          refreshToken: poll.refreshToken,
-          exp: poll.exp,
-          email: poll.email,
-          clientId: poll.clientId || pending.clientId,
-          scope: poll.scope || pending.scope,
-          pending: null,
-        });
-        return { current, pollError: "" };
-      }
-      if (poll.pending || waitingDeviceError(poll.error)) {
-        return { current, pollError: "" };
-      }
-      console.warn("[ms-oauth] teams poll", poll.error);
-      if (terminalDeviceError(poll.error)) {
-        await persistTeams(current, { pending: null });
-        return { current, pollError: poll.error };
-      }
-      return { current, pollError: poll.error || "" };
-    });
+    const { current, pollError } = await pollDeviceBag(student, "teams", pollTeamsCode, persistTeams);
+    await reprobeIfStale(current);
     const flags = studioFlags(current);
+    const ms = msServicesOf(current);
     return res.json({
-      connected: teamsGraphConnected(current.teams) || flags.teams,
-      pending: teamsPending(current.teams),
+      connected: Boolean(teamsReallyConnected(current, ms) || flags.teams),
+      pending: teamsPending(current.teams) || appPendingFor(current),
       email: current.teams?.email || "",
       error: pollError || "",
       studio: flags.teams,
-      adminConsentUrl: adminConsentUrl(),
+      ...statusExtras(current, "teams", flags),
     });
   } catch (err) {
     return fail(res, err);

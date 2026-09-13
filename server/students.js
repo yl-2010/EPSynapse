@@ -5,7 +5,7 @@
  */
 
 import { randomBytes } from "node:crypto";
-import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -44,6 +44,63 @@ function emptyGraph() {
     exp: 0,
     email: "",
     pending: null,
+    clientId: "",
+    scope: "",
+    denied: false,
+  };
+}
+
+/**
+ * Result of the last per-service Graph probe. Not secret.
+ * files/notes/mail/chats: true, false, or null when never checked.
+ */
+export function emptyMsServices() {
+  return {
+    email: "",
+    files: null,
+    notes: null,
+    mail: null,
+    chats: null,
+    errors: {},
+    needsAdminApproval: false,
+    checkedAt: "",
+  };
+}
+
+function triState(v) {
+  if (v === true || v === false) return v;
+  return null;
+}
+
+function hydrateMsServices(raw) {
+  const src = raw && typeof raw === "object" ? raw : {};
+  const errors = {};
+  if (src.errors && typeof src.errors === "object") {
+    for (const key of ["files", "notes", "mail", "chats"]) {
+      if (src.errors[key]) errors[key] = String(src.errors[key]).slice(0, 200);
+    }
+  }
+  return {
+    email: String(src.email || ""),
+    files: triState(src.files),
+    notes: triState(src.notes),
+    mail: triState(src.mail),
+    chats: triState(src.chats),
+    errors,
+    needsAdminApproval: Boolean(src.needsAdminApproval),
+    checkedAt: String(src.checkedAt || ""),
+  };
+}
+
+function hydrateMsAuth(raw) {
+  if (!raw || typeof raw !== "object" || !raw.state) return null;
+  return {
+    state: String(raw.state || ""),
+    codeVerifier: String(raw.codeVerifier || ""),
+    service: String(raw.service || ""),
+    returnTo: String(raw.returnTo || ""),
+    authorizeUrl: String(raw.authorizeUrl || ""),
+    createdAt: String(raw.createdAt || ""),
   };
 }
 
@@ -195,6 +252,9 @@ function hydrate(raw) {
       exp: Number(graph.exp) || 0,
       email: String(graph.email || ""),
       pending: graph.pending ?? null,
+      clientId: String(graph.clientId || ""),
+      scope: String(graph.scope || ""),
+      denied: Boolean(graph.denied),
     },
     outlook: {
       accessToken: String(outlook.accessToken || ""),
@@ -204,6 +264,7 @@ function hydrate(raw) {
       pending: outlook.pending ?? null,
       clientId: String(outlook.clientId || ""),
       scope: String(outlook.scope || ""),
+      denied: Boolean(outlook.denied),
     },
     teams: {
       accessToken: String(teams.accessToken || ""),
@@ -213,7 +274,11 @@ function hydrate(raw) {
       pending: teams.pending ?? null,
       clientId: String(teams.clientId || ""),
       scope: String(teams.scope || ""),
+      denied: Boolean(teams.denied),
     },
+    msServices: hydrateMsServices(src.msServices),
+    msAuth: hydrateMsAuth(src.msAuth),
+    msConsentRequestedAt: String(src.msConsentRequestedAt || ""),
     createdAt: String(src.createdAt || ""),
     updatedAt: String(src.updatedAt || ""),
   };
@@ -221,6 +286,7 @@ function hydrate(raw) {
 
 function graphConnected(graph) {
   if (!graph?.accessToken) return false;
+  if (graph.denied) return false;
   const exp = Number(graph.exp) || 0;
   if (!exp) return true;
   return exp > Math.floor(Date.now() / 1000) - SKEW_SEC;
@@ -533,6 +599,7 @@ function mergeTokenBag(bag, patch, extraKeys = []) {
   if (src.exp !== undefined) bag.exp = Number(src.exp) || 0;
   if (src.email !== undefined) bag.email = String(src.email);
   if (src.pending !== undefined) bag.pending = src.pending;
+  if (src.denied !== undefined) bag.denied = Boolean(src.denied);
   for (const key of extraKeys) {
     if (src[key] !== undefined) bag[key] = String(src[key] || "");
   }
@@ -543,8 +610,58 @@ export function mergeGraph(student, patch) {
   if (!student.graph || typeof student.graph !== "object") {
     student.graph = emptyGraph();
   }
-  mergeTokenBag(student.graph, patch);
+  mergeTokenBag(student.graph, patch, ["clientId", "scope"]);
   return student;
+}
+
+/** Per-service probe result. Pass null to reset. Keys not in patch keep their value. */
+export function mergeMsServices(student, patch) {
+  if (patch === null) {
+    student.msServices = emptyMsServices();
+    return student;
+  }
+  const cur = hydrateMsServices(student.msServices);
+  const src = patch && typeof patch === "object" ? patch : {};
+  for (const key of ["files", "notes", "mail", "chats"]) {
+    if (src[key] !== undefined) cur[key] = triState(src[key]);
+  }
+  if (src.email !== undefined) cur.email = String(src.email || "");
+  if (src.needsAdminApproval !== undefined) cur.needsAdminApproval = Boolean(src.needsAdminApproval);
+  if (src.checkedAt !== undefined) cur.checkedAt = String(src.checkedAt || "");
+  if (src.errors !== undefined) {
+    const next = {};
+    const errs = src.errors && typeof src.errors === "object" ? src.errors : {};
+    for (const key of ["files", "notes", "mail", "chats"]) {
+      if (errs[key]) next[key] = String(errs[key]).slice(0, 200);
+    }
+    cur.errors = next;
+  }
+  student.msServices = cur;
+  return student;
+}
+
+/** In-flight authorization-code sign-in. Pass null to clear. Never in publicProfile. */
+export function mergeMsAuth(student, patch) {
+  student.msAuth = patch ? hydrateMsAuth({ ...(student.msAuth || {}), ...patch }) : null;
+  return student;
+}
+
+/** Fallback when the in-memory state map lost the entry (server restart). */
+export async function findStudentByMsAuthState(state) {
+  const needle = String(state || "").trim();
+  if (!needle) return null;
+  let names;
+  try {
+    names = await readdir(studentsDir());
+  } catch {
+    return null;
+  }
+  for (const name of names) {
+    if (!name.endsWith(".json")) continue;
+    const student = await loadStudentByFileId(name.slice(0, -5)).catch(() => null);
+    if (student?.msAuth?.state === needle) return student;
+  }
+  return null;
 }
 
 export function mergeOutlook(student, patch) {

@@ -3,12 +3,21 @@
  * Chat scopes need Eastside Prep IT approval. adminConsentUrl() is for that step.
  */
 
-import { completeDeviceUrl, OFFICE_CLIENT_ID } from "./onedrive.js";
+import {
+  adminConsentUrl,
+  completeDeviceUrl,
+  msClientMode,
+  msClientSecret,
+  MS_TENANT,
+  OFFICE_CLIENT_ID,
+} from "./onedrive.js";
+
+export { adminConsentUrl };
 
 export const EPS_TENANT_ID = "b2681e8b-dd20-46cf-b163-371a2d7c6014";
 export const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
 
-const LOGIN = `https://login.microsoftonline.com/${EPS_TENANT_ID}/oauth2/v2.0`;
+const LOGIN = `https://login.microsoftonline.com/${MS_TENANT}/oauth2/v2.0`;
 const TEAMS_SCOPE =
   "Chat.Read Chat.ReadWrite ChatMessage.Send offline_access openid profile";
 
@@ -19,11 +28,6 @@ const MESSAGE_TEXT_MAX = 4000;
 
 export function teamsClientId() {
   return String(process.env.MICROSOFT_CLIENT_ID || "").trim() || OFFICE_CLIENT_ID;
-}
-
-export function adminConsentUrl() {
-  const id = encodeURIComponent(teamsClientId());
-  return `https://login.microsoftonline.com/${EPS_TENANT_ID}/v2.0/adminconsent?client_id=${id}&scope=https://graph.microsoft.com/.default&redirect_uri=https://epsynapse.com/`;
 }
 
 function b64urlJson(part) {
@@ -202,16 +206,21 @@ async function refreshAccessToken(refreshToken, clientId, scope) {
   const id = String(clientId || "").trim() || teamsClientId();
   const scp = String(scope || "").trim() || TEAMS_SCOPE;
   if (!rt) return { ok: false, error: "no refresh token" };
+  const body = new URLSearchParams({
+    client_id: id,
+    grant_type: "refresh_token",
+    refresh_token: rt,
+    scope: scp,
+  });
+  const secret = msClientSecret();
+  if (secret && msClientMode() === "app" && id === teamsClientId()) {
+    body.set("client_secret", secret);
+  }
   try {
     const res = await fetch(`${LOGIN}/token`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: id,
-        grant_type: "refresh_token",
-        refresh_token: rt,
-        scope: scp,
-      }),
+      body,
     });
     const data = await readOauthJson(res);
     if (!res.ok || !data.access_token) {
@@ -373,6 +382,7 @@ export function publicPending(teams) {
 export function isConnected(teams) {
   const token = String(teams?.accessToken || "").trim();
   if (!token) return false;
+  if (teams?.denied) return false;
   const exp = Number(teams.exp) || jwtExp(token);
   if (!exp) return true;
   return exp * 1000 > Date.now();
