@@ -2229,8 +2229,9 @@ html[data-resolved-theme="dark"] .yan-chat-pill.corner.lg-refraction::after {
   line-height: var(--lh-body); resize: none; overflow-x: hidden; overflow-y: hidden;
   white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word;
   appearance: none; -webkit-appearance: none; field-sizing: fixed; align-self: center;
+  box-sizing: border-box;
 }
-.yan-chat.is-composer-tall .yan-chat-input { align-self: stretch; height: auto; }
+.yan-chat.is-composer-tall .yan-chat-input { align-self: stretch; }
 .yan-chat-input::placeholder { color: var(--muted); opacity: 0.8; }
 .yan-chat.is-dragover .yan-chat-pill.corner {
   box-shadow: 0 0 0 2px var(--chat-orange), 0 4px var(--lg-outer-shadow-blur) var(--lg-outer-shadow);
@@ -2604,10 +2605,12 @@ html[data-resolved-theme="light"] .yan-chat-bubble {
 .yan-chat-bubble.md-body {
   white-space: normal;
 }
-.yan-chat-bubble--user {
+.yan-chat-bubble--user,
+.yan-chat-bubble--user.md-body {
   --chat-bubble-tint: color-mix(in srgb, var(--chat-orange) 16%, transparent);
   align-self: flex-end;
   background-image: linear-gradient(var(--chat-bubble-tint), var(--chat-bubble-tint));
+  white-space: pre-wrap;
 }
 .yan-chat-bubble--assistant {
   align-self: flex-start;

@@ -166,52 +166,47 @@
       btn.tabIndex = next === "panel" ? 0 : -1;
     });
     syncComposerSize();
-    window.setTimeout(refreshGlass, reduceMotion ? 0 : 420);
+    window.setTimeout(() => {
+      syncComposerSize();
+      refreshGlass();
+    }, reduceMotion ? 0 : 420);
   }
 
-  function composerLineCount() {
-    const text = String(input.value || "");
-    const parts = text.split("\n");
-    const width = Math.max(0, input.clientWidth || input.offsetWidth || 0);
-    if (width < 8) return Math.max(1, parts.length);
-    const cs = getComputedStyle(input);
-    const canvas =
-      composerLineCount._c || (composerLineCount._c = document.createElement("canvas"));
-    const ctx = canvas.getContext("2d");
-    ctx.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
-    let lines = 0;
-    for (const part of parts) {
-      if (!part) {
-        lines += 1;
-        continue;
-      }
-      lines += Math.max(1, Math.ceil(ctx.measureText(part).width / width));
-    }
-    return Math.max(1, lines);
-  }
-
-  function syncComposerSize() {
-    if (!input) return;
-    root.classList.toggle("has-input-text", Boolean(input.value.trim()));
-    const lines = composerLineCount();
-    if (lines <= 1) {
-      input.style.height = "";
-      input.style.overflowY = "hidden";
-      root.classList.remove("is-composer-tall");
-      root.style.removeProperty("--pill-h");
-      return;
-    }
+  function composerLineHeight() {
     const cs = getComputedStyle(input);
     let lineH = parseFloat(cs.lineHeight);
     if (!Number.isFinite(lineH) || lineH < 8) {
       lineH = (parseFloat(cs.fontSize) || 16) * 1.294;
     }
-    const next = Math.min(lines * lineH, 120);
+    return lineH;
+  }
+
+  function syncComposerSize() {
+    if (!input) return;
+    root.classList.toggle("has-input-text", Boolean(input.value.trim()));
+    const hasBreak = /[\n\r]/.test(input.value);
+    input.style.height = "0px";
+    const scroll = input.scrollHeight;
+    const lineH = composerLineHeight();
+    const oneLine = Math.ceil(lineH + 2);
+    const tall = hasBreak || scroll > oneLine;
+    if (!tall) {
+      input.style.height = "";
+      input.style.overflowY = "hidden";
+      if (root.classList.contains("is-composer-tall")) {
+        root.classList.remove("is-composer-tall");
+        root.style.removeProperty("--pill-h");
+        refreshGlassSoon();
+      }
+      return;
+    }
+    const next = Math.min(Math.max(scroll, oneLine), 120);
     input.style.height = `${next}px`;
-    input.style.overflowY = lines * lineH > 120 ? "auto" : "hidden";
+    input.style.overflowY = scroll > 120 ? "auto" : "hidden";
     root.classList.add("is-composer-tall");
     const orb = parseFloat(getComputedStyle(root).getPropertyValue("--chat-circle")) || 80;
-    root.style.setProperty("--pill-h", `${Math.max(orb, next + 36)}px`);
+    root.style.setProperty("--pill-h", `${Math.max(orb, next + 40)}px`);
+    refreshGlassSoon();
   }
 
   function textFromModelField(value) {
@@ -285,13 +280,14 @@
       return window.EPSMarkdown.render(raw);
     }
     if (window.EPSMarkdown && typeof window.EPSMarkdown.escapeHtml === "function") {
-      return window.EPSMarkdown.escapeHtml(raw);
+      return window.EPSMarkdown.escapeHtml(raw).replace(/\r\n|\n|\r/g, "<br>");
     }
     return raw
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
+      .replace(/"/g, "&quot;")
+      .replace(/\r\n|\n|\r/g, "<br>");
   }
 
   function scrollChatToEnd(node) {
@@ -321,10 +317,15 @@
   function writeBubble(el, role, text) {
     const value = text || "";
     el.hidden = role === "assistant" ? !value : false;
-    el.classList.add("md-body");
-    el.innerHTML = renderBubbleHtml(value);
-    if (window.EPSMarkdown && typeof window.EPSMarkdown.typeset === "function") {
-      window.EPSMarkdown.typeset(el);
+    if (role === "user") {
+      el.classList.remove("md-body");
+      el.textContent = value;
+    } else {
+      el.classList.add("md-body");
+      el.innerHTML = renderBubbleHtml(value);
+      if (window.EPSMarkdown && typeof window.EPSMarkdown.typeset === "function") {
+        window.EPSMarkdown.typeset(el);
+      }
     }
     scrollChatToEnd(el.parentElement);
     refreshGlassSoon();
@@ -1080,6 +1081,7 @@
     sendMessage(input?.value);
   });
   input?.addEventListener("input", syncComposerSize);
+  window.addEventListener("resize", syncComposerSize);
   input?.addEventListener("keydown", (event) => {
     if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
     event.preventDefault();
