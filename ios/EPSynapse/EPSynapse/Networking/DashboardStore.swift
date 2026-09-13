@@ -76,6 +76,10 @@ final class DashboardStore: ObservableObject {
       filesError = ""
       mailError = ""
       notes = []
+      openMail = nil
+      notesStatus = ""
+      scheduleStatus = ""
+      sendStatus = ""
       return
     }
 

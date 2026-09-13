@@ -47,6 +47,20 @@ final class ChatStore: ObservableObject {
         await persist(turns: turns, sessionId: currentSessionId)
     }
 
+    /// Sign-out. Drop the open conversation, the history list, and the
+    /// on-device thread cache so the next account on this device does not
+    /// see someone else's chats.
+    func resetForSignOut() {
+        turns = []
+        currentSessionId = nil
+        busy = false
+        chats = []
+        wantsChatOpen = false
+        composerOpen = false
+        setHistoryOpen(false)
+        defaults.removeObject(forKey: cacheKey)
+    }
+
     func loadList() async {
         historyLoading = true
         defer { historyLoading = false }

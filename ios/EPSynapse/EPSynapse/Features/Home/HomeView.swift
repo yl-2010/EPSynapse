@@ -104,6 +104,10 @@ struct HomeView: View {
                 Task { await dashboard.load(from: session) }
             } else {
                 path = NavigationPath()
+                ChatStore.shared.resetForSignOut()
+                // Empty session: load() clears every list so the next
+                // account does not see the previous one's data.
+                Task { await dashboard.load(from: session) }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .epsOpenSettings)) { _ in
