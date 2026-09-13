@@ -2970,8 +2970,13 @@
   function absorbMsStatus(prefix, st) {
     if (!st || typeof st !== "object") return;
     const next = {};
-    if ("denied" in st) {
-      next.msDenied = Object.assign({}, (me && me.msDenied) || {}, { [prefix]: String(st.denied || "") });
+    if ("denied" in st || "deniedReason" in st) {
+      // The server sends `denied` as a boolean and the sentence in `deniedReason`.
+      let reason = "";
+      if (typeof st.denied === "string") reason = st.denied;
+      else if (st.deniedReason) reason = String(st.deniedReason);
+      else if (st.denied === true) reason = msDeniedFor(prefix) || "Microsoft denied this service for your sign-in.";
+      next.msDenied = Object.assign({}, (me && me.msDenied) || {}, { [prefix]: reason });
     }
     if ("needsAdminApproval" in st) next.msNeedsAdminApproval = Boolean(st.needsAdminApproval);
     if (st.adminConsentUrl) next.adminConsentUrl = st.adminConsentUrl;
