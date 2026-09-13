@@ -2637,10 +2637,12 @@ html[data-resolved-theme="light"] .yan-chat-bubble {
 @media (prefers-color-scheme: dark) {
   html:not([data-resolved-theme="light"]) .yan-chat-bubble--user {
     --chat-bubble-tint: color-mix(in srgb, var(--chat-orange) 26%, transparent);
+    color: #fff;
   }
 }
 html[data-resolved-theme="dark"] .yan-chat-bubble--user {
   --chat-bubble-tint: color-mix(in srgb, var(--chat-orange) 26%, transparent);
+  color: #fff;
 }
 html[data-resolved-theme="light"] .yan-chat-bubble--user {
   --chat-bubble-tint: color-mix(in srgb, var(--chat-orange) 16%, transparent);

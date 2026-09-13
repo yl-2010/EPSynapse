@@ -297,7 +297,14 @@
     el.hidden = role === "assistant" ? !value : false;
     if (role === "user") {
       el.classList.remove("md-body");
-      el.textContent = value;
+      let inner = el.querySelector(".yan-chat-bubble-in");
+      if (!inner) {
+        inner = document.createElement("span");
+        inner.className = "yan-chat-bubble-in";
+        el.textContent = "";
+        el.appendChild(inner);
+      }
+      inner.textContent = value;
     } else {
       el.classList.add("md-body");
       el.innerHTML = renderBubbleHtml(value);
