@@ -185,6 +185,16 @@
 
   function syncComposerSize() {
     if (!input) return;
+    if (state() === "closed" || !root.classList.contains("is-open")) {
+      input.style.height = "";
+      input.style.overflowY = "hidden";
+      root.classList.remove("is-composer-tall", "has-input-text");
+      if (root.style.getPropertyValue("--pill-h")) {
+        root.style.removeProperty("--pill-h");
+        refreshGlassSoon();
+      }
+      return;
+    }
     root.classList.toggle("has-input-text", Boolean(input.value.trim()));
     const hasBreak = /[\n\r]/.test(input.value);
     input.style.height = "0px";

@@ -2092,6 +2092,13 @@ html[data-resolved-theme="light"] .yan-chat {
     height 0.22s var(--ease), box-shadow 0.35s var(--ease),
     transform 0.3s var(--ease);
 }
+/* Closed launcher is a circle. Ignore leftover --pill-h from a tall composer. */
+.yan-chat:not(.is-open) .yan-chat-pill.corner,
+.yan-chat:not(.is-open) .yan-chat-pill.corner.circle {
+  height: var(--chat-circle);
+  min-height: var(--chat-circle);
+  max-height: var(--chat-circle);
+}
 .yan-chat.is-open .yan-chat-pill.corner {
   cursor: text;
   --lg-filter: none;

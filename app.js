@@ -914,7 +914,8 @@
     const chat = document.getElementById("edu-chat");
     if (!chat) return;
     chat.dataset.state = "closed";
-    chat.classList.remove("is-open", "has-panel");
+    chat.classList.remove("is-open", "has-panel", "is-composer-tall", "has-input-text");
+    chat.style.removeProperty("--pill-h");
     const panel = chat.querySelector(".yan-chat-panel");
     if (panel) {
       panel.hidden = true;
