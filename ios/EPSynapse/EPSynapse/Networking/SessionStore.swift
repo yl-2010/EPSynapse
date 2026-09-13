@@ -42,21 +42,6 @@ final class SessionStore: ObservableObject {
   static let msCallbackScheme = "epsynapse"
   static let msCallbackHost = "ms"
   static let keyIdle = "Paste the gsk_ key here, tap Save key, wait until Chat key says Groq, then ask in chat. Do not paste the key in the chat box."
-  static let setupGuide = """
-This box is only for questions. The Groq key goes in Settings, not here.
-
-1. Sign in with Google if you are not already.
-2. Open Settings.
-3. Open Chat key (Agent on iPhone).
-4. Open console.groq.com/keys. Sign up with Google. No credit card. Create API Key and copy the value that starts with gsk_. Groq shows the full key only once.
-5. Paste it in the API key field. Leave Model on Groq.
-6. Tap Save key. Do not only save School.
-7. Chat key must say Groq, not Add a Groq key.
-8. Close settings. Type a question here. Homework, a class, Canvas, the day.
-
-If you skip Save key, chat will send you back to these steps.
-"""
-  static let readyGuide = "Your Groq key is saved on this account. Ask about a class, Canvas, or the day."
   static let googleFirst = "Sign in with Google first."
   static let signedInHint = "Signed in with Google. School and student ID let us match you at school."
 

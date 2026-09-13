@@ -23,40 +23,6 @@
   const historyBtns = root.querySelectorAll("[data-edu-chat-history]");
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const LS_CHATS = "epsynapse.chat.threads";
-  const SETUP_GUIDE = [
-    "This box is only for questions. The Groq key goes in Settings, not here.",
-    "",
-    "1. Sign in with Google at the top of the page if you are not already.",
-    "2. Tap the gear in the bottom-left corner.",
-    "3. Tap **Chat key**.",
-    "4. Open [console.groq.com/keys](https://console.groq.com/keys). Sign up with Google. No credit card. Tap Create API Key and copy the value that starts with `gsk_`. Groq shows the full key only once.",
-    "5. Paste it in the API key field. Leave Model on Groq.",
-    "6. Tap **Save key**. Enter also saves. Do not use the School Save button for this.",
-    "7. You can add more than one key. If one hits its free limit, chat switches to the next on its own.",
-    "8. You should land back on the settings list. Chat key must say Groq, not \"Add a Groq key\".",
-    "9. Close settings. Type a question here. Homework, a class, Canvas, the day. The chat uses the key saved on your Google account.",
-    "",
-    "If you skip Save key, chat will send you back to these steps.",
-    "",
-    "If chat later goes quiet, Groq usually rejected the key or hit the free limit. Open [epsynapse.com/groq](/groq).",
-  ].join("\n");
-  const CANVAS_GUIDE = [
-    "Chat is ready. Classes and homework still need a Canvas token. That token does not go in this box.",
-    "",
-    "1. Open [eastsideprep.instructure.com](https://eastsideprep.instructure.com). If you see four11, tap **@eastsideprep.org login**. Sign in with your school Microsoft account. Not Parent/Guardian.",
-    "2. In Canvas, click **Account** (your picture, left side), then **Settings**.",
-    "3. Scroll to **Approved Integrations**. Click **Add New Access Token**.",
-    "4. Purpose: EPSynapse. Students must pick an expiration date. There is no permissions list. Do not hunt for scopes or checkboxes.",
-    "5. Click **Generate Token**. Copy it now. Canvas shows the full value only once. It is a long string, not a gsk_ key.",
-    "6. Tap the gear, then **Canvas**. Leave the URL as `https://eastsideprep.instructure.com` unless you use another school. Paste the token. Tap **Save**.",
-    "7. Canvas on the settings list must say Connected. Then ask here about a class or the day.",
-    "",
-    "Full click-by-click is on [epsynapse.com/canvas](/canvas).",
-  ].join("\n");
-  const READY_GUIDE =
-    "Your Groq key and Canvas token are saved on this account. When OneDrive, Outlook, and Teams say Connected in settings, the agent can use them too. Ask about a class, homework, or the day. If chat stops, Groq usually rejected the key or hit the free limit (about 1000 chats a day). Create a new gsk_ at [console.groq.com/keys](https://console.groq.com/keys), paste it in Settings → Chat key, or wait. A second key on the same Groq login does not reset a daily cap. Steps on [epsynapse.com/groq](/groq).";
-  const CURSOR_READY_GUIDE =
-    "This account uses Cursor on the Mac. No Groq key. When Canvas, OneDrive, Outlook, and Teams say Connected in settings, the agent can use them too. Ask about a class, homework, or the day.";
   const LIMIT_GUIDE = [
     "Chat stopped because Groq refused the saved key. That is Groq, not this page.",
     "",
@@ -383,11 +349,6 @@
     return document.documentElement.dataset.cursorAgent === "1";
   }
 
-  function hasCanvas() {
-    const ready = document.getElementById("canvas-ready");
-    return Boolean(ready && !ready.hidden);
-  }
-
   function isKeyFailure(text, status, code) {
     if (code === "key_rejected" || code === "key_limited") return true;
     if (status === 401 || status === 403 || status === 429) return true;
@@ -431,26 +392,6 @@
 
   function clearGuide() {
     messagesEl?.querySelector(".yan-chat-turn--guide")?.remove();
-  }
-
-  function paintGuide() {
-    if (!messagesEl || messages.length) return;
-    clearGuide();
-    const turn = document.createElement("div");
-    turn.className = "yan-chat-turn yan-chat-turn--assistant yan-chat-turn--guide";
-    const el = document.createElement("div");
-    el.className = "yan-chat-bubble yan-chat-bubble--assistant";
-    el.dataset.liquidGlass = "rounded";
-    el.dataset.filterId = "lg-edu-chat-guide";
-    let body = usesCursor() ? CURSOR_READY_GUIDE : READY_GUIDE;
-    if (!hasChatKey()) body = SETUP_GUIDE;
-    else if (!usesCursor() && localStorage.getItem(LS_KEY_ERR)) body = LIMIT_GUIDE;
-    else if (!hasCanvas()) body = CANVAS_GUIDE;
-    writeBubble(el, "assistant", body);
-    turn.appendChild(el);
-    messagesEl.appendChild(turn);
-    scrollChatToEnd(turn);
-    refreshGlass();
   }
 
   function newChatId() {
@@ -867,7 +808,6 @@
   function openChat() {
     if (!signedIn() || state() !== "closed") return;
     if (!messages.length) {
-      paintGuide();
       setState("panel");
       return;
     }
@@ -907,7 +847,6 @@
     writeLocalBag(bag);
     if (input) input.value = "";
     syncComposerSize();
-    paintGuide();
     setState("panel");
   }
 
@@ -921,7 +860,6 @@
     if (!hasChatKey()) {
       if (input) input.value = "";
       syncComposerSize();
-      paintGuide();
       setState("panel");
       window.__epsynapseOpenChatKey?.();
       return;
@@ -1121,9 +1059,7 @@
   };
   window.__epsynapseRefreshChatGuide = () => {
     syncPlaceholder();
-    if (!messages.length && (state() === "panel" || messagesEl?.querySelector(".yan-chat-turn--guide"))) {
-      paintGuide();
-    }
+    if (!messages.length) clearGuide();
   };
   setState("closed", { skipFocus: true });
 })();

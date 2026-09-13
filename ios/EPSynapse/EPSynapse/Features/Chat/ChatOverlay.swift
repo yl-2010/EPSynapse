@@ -162,21 +162,7 @@ struct ChatOverlay: View {
 
     private var messagePanel: some View {
         ZStack(alignment: .top) {
-            if chat.turns.isEmpty {
-                ScrollView(.vertical) {
-                    if hasChatKey {
-                        Text(SessionStore.readyGuide)
-                            .font(.body)
-                            .foregroundStyle(EPSTheme.muted)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    } else {
-                        EPSMarkdownText(source: SessionStore.setupGuide, scheme: colorScheme)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
-                .epsVerticalScrollOnly()
-                .padding(.top, 28)
-            } else {
+            if !chat.turns.isEmpty {
                 ScrollViewReader { proxy in
                     ScrollView(.vertical) {
                         LazyVStack(alignment: .leading, spacing: 10) {
