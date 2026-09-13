@@ -13,7 +13,7 @@ Sign in at https://entra.microsoft.com (or https://portal.azure.com and open Mic
 3. Supported account types: "Accounts in any organizational directory (Any Microsoft Entra ID tenant - Multitenant)". This lets EPS accounts sign in even if the registration lives in a different directory.
 4. Redirect URI: pick the platform "Public client/native (mobile & desktop)" and enter `https://api.epsynapse.com/v1/ms/callback`. Click Register.
 5. Open Authentication. Under the Mobile and desktop applications platform, add a second redirect URI, `http://localhost:3006/v1/ms/callback`, for local testing. Save.
-6. Still under Authentication, set "Allow public client flows" to Yes. This keeps the device-code fallback working. Save.
+6. Still under Authentication, set "Allow public client flows" to No. That toggle enables device code and username/password grants and EPSynapse uses neither. Auth code + PKCE on the Mobile and desktop applications platform does not need it. Save.
 7. Open API permissions > Add a permission > Microsoft Graph > Delegated permissions. Add `User.Read`, `Files.ReadWrite`, `Notes.ReadWrite`, `Mail.ReadWrite`, `Mail.Send`, `Chat.ReadWrite`, `offline_access`, `openid`, `profile`, `email`. Click Add permissions. Do not click "Grant admin consent" here unless you are an admin of the EPS tenant; that button only affects the directory the registration lives in.
 8. Open Branding & properties. Set the home page to `https://epsynapse.com`, upload the logo from `logos/mark.png`, and set the publisher domain if the directory has a verified one. Microsoft shows "unverified" on the consent screen for publishers without MPN verification. That is fine for the hackathon.
 9. Open Overview and copy the Application (client) ID.
@@ -37,7 +37,7 @@ MICROSOFT_SCOPES=User.Read Files.ReadWrite Notes.ReadWrite Mail.ReadWrite Mail.S
 SCHOOL_IT_EMAIL=<address the "Send request to school IT" button emails>
 ```
 
-Every value except `MICROSOFT_CLIENT_ID` and `SCHOOL_IT_EMAIL` has the default shown, so you can leave those lines out. Then restart and check health:
+Every value except `MICROSOFT_CLIENT_ID` and `SCHOOL_IT_EMAIL` has the default shown, so you can leave those lines out. Leave `MICROSOFT_CLIENT_ID` unset and Microsoft sign-in stays off. Then restart and check health:
 
 ```bash
 launchctl kickstart -k "gui/$(id -u)/com.jype.server"
@@ -46,7 +46,7 @@ curl -sS -f http://127.0.0.1:3006/health
 
 ### How to test
 
-Sign in to https://epsynapse.com as a student who is not the demo account. Open Settings > OneNote and tap Connect. One of three things happens.
+Sign in to https://epsynapse.com as a student who is not the demo account. Open Settings > OneNote and tap Connect. The browser goes to login.microsoftonline.com and comes back to `https://api.epsynapse.com/v1/ms/callback`. One of three things happens.
 
 a. The EPS tenant allows users to consent. Microsoft shows a consent screen titled "Permissions requested" that lists the ten permissions above with EPSynapse as the app name. Accept, and you land back on the site. The OneNote pane says Connected only after Graph returns a notebook list.
 
@@ -85,6 +85,10 @@ Grant tenant-wide admin consent for the delegated Microsoft Graph permissions be
 - Tokens live on the EPSynapse API server. A student can disconnect in Settings, which deletes the token, and can revoke the app under https://myapps.microsoft.com at any time.
 - No data is sold or shared with third parties.
 
+### Why the earlier sign-ins tripped Defender
+
+On Sep 12 the API signed students in with Microsoft's device-code grant against a first-party Office client id, because we had no app registration. Defender's Attack Disruption matched that to device-code phishing: device-code grant, a `node` user agent, a first-party client, all from one home IP. It disabled or force-signed-out four student accounts. That was a false positive, but the logs look the same as a real attack, so the flow is gone. Students now sign in through EPSynapse's own Entra app with authorization code + PKCE, a browser redirect to login.microsoftonline.com, a consent screen, and a return to https://api.epsynapse.com/v1/ms/callback.
+
 ### How to approve
 
 Option A. Open this link and sign in as a Global Administrator or Cloud Application Administrator. Review the permissions and click Accept.
@@ -109,12 +113,15 @@ Team JYPE, `<team email placeholder>`. Any of the four students can answer quest
 
 ## Part 3. Current state
 
+Device code was removed Sep 13 after Microsoft Defender's Attack Disruption treated the old first-party Office client plus device-code grant as phishing and disabled four student accounts. Microsoft sign-in is off until `MICROSOFT_CLIENT_ID` points at our own registration. School IT admin consent is still required after that.
+
 What is set up now:
 
-- Sign-in uses a device-code flow against the Microsoft Office client id `d3590ed6-52b3-4102-aeff-aad2292ab01c` in the EPS tenant. That client is pre-consented, so Microsoft never shows a consent screen. Its token has `Notes.Create` but no OneNote read scope, and for at least one student `GET /me/drive/root` returns 401.
-- Each Microsoft service pane (OneNote, OneDrive, Outlook, Teams) now reports its own status from a real Graph call. The app no longer says Connected when Graph says no.
+- Sign-in is authorization code + PKCE only, against EPSynapse's own Entra app. The browser goes to login.microsoftonline.com and returns to `https://api.epsynapse.com/v1/ms/callback`.
+- When `MICROSOFT_CLIENT_ID` is unset, `POST /v1/me/ms/start` returns 503 with `{ error, mode: "off", configured: false }`, `GET /v1/me` has `msClientMode: "off"` and `msConfigured: false`, and `adminConsentUrl` is empty.
+- On startup the server drops any stored Microsoft tokens whose `clientId` is not the configured `MICROSOFT_CLIENT_ID`.
+- Each Microsoft service pane (OneNote, OneDrive, Outlook, Teams) reports its own status from a real Graph call. The app no longer says Connected when Graph says no.
 - A "Send request to school IT" button emails the admin consent link to `SCHOOL_IT_EMAIL`.
-- The server reads `MICROSOFT_CLIENT_ID` and the other variables from the section above and switches to authorization code + PKCE when a client id is set.
 
 What is blocked on the app registration:
 

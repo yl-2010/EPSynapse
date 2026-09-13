@@ -153,9 +153,9 @@ What that means:
 
 ## 6. Microsoft tools need school IT approval
 
-OneDrive, OneNote, Outlook, and Teams go through Microsoft Graph with the student's school account. Eastside Prep's tenant blocks new app permissions until an admin approves them once.
+OneDrive, OneNote, Outlook, and Teams go through Microsoft Graph with the student's school account. Eastside Prep's tenant blocks new app permissions until an admin approves them once. Those Microsoft tools stay off until `MICROSOFT_CLIENT_ID` is set to EPSynapse's own registration. EPSynapse never signs in with device code or a stored password.
 
-Until that happens, those tools return `isError: true` with the honest message, for example "OneNote needs Notes access on this Microsoft sign-in. Connect OneDrive again after school IT accepts the app." `connection_status` shows the same thing per service and includes `adminConsentUrl`.
+Until school IT approves the app, those tools return `isError: true` with the honest message, for example "OneNote needs Notes access on this Microsoft sign-in. Connect OneDrive again after school IT accepts the app." `connection_status` shows the same thing per service and includes `adminConsentUrl` once a client id is set.
 
 The approval link is also returned as `adminConsentUrl` from `GET /v1/me`. It points at `https://login.microsoftonline.com/<EPS tenant>/v2.0/adminconsent?client_id=...`. Send it to school IT. They click once, sign in as a tenant admin, accept, and every student's Microsoft tools start working after they reconnect.
 

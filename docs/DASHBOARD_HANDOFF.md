@@ -8,4 +8,4 @@ Landed on the Studio.
 - Mac modules: `server/students.js`, `server/canvas.js`, `server/onedrive.js`. Profiles in gitignored `server/data/`.
 - Chat pill posts `/v1/agent/chat`. Server attaches a live Canvas + OneDrive snapshot and uses the account model key.
 
-Device-code for school OneDrive works with the Outlook Web first-party client. Paste-token is still there if Microsoft blocks a student.
+Device code was removed Sep 13. School OneDrive now uses authorization code + PKCE against EPSynapse's own Entra app, and Microsoft sign-in stays off until `MICROSOFT_CLIENT_ID` is set.
