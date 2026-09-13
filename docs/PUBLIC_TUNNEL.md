@@ -29,12 +29,7 @@ Other apps on this Mac keep their own tunnels. Four `cloudflared` processes. Do 
 
 ## Runtime
 
-LaunchAgents `com.jype.server` + `com.jype.cloudflared`, or manually:
-
-```bash
-npm run server
-cloudflared tunnel --config ~/.cloudflared/config-jype.yml run
-```
+LaunchAgents `com.jype.server` + `com.jype.cloudflared` start at login. Reboot needs no extra commands. First-time install: `bash deploy/launchagents/install.sh`.
 
 ## Verify
 

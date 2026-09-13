@@ -15,13 +15,7 @@ curl -sS -f https://api.epsynapse.com/health
 
 Both curls should print JSON with `"ok":true`.
 
-If local `/health` fails, the LaunchAgent is not loaded. Start it by hand, then hit `/health` again:
-
-```bash
-cd /Users/yanlevin/github/JYPE
-npm run server
-curl -sS -f http://127.0.0.1:3006/health
-```
+A Mac reboot needs no extra commands. Login starts Express and the tunnel. This `kickstart` is only for a new `server/` commit.
 
 Logs: `/tmp/jype-server.log`
 

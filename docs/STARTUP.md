@@ -21,17 +21,19 @@ curl -sS -f http://127.0.0.1:3006/health
 curl -sS -f https://api.epsynapse.com/health
 ```
 
-Both curls should print JSON with `"ok":true`. If the first one fails, the LaunchAgent is not loaded. Start it with `npm run server` from the repo root, then hit `/health` again.
+Both curls should print JSON with `"ok":true`.
 
 Logs if something looks wrong: `/tmp/jype-server.log`.
 
-Do this after anyone lands a change under `server/`. The grades work is in `server/canvas.js` and `server/index.js`. Until this restart, the live API will not have it.
+Do this after anyone lands a change under `server/`. Until this restart, the live API will not have it.
 
 ---
 
 ## After a Mac restart
 
-LaunchAgents auto-start the JYPE API + tunnel on login.
+Nothing to start. Login loads `com.jype.server` and `com.jype.cloudflared` (`RunAtLoad` + `KeepAlive`), same as the other APIs on this Mac. FileVault unlock is the only prompt.
+
+Optional check:
 
 ```bash
 curl -sS http://127.0.0.1:3006/health
@@ -47,16 +49,13 @@ curl -sS https://api.epsynapse.com/health
 
 Plists live in `~/Library/LaunchAgents/`. Other apps on this Mac keep their own pairs. Do not merge tunnels.
 
-Install / reload:
+First time on a Mac, or if they vanished from Login Items:
 
 ```bash
-cp /Users/yanlevin/github/JYPE/deploy/launchagents/com.jype.server.plist ~/Library/LaunchAgents/
-cp /Users/yanlevin/github/JYPE/deploy/launchagents/com.jype.cloudflared.plist ~/Library/LaunchAgents/
-launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/com.jype.server.plist
-launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/com.jype.cloudflared.plist
+bash /Users/yanlevin/github/JYPE/deploy/launchagents/install.sh
 ```
 
-If they are already loaded: `launchctl kickstart -k "gui/$(id -u)/com.jype.server"` (same for `com.jype.cloudflared`).
+That copies the plists, `launchctl enable`s them, and bootstraps if they are not already loaded. Do not run it to pick up `server/` code. Use `kickstart` above for that.
 
 Logs: `/tmp/jype-server.log`, `/tmp/cloudflared-jype.log`.
 

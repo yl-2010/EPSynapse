@@ -26,14 +26,15 @@ bash deploy/cloudflared/setup-path-a.sh
 
 `setup-path-a.sh` looks up `jype-api` with whatever origin cert `cloudflared` is using. The live tunnel is in the JYPE account, not NoteLMs.
 
-## Every session / LaunchAgents
+## Login / LaunchAgents
+
+`com.jype.server` + `com.jype.cloudflared` start at login. A reboot needs no extra commands.
+
+First time on a Mac:
 
 ```bash
-cd /Users/yanlevin/github/JYPE && npm run server
-cloudflared tunnel --config ~/.cloudflared/config-jype.yml run
+bash deploy/launchagents/install.sh
 ```
-
-Or rely on `com.jype.server` + `com.jype.cloudflared`.
 
 ## Verify
 
