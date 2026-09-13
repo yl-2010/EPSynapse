@@ -88,16 +88,20 @@ struct APIClient {
     )
   }
 
-  // Microsoft connect. The server picks the flow: "app" returns authorizeUrl for a
-  // browser sign-in, "office" returns a device code.
+  // Microsoft connect. mode "app" returns authorizeUrl for a browser sign-in.
+  // HTTP 503 / mode "off" means the API has no Entra app registration yet.
   func msStart(service: MSService, returnTo: String, sessionId: String) async throws -> MSStartResponse {
-    try await request(
-      "/v1/me/ms/start",
-      method: "POST",
-      body: MSServiceBody(service: service.rawValue, returnTo: returnTo),
-      sessionId: sessionId,
-      timeout: 25
-    )
+    do {
+      return try await request(
+        "/v1/me/ms/start",
+        method: "POST",
+        body: MSServiceBody(service: service.rawValue, returnTo: returnTo),
+        sessionId: sessionId,
+        timeout: 25
+      )
+    } catch let error as APIError where error.status == 503 {
+      return MSStartResponse(mode: "off", service: service.rawValue, error: error.message, configured: false)
+    }
   }
 
   func msStatus(service: MSService, sessionId: String) async throws -> ConnectionStatusResponse {

@@ -61,11 +61,18 @@ struct Profile: Codable, Equatable {
   var studioOutlook: Bool = false
   var studioTeams: Bool = false
   var msClientMode: String = ""
+  var msConfigured: Bool?
   var msSignedInEmail: String = ""
   var msDenied: MSDenied = MSDenied()
   var msNeedsAdminApproval: Bool = false
   var adminConsentUrl: String = ""
   var consentRequest: MSConsentRequest?
+
+  /// True when the Mac API has no EPSynapse Entra app registration yet.
+  var isMicrosoftSignInOff: Bool {
+    if msConfigured == false { return true }
+    return msClientMode.lowercased() == "off"
+  }
 
   init(
     school: String = "",
@@ -163,6 +170,7 @@ struct Profile: Codable, Equatable {
     studioOutlook = c.bool(.studioOutlook)
     studioTeams = c.bool(.studioTeams)
     msClientMode = c.string(.msClientMode)
+    msConfigured = try? c.decodeIfPresent(Bool.self, forKey: .msConfigured)
     msSignedInEmail = c.string(.msSignedInEmail)
     msDenied = (try? c.decodeIfPresent(MSDenied.self, forKey: .msDenied)) ?? MSDenied()
     msNeedsAdminApproval = c.bool(.msNeedsAdminApproval)
@@ -307,69 +315,68 @@ struct MSConsentRequest: Codable, Equatable {
 }
 
 /// Reply from POST /v1/me/ms/start and the older /v1/me/<service>/start routes.
-/// mode "app" carries authorizeUrl; mode "office" carries device-code fields.
+/// mode "app" carries authorizeUrl. mode "off" means no Entra app registration yet.
 struct MSStartResponse: Codable {
   var mode: String
+  var service: String
   var authorizeUrl: String
   var state: String
-  var user_code: String
   var verification_uri: String
   var verification_uri_complete: String
   var message: String
-  var interval: Int
   var adminConsentUrl: String
   var error: String
+  var configured: Bool?
 
-  /// App mode also copies authorizeUrl into verification_uri, so check this first.
-  var isBrowserFlow: Bool { mode == "app" || !authorizeUrl.isEmpty }
-  var isDeviceFlow: Bool { !isBrowserFlow && !user_code.isEmpty }
-  var browserURL: String { authorizeUrl.isEmpty ? verification_uri_complete : authorizeUrl }
+  var isOff: Bool {
+    if configured == false { return true }
+    return mode.lowercased() == "off"
+  }
 
-  var devicePending: DevicePending {
-    DevicePending(
-      user_code: user_code,
-      verification_uri: verification_uri,
-      verification_uri_complete: verification_uri_complete,
-      message: message
-    )
+  var isBrowserFlow: Bool { !isOff && (mode == "app" || !browserURL.isEmpty) }
+
+  var browserURL: String {
+    if !authorizeUrl.isEmpty { return authorizeUrl }
+    if !verification_uri_complete.isEmpty { return verification_uri_complete }
+    return verification_uri
   }
 
   init(
     mode: String = "",
+    service: String = "",
     authorizeUrl: String = "",
     state: String = "",
-    user_code: String = "",
     verification_uri: String = "",
     verification_uri_complete: String = "",
     message: String = "",
-    interval: Int = 0,
     adminConsentUrl: String = "",
-    error: String = ""
+    error: String = "",
+    configured: Bool? = nil
   ) {
     self.mode = mode
+    self.service = service
     self.authorizeUrl = authorizeUrl
     self.state = state
-    self.user_code = user_code
     self.verification_uri = verification_uri
     self.verification_uri_complete = verification_uri_complete
     self.message = message
-    self.interval = interval
     self.adminConsentUrl = adminConsentUrl
     self.error = error
+    self.configured = configured
   }
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     mode = c.string(.mode)
+    service = c.string(.service)
     authorizeUrl = c.string(.authorizeUrl)
     state = c.string(.state)
-    user_code = c.string(.user_code)
     verification_uri = c.string(.verification_uri)
     verification_uri_complete = c.string(.verification_uri_complete)
     message = c.string(.message)
-    interval = c.int(.interval)
     adminConsentUrl = c.string(.adminConsentUrl)
     error = c.string(.error)
+    configured = try? c.decodeIfPresent(Bool.self, forKey: .configured)
   }
 }
 
@@ -390,10 +397,9 @@ struct MSServiceBody: Encodable {
   }
 }
 
-/// A pending Microsoft sign-in. Device code carries user_code and verification_uri.
-/// Browser (app mode) carries only authorizeUrl, service, state.
+/// A pending Microsoft browser sign-in. Driven by authorizeUrl.
+/// Start replies may also copy that URL into verification_uri / verification_uri_complete.
 struct DevicePending: Codable, Equatable {
-  var user_code: String
   var verification_uri: String
   var verification_uri_complete: String
   var message: String
@@ -401,14 +407,13 @@ struct DevicePending: Codable, Equatable {
   var service: String
   var state: String
 
-  var openURL: String {
+  var resolvedAuthorizeUrl: String {
+    if !authorizeUrl.isEmpty { return authorizeUrl }
     if !verification_uri_complete.isEmpty { return verification_uri_complete }
-    if user_code.isEmpty { return verification_uri }
-    return "https://login.microsoft.com/device?otc=\(user_code)"
+    return verification_uri
   }
 
   init(
-    user_code: String = "",
     verification_uri: String = "",
     verification_uri_complete: String = "",
     message: String = "",
@@ -416,7 +421,6 @@ struct DevicePending: Codable, Equatable {
     service: String = "",
     state: String = ""
   ) {
-    self.user_code = user_code
     self.verification_uri = verification_uri
     self.verification_uri_complete = verification_uri_complete
     self.message = message
@@ -427,7 +431,6 @@ struct DevicePending: Codable, Equatable {
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
-    user_code = c.string(.user_code)
     verification_uri = c.string(.verification_uri)
     verification_uri_complete = c.string(.verification_uri_complete)
     message = c.string(.message)
@@ -436,15 +439,7 @@ struct DevicePending: Codable, Equatable {
     state = c.string(.state)
   }
 
-  /// Device-code pending: there is a code to type.
-  var isActive: Bool {
-    !user_code.isEmpty
-  }
-
-  /// Browser pending: the student is somewhere in the Microsoft sign-in page.
-  var isBrowser: Bool {
-    user_code.isEmpty && !authorizeUrl.isEmpty
-  }
+  var isBrowser: Bool { !resolvedAuthorizeUrl.isEmpty }
 }
 
 struct Course: Codable, Identifiable, Equatable {
@@ -1077,43 +1072,6 @@ struct AgentConfigResponse: Codable {
   }
 }
 
-struct DeviceStartResponse: Codable {
-  var user_code: String
-  var verification_uri: String
-  var verification_uri_complete: String
-  var message: String
-  var interval: Int
-
-  var openURL: String {
-    if !verification_uri_complete.isEmpty { return verification_uri_complete }
-    if user_code.isEmpty { return verification_uri }
-    return "https://login.microsoft.com/device?otc=\(user_code)"
-  }
-
-  init(
-    user_code: String = "",
-    verification_uri: String = "",
-    verification_uri_complete: String = "",
-    message: String = "",
-    interval: Int = 0
-  ) {
-    self.user_code = user_code
-    self.verification_uri = verification_uri
-    self.verification_uri_complete = verification_uri_complete
-    self.message = message
-    self.interval = interval
-  }
-
-  init(from decoder: Decoder) throws {
-    let c = try decoder.container(keyedBy: CodingKeys.self)
-    user_code = c.string(.user_code)
-    verification_uri = c.string(.verification_uri)
-    verification_uri_complete = c.string(.verification_uri_complete)
-    message = c.string(.message)
-    interval = c.int(.interval)
-  }
-}
-
 struct ConnectionStatusResponse: Codable {
   var connected: Bool
   var pending: DevicePending?
@@ -1129,9 +1087,15 @@ struct ConnectionStatusResponse: Codable {
   var needsAdminApproval: Bool
   var consentRequest: MSConsentRequest?
   var mode: String
+  var configured: Bool?
   var msSignedInEmail: String
   var studio: Bool
   var adminConsentUrl: String
+
+  var isOff: Bool {
+    if configured == false { return true }
+    return mode.lowercased() == "off"
+  }
 
   init(
     connected: Bool = false,
@@ -1147,6 +1111,7 @@ struct ConnectionStatusResponse: Codable {
     needsAdminApproval: Bool = false,
     consentRequest: MSConsentRequest? = nil,
     mode: String = "",
+    configured: Bool? = nil,
     msSignedInEmail: String = "",
     studio: Bool = false,
     adminConsentUrl: String = ""
@@ -1164,6 +1129,7 @@ struct ConnectionStatusResponse: Codable {
     self.needsAdminApproval = needsAdminApproval
     self.consentRequest = consentRequest
     self.mode = mode
+    self.configured = configured
     self.msSignedInEmail = msSignedInEmail
     self.studio = studio
     self.adminConsentUrl = adminConsentUrl
@@ -1192,6 +1158,7 @@ struct ConnectionStatusResponse: Codable {
     needsAdminApproval = c.bool(.needsAdminApproval)
     consentRequest = try? c.decodeIfPresent(MSConsentRequest.self, forKey: .consentRequest)
     mode = c.string(.mode)
+    configured = try? c.decodeIfPresent(Bool.self, forKey: .configured)
     msSignedInEmail = c.string(.msSignedInEmail)
     studio = c.bool(.studio)
     adminConsentUrl = c.string(.adminConsentUrl)

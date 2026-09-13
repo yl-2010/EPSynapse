@@ -14,23 +14,23 @@ enum MSPaneState: Equatable {
   case studio(email: String)
   /// Microsoft or the school tenant refused. `needsAdminApproval` means IT has to consent once.
   case denied(reason: String, needsAdminApproval: Bool)
-  /// Device-code flow. Show the code and a link to the Microsoft page, keep polling.
-  case pendingCode(code: String, url: String)
   /// Browser OAuth flow. The web sign-in sheet is open or the callback is on its way.
   case pendingBrowser(authorizeUrl: String)
+  /// The API has no EPSynapse Entra app registration. Connect stays disabled.
+  case off
   /// Something failed on our side. Show the message and let them try again.
   case error(String)
-
-  var isPendingCode: Bool {
-    if case .pendingCode = self { return true }
-    return false
-  }
 
   var isConnected: Bool {
     switch self {
     case .connected, .studio: true
     default: false
     }
+  }
+
+  var isOff: Bool {
+    if case .off = self { return true }
+    return false
   }
 }
 
@@ -74,11 +74,11 @@ final class SessionStore: ObservableObject {
   /// Consent-request text fetched for the Copy button, per service.
   @Published var msConsent: [MSService: MSConsentRequest] = [:]
 
-  private var msLocalPending: [MSService: DevicePending] = [:]
   private var msBrowserPending: [MSService: String] = [:]
   private var msLocalDenied: [MSService: String] = [:]
   private var msErrors: [MSService: String] = [:]
   private var msBusy: Set<MSService> = []
+  private var msForcedOff = false
   private var authSession: ASWebAuthenticationSession?
   private let authPresenter = MSAuthPresenter()
 
@@ -211,11 +211,12 @@ final class SessionStore: ObservableObject {
     msStates[service] ?? .idle
   }
 
-  var hasMicrosoftPendingCode: Bool {
-    msStates.values.contains { $0.isPendingCode }
+  var isMicrosoftSignInOff: Bool {
+    msForcedOff || profile?.isMicrosoftSignInOff == true
   }
 
   func adminConsentURL(for service: MSService) -> URL? {
+    if isMicrosoftSignInOff { return nil }
     let raw = [
       msConsent[service]?.adminConsentUrl ?? "",
       profile?.consentRequest?.adminConsentUrl ?? "",
@@ -224,12 +225,16 @@ final class SessionStore: ObservableObject {
     return URL(string: raw)
   }
 
-  /// Starts the Microsoft sign-in for one service. The server picks browser OAuth ("app")
-  /// or device code ("office"). Browser mode runs ASWebAuthenticationSession and waits for
-  /// epsynapse://ms?... to come back, then reloads /v1/me so the pane shows the honest state.
+  /// Starts Microsoft sign-in for one service. The API returns authorizeUrl for a
+  /// browser PKCE flow. ASWebAuthenticationSession waits for epsynapse://ms?... then
+  /// we reload /v1/me so the pane matches the server.
   func connectMicrosoft(_ service: MSService) async {
     guard profile != nil, !sessionId.isEmpty else {
       msErrors[service] = Self.googleFirst
+      paintConnections()
+      return
+    }
+    if isMicrosoftSignInOff {
       paintConnections()
       return
     }
@@ -241,7 +246,6 @@ final class SessionStore: ObservableObject {
     msLocalDenied[service] = nil
     msNotes[service] = nil
     msBrowserPending[service] = nil
-    msLocalPending[service] = nil
 
     let started: MSStartResponse
     do {
@@ -252,27 +256,23 @@ final class SessionStore: ObservableObject {
       return
     }
 
-    if started.isBrowserFlow {
-      let url = started.browserURL
-      msBrowserPending[service] = url
+    if started.isOff {
+      msForcedOff = true
+      msBrowserPending[service] = nil
       paintConnections()
-      await runBrowserSignIn(service, authorizeUrl: url)
       return
     }
 
-    if started.isDeviceFlow {
-      let pending = started.devicePending
-      msLocalPending[service] = pending
-      switch service {
-      case .onedrive: profile?.onedrivePending = pending
-      case .outlook: profile?.outlookPending = pending
-      case .teams: profile?.teamsPending = pending
-      case .onenote: break
-      }
+    if !started.adminConsentUrl.isEmpty {
+      profile?.adminConsentUrl = started.adminConsentUrl
+    }
+
+    if started.isBrowserFlow {
+      let url = started.browserURL
+      msForcedOff = false
+      msBrowserPending[service] = url
       paintConnections()
-      if let url = URL(string: pending.openURL), !pending.openURL.isEmpty {
-        await UIApplication.shared.open(url)
-      }
+      await runBrowserSignIn(service, authorizeUrl: url)
       return
     }
 
@@ -312,53 +312,6 @@ final class SessionStore: ObservableObject {
     return true
   }
 
-  /// Device-code flow only. Polls /v1/me/<service>/status for every pane that shows a code.
-  func pollConnections(force: Bool = false) async {
-    guard !sessionId.isEmpty, let me = profile else { return }
-    let watch = MSService.allCases.filter { service in
-      if me.msConnected(service) || me.msStudio(service) { return false }
-      if force { return true }
-      return msState(service).isPendingCode
-    }
-    guard !watch.isEmpty else { return }
-
-    var reload = false
-    for service in watch {
-      guard let status = try? await api.msStatus(service: service, sessionId: sessionId) else { continue }
-      if status.connected {
-        reload = true
-        msLocalPending[service] = nil
-        continue
-      }
-      if status.denied {
-        msLocalDenied[service] = status.deniedReason
-        msLocalPending[service] = nil
-        msBrowserPending[service] = nil
-        reload = true
-        continue
-      }
-      if let pending = status.pending, pending.isBrowser {
-        // App mode: the server only knows the sign-in page is open.
-        msLocalPending[service] = nil
-        msBrowserPending[service] = pending.authorizeUrl
-      } else if let pending = status.pending, pending.isActive {
-        msLocalPending[service] = pending
-      } else if msLocalPending[service] != nil, status.pending == nil {
-        // The code expired or the server dropped it. Let the pane offer Connect again.
-        msLocalPending[service] = nil
-        if !status.error.isEmpty { msErrors[service] = status.error }
-      }
-      if !status.error.isEmpty, msErrors[service] == nil, !msState(service).isPendingCode {
-        msErrors[service] = status.error
-      }
-    }
-    if reload {
-      await reloadMe()
-    } else {
-      paintConnections()
-    }
-  }
-
   func disconnectMicrosoft(_ service: MSService) async {
     guard !sessionId.isEmpty else { return }
     msNotes[service] = nil
@@ -368,7 +321,7 @@ final class SessionStore: ObservableObject {
       rememberSession(me.sessionId)
       msLocalDenied[service] = nil
       msErrors[service] = nil
-      msLocalPending[service] = nil
+      msBrowserPending[service] = nil
       paintConnections()
     } catch {
       msErrors[service] = (error as? APIError)?.message ?? "Could not disconnect \(service.title)."
@@ -646,11 +599,16 @@ final class SessionStore: ObservableObject {
   private func paintConnections() {
     guard let me = profile else {
       msStates = [:]
-      msLocalPending = [:]
       msBrowserPending = [:]
       msLocalDenied = [:]
       msErrors = [:]
+      msForcedOff = false
       return
+    }
+    if me.msConfigured == true, me.msClientMode.lowercased() != "off" {
+      msForcedOff = false
+    } else if me.isMicrosoftSignInOff {
+      msForcedOff = true
     }
     var next: [MSService: MSPaneState] = [:]
     for service in MSService.allCases {
@@ -666,6 +624,9 @@ final class SessionStore: ObservableObject {
     if me.msConnected(service) {
       return .connected(email: me.msEmail(service))
     }
+    if msForcedOff || me.isMicrosoftSignInOff {
+      return .off
+    }
     if let error = msErrors[service], !error.isEmpty {
       return .error(error)
     }
@@ -679,15 +640,10 @@ final class SessionStore: ObservableObject {
         needsAdminApproval: me.msNeedsAdminApproval || Self.looksLikeAdminConsent(reason)
       )
     }
-    if let pending = msLocalPending[service] ?? me.msPending(service) {
-      if pending.isActive {
-        return .pendingCode(code: pending.user_code, url: pending.openURL)
-      }
-      if pending.isBrowser {
-        return .pendingBrowser(authorizeUrl: pending.authorizeUrl)
-      }
+    if let pending = me.msPending(service), pending.isBrowser {
+      return .pendingBrowser(authorizeUrl: pending.resolvedAuthorizeUrl)
     }
-    if let authorizeUrl = msBrowserPending[service] {
+    if let authorizeUrl = msBrowserPending[service], !authorizeUrl.isEmpty {
       return .pendingBrowser(authorizeUrl: authorizeUrl)
     }
     return .idle

@@ -52,9 +52,6 @@ struct SettingsSheet: View {
     @State private var replacingKey = false
     @State private var replacingCanvas = false
 
-    private static let adminConsent = URL(
-        string: "https://login.microsoftonline.com/b2681e8b-dd20-46cf-b163-371a2d7c6014/v2.0/adminconsent?client_id=d3590ed6-52b3-4102-aeff-aad2292ab01c&scope=https://graph.microsoft.com/.default&redirect_uri=https://epsynapse.com/"
-    )!
     private static let groqHelp = URL(string: "https://epsynapse.com/groq")!
     private static let canvasHelp = URL(string: "https://epsynapse.com/canvas")!
 
@@ -100,14 +97,6 @@ struct SettingsSheet: View {
                 schoolHits = []
             } else {
                 schoolHits = hits
-            }
-        }
-        .task {
-            while !Task.isCancelled {
-                if session.hasMicrosoftPendingCode {
-                    await session.pollConnections()
-                }
-                try? await Task.sleep(nanoseconds: 4_000_000_000)
             }
         }
         .fileImporter(
@@ -418,10 +407,10 @@ struct SettingsSheet: View {
     private func microsoftServicePane(_ service: MSService) -> some View {
         let state = session.msState(service)
         let note = session.msNotes[service] ?? ""
-        let consentURL = session.adminConsentURL(for: service) ?? Self.adminConsent
+        let consentURL = session.adminConsentURL(for: service)
 
         VStack(alignment: .leading, spacing: 12) {
-            if !state.isConnected {
+            if !state.isConnected, !state.isOff {
                 stepList(Self.microsoftSteps(for: service))
             }
 
@@ -476,24 +465,8 @@ struct SettingsSheet: View {
                         Task { await session.connectMicrosoft(service) }
                     }
                 }
-                helpLink("Admin approval link", consentURL)
-
-            case .pendingCode(let code, let url):
-                if !code.isEmpty {
-                    Text(code)
-                        .font(.title2.weight(.bold).monospaced())
-                        .foregroundStyle(EPSTheme.fg)
-                        .textSelection(.enabled)
-                }
-                if let link = URL(string: url), !url.isEmpty {
-                    helpLink("Open Microsoft sign-in", link)
-                }
-                Text("Microsoft should open with this code. Allow access, then come back. This page checks every few seconds.")
-                    .font(.footnote)
-                    .foregroundStyle(EPSTheme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-                textAction("Start over") {
-                    Task { await session.connectMicrosoft(service) }
+                if let consentURL {
+                    helpLink("Admin approval link", consentURL)
                 }
 
             case .pendingBrowser:
@@ -504,6 +477,15 @@ struct SettingsSheet: View {
                 goldButton("Connect \(service.title)") {
                     Task { await session.connectMicrosoft(service) }
                 }
+
+            case .off:
+                Text(Self.microsoftOffCopy)
+                    .font(.footnote)
+                    .foregroundStyle(EPSTheme.fg)
+                    .fixedSize(horizontal: false, vertical: true)
+                goldButton("Connect \(service.title)") {}
+                    .disabled(true)
+                    .opacity(0.45)
 
             case .error(let message):
                 goldButton("Connect \(service.title)") {
@@ -527,7 +509,7 @@ struct SettingsSheet: View {
                     .foregroundStyle(EPSTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if !state.isConnected, !isDenied(state) {
+            if let consentURL, !state.isConnected, !state.isOff, !isDenied(state) {
                 helpLink("Admin approval link", consentURL)
             }
         }
@@ -723,8 +705,10 @@ struct SettingsSheet: View {
             return trimmed.isEmpty ? "Connected" : trimmed
         case .denied(_, let needsAdminApproval):
             return needsAdminApproval ? "Needs IT approval" : "Not connected"
-        case .pendingCode, .pendingBrowser:
+        case .pendingBrowser:
             return "Finishing sign-in"
+        case .off:
+            return "Off"
         case .idle, .error:
             return "Not connected"
         }
@@ -823,6 +807,9 @@ struct SettingsSheet: View {
         "Leave Canvas URL as https://eastsideprep.instructure.com unless you use another school. Paste the token below. Tap Save.",
         "Canvas on the settings list must say Connected. Then close settings.",
     ]
+
+    private static let microsoftOffCopy =
+        "Microsoft sign-in is off. EPSynapse needs its own Microsoft app registration approved by school IT before this can connect."
 
     private static func microsoftSteps(for service: MSService) -> [String] {
         let noun: String = switch service {
