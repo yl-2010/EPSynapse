@@ -28,13 +28,6 @@
     />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
-      .od-code {
-        margin: 0.45rem 0 0.55rem;
-        font-size: 2.15rem;
-        font-weight: 750;
-        letter-spacing: 0.16em;
-        color: var(--accent);
-      }
       .edu-mail-unread .edu-name { font-weight: 650; }
       .edu-mail-body {
         margin: 0.65rem 0 0;
@@ -595,7 +588,6 @@
               </div>
             </div>
             <div id="onedrive-pending" hidden>
-              <p id="onedrive-code" class="od-code"></p>
               <a id="onedrive-open" class="set-link" href="#">Open Microsoft sign-in</a>
             </div>
             <p class="set-hint" id="onedrive-studio" hidden>On this Mac the agent can already use the school OneDrive folder in Finder for today's demo.</p>
@@ -606,7 +598,7 @@
                 <button type="button" id="onedrive-request" class="edu-sheet-btn edu-sheet-btn--gold">Send request to school IT</button>
               </div>
               <div class="ms-approval-links">
-                <a class="set-link" id="onedrive-admin" href="https://login.microsoftonline.com/b2681e8b-dd20-46cf-b163-371a2d7c6014/v2.0/adminconsent?client_id=d3590ed6-52b3-4102-aeff-aad2292ab01c&amp;scope=https://graph.microsoft.com/.default&amp;redirect_uri=https://epsynapse.com/" target="_blank" rel="noopener noreferrer">Admin approval link for IT</a>
+                <a class="set-link" id="onedrive-admin" href="#" hidden target="_blank" rel="noopener noreferrer">Admin approval link for IT</a>
                 <button type="button" id="onedrive-copy" class="set-textbtn">Copy request</button>
               </div>
               <pre class="ms-request-body" id="onedrive-request-body" hidden></pre>
@@ -640,7 +632,6 @@
               </div>
             </div>
             <div id="onenote-pending" hidden>
-              <p id="onenote-code" class="od-code"></p>
               <a id="onenote-open" class="set-link" href="#">Open Microsoft sign-in</a>
             </div>
             <p class="set-hint" id="onenote-studio" hidden>On this Mac the agent can already use the school Microsoft sign-in for today's demo.</p>
@@ -651,7 +642,7 @@
                 <button type="button" id="onenote-request" class="edu-sheet-btn edu-sheet-btn--gold">Send request to school IT</button>
               </div>
               <div class="ms-approval-links">
-                <a class="set-link" id="onenote-admin" href="https://login.microsoftonline.com/b2681e8b-dd20-46cf-b163-371a2d7c6014/v2.0/adminconsent?client_id=d3590ed6-52b3-4102-aeff-aad2292ab01c&amp;scope=https://graph.microsoft.com/.default&amp;redirect_uri=https://epsynapse.com/" target="_blank" rel="noopener noreferrer">Admin approval link for IT</a>
+                <a class="set-link" id="onenote-admin" href="#" hidden target="_blank" rel="noopener noreferrer">Admin approval link for IT</a>
                 <button type="button" id="onenote-copy" class="set-textbtn">Copy request</button>
               </div>
               <pre class="ms-request-body" id="onenote-request-body" hidden></pre>
@@ -685,7 +676,6 @@
               </div>
             </div>
             <div id="outlook-pending" hidden>
-              <p id="outlook-code" class="od-code"></p>
               <a id="outlook-open" class="set-link" href="#">Open Microsoft sign-in</a>
             </div>
             <p class="set-hint" id="outlook-studio" hidden>On this Mac the agent can already read and send school Outlook for today's demo.</p>
@@ -696,7 +686,7 @@
                 <button type="button" id="outlook-request" class="edu-sheet-btn edu-sheet-btn--gold">Send request to school IT</button>
               </div>
               <div class="ms-approval-links">
-                <a class="set-link" id="outlook-admin" href="https://login.microsoftonline.com/b2681e8b-dd20-46cf-b163-371a2d7c6014/v2.0/adminconsent?client_id=d3590ed6-52b3-4102-aeff-aad2292ab01c&amp;scope=https://graph.microsoft.com/.default&amp;redirect_uri=https://epsynapse.com/" target="_blank" rel="noopener noreferrer">Admin approval link for IT</a>
+                <a class="set-link" id="outlook-admin" href="#" hidden target="_blank" rel="noopener noreferrer">Admin approval link for IT</a>
                 <button type="button" id="outlook-copy" class="set-textbtn">Copy request</button>
               </div>
               <pre class="ms-request-body" id="outlook-request-body" hidden></pre>
@@ -730,7 +720,6 @@
               </div>
             </div>
             <div id="teams-pending" hidden>
-              <p id="teams-code" class="od-code"></p>
               <a id="teams-open" class="set-link" href="#">Open Microsoft sign-in</a>
             </div>
             <p class="set-hint" id="teams-studio" hidden>On this Mac the agent can already read and send school Teams for today's demo.</p>
@@ -741,7 +730,7 @@
                 <button type="button" id="teams-request" class="edu-sheet-btn edu-sheet-btn--gold">Send request to school IT</button>
               </div>
               <div class="ms-approval-links">
-                <a class="set-link" id="teams-admin" href="https://login.microsoftonline.com/b2681e8b-dd20-46cf-b163-371a2d7c6014/v2.0/adminconsent?client_id=d3590ed6-52b3-4102-aeff-aad2292ab01c&amp;scope=https://graph.microsoft.com/.default&amp;redirect_uri=https://epsynapse.com/" target="_blank" rel="noopener noreferrer">Admin approval link for IT</a>
+                <a class="set-link" id="teams-admin" href="#" hidden target="_blank" rel="noopener noreferrer">Admin approval link for IT</a>
                 <button type="button" id="teams-copy" class="set-textbtn">Copy request</button>
               </div>
               <pre class="ms-request-body" id="teams-request-body" hidden></pre>
@@ -818,7 +807,7 @@
 
     <script src="/liquid-glass.js?v=glass14"></script>
     <script src="/theme-orb.js?v=moon6"></script>
-    <script src="/app.js?v=orbclose1"></script>
+    <script src="/app.js?v=msapp1"></script>
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js" crossorigin="anonymous"></script>
     <script src="/markdown.js?v=2"></script>
     <script src="/chatbot.js?v=userwhite1"></script>
