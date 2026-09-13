@@ -7,6 +7,8 @@
   const LS_MAIL = "epsynapse.ms.mail";
   const LS_EVENTS = "epsynapse.ms.events";
   const LS_DOOR = "epsynapse.door";
+  const SS_GNONCE = "epsynapse.gnonce";
+  const LS_PREFIX = "epsynapse.";
 
   const loading = document.getElementById("stage-loading");
   const stage = document.getElementById("stage-full");
@@ -82,6 +84,8 @@
   let googleClientId = "";
   let gisConfigError = "";
   let gisInitialized = false;
+  let gisNonce = "";
+  let announcedAccount = null;
   let pausedRefresh = null;
   const PAUSED_FALLBACK =
     "Your account is paused until Eastside Prep sign-in is live. Sign out and check back soon.";
@@ -255,6 +259,22 @@
       .replace(/"/g, "&quot;");
   }
 
+  // Scheme allowlist for URLs that came from the API, Microsoft, or storage.
+  // Returns the URL when it is https:, a same-origin path like "/x", or (only
+  // when asked) mailto:. Anything else, including javascript: and data:, is "".
+  function safeExternalUrl(raw, opts = {}) {
+    const href = String(raw || "").trim();
+    if (!href) return "";
+    if (href.startsWith("/") && !href.startsWith("//")) return href;
+    if (opts.allowMailto && /^mailto:/i.test(href)) return href;
+    if (!/^https:\/\//i.test(href)) return "";
+    try {
+      return new URL(href).protocol === "https:" ? href : "";
+    } catch {
+      return "";
+    }
+  }
+
   function sid() {
     return localStorage.getItem(LS_SID) || "";
   }
@@ -313,6 +333,7 @@
 
   function applyAuthGate() {
     const on = signedInViaGoogle();
+    announceAccount();
     if (on && isPaused()) {
       showPausedScreen();
       return;
@@ -342,6 +363,7 @@
     if (!el || !me) return;
     const authChanged = document.documentElement.dataset.auth !== "paused";
     document.documentElement.dataset.auth = "paused";
+    announceAccount();
     closeSheet();
     closeChatOverlay();
     stopOdPoll();
@@ -361,8 +383,9 @@
     const email = me.email || "";
     if (profile) profile.hidden = !(name || email || me.picture);
     if (pic) {
-      if (me.picture) {
-        pic.src = me.picture;
+      const picUrl = safeExternalUrl(me.picture);
+      if (picUrl) {
+        pic.src = picUrl;
         pic.hidden = false;
       } else {
         pic.removeAttribute("src");
@@ -501,8 +524,9 @@
       if (profile) profile.hidden = false;
       if (outRow) outRow.hidden = false;
       if (pic) {
-        if (me.picture) {
-          pic.src = me.picture;
+        const picUrl = safeExternalUrl(me.picture);
+        if (picUrl) {
+          pic.src = picUrl;
           pic.hidden = false;
         } else {
           pic.removeAttribute("src");
@@ -576,7 +600,15 @@
       setOutStatus(msg);
       return;
     }
-    const nonce = crypto.randomUUID();
+    const nonce = newNonce();
+    try {
+      sessionStorage.setItem(SS_GNONCE, nonce);
+    } catch {
+      const msg = "This browser blocks session storage, so Google sign-in cannot be verified.";
+      setStatus(statusEl, msg);
+      setOutStatus(msg);
+      return;
+    }
     const q = [
       ["client_id", googleClientId],
       ["redirect_uri", googleRedirectUri()],
@@ -600,25 +632,57 @@
     history.replaceState(null, "", `${location.pathname}${location.search}`);
   }
 
+  function newNonce() {
+    if (crypto.randomUUID) return crypto.randomUUID();
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  function takeStoredNonce() {
+    let nonce = "";
+    try {
+      nonce = sessionStorage.getItem(SS_GNONCE) || "";
+      sessionStorage.removeItem(SS_GNONCE);
+    } catch {
+      nonce = "";
+    }
+    return nonce;
+  }
+
+  // Redirect return: `#id_token=...` in the fragment. Only accept it when this
+  // tab started the redirect (the nonce we stored is still here). Anyone can
+  // put a token in a link; only our own round trip has the matching nonce.
   async function consumeGoogleHash() {
     const token = takeHashIdToken();
     if (!token) return false;
-    await onGoogleCredential({ credential: token });
     stripLocationHash();
+    const nonce = takeStoredNonce();
+    if (!nonce) {
+      const msg = "That sign-in link was not started from this tab. Tap Sign in with Google again.";
+      setStatus(statusEl, msg);
+      setOutStatus(msg);
+      return false;
+    }
+    await onGoogleCredential({ credential: token }, nonce);
     return true;
   }
 
-  async function onGoogleCredential(resp) {
+  async function onGoogleCredential(resp, nonce) {
     const idToken = resp && resp.credential;
     if (!idToken) {
       setStatus(statusEl, "Google did not return a sign-in token.");
+      return;
+    }
+    if (!nonce) {
+      setStatus(statusEl, "Google sign-in had no nonce to verify. Try again.");
       return;
     }
     setStatus(statusEl, "Signing in…");
     try {
       me = await api("/v1/auth/google", {
         method: "POST",
-        body: JSON.stringify({ idToken }),
+        body: JSON.stringify({ idToken, nonce }),
       });
       fillFormFromMe();
       if (isPaused()) {
@@ -667,9 +731,13 @@
       return;
     }
 
+    // One nonce per page load for the popup / One Tap path. GIS puts it in the
+    // ID token's nonce claim; the server checks it against body.nonce.
+    gisNonce = newNonce();
     window.google.accounts.id.initialize({
       client_id: googleClientId,
-      callback: onGoogleCredential,
+      callback: (resp) => onGoogleCredential(resp, gisNonce),
+      nonce: gisNonce,
       ux_mode: "popup",
       use_fedcm_for_prompt: true,
       auto_select: false,
@@ -680,11 +748,47 @@
     paintAccount();
   }
 
+  // Drop every `epsynapse.*` key in both storages except the remembered door.
+  // Chat threads, cached OneDrive/Outlook rows, provider, and the sid all go, so
+  // the next student on this browser starts blank.
+  function forgetLocalData() {
+    [localStorage, sessionStorage].forEach((store) => {
+      let keys = [];
+      try {
+        for (let i = 0; i < store.length; i += 1) {
+          const k = store.key(i);
+          if (k && k.startsWith(LS_PREFIX) && k !== LS_DOOR) keys.push(k);
+        }
+      } catch {
+        keys = [];
+      }
+      keys.forEach((k) => {
+        try {
+          store.removeItem(k);
+        } catch {
+          /* ignore */
+        }
+      });
+    });
+  }
+
+  // Tell chatbot.js (and anything else) whose account is on screen. The chat
+  // cache is keyed by this, so a different sign-in never paints someone else's
+  // thread.
+  function announceAccount() {
+    const email = signedInViaGoogle() ? String(me.email || me.googleName || "").trim().toLowerCase() : "";
+    if (announcedAccount === email) return;
+    announcedAccount = email;
+    window.__epsynapseAccountKey = email;
+    window.dispatchEvent(new CustomEvent("epsynapse-account", { detail: { account: email } }));
+  }
+
   // Forget the session on this device and repaint as logged out. Shared by
   // sign-out and delete-account.
   function clearLocalSession() {
-    localStorage.removeItem(LS_SID);
+    forgetLocalData();
     me = null;
+    announceAccount();
     lastHome = { courses: [], assignments: [], files: [], messages: [], classes: [], meetings: [], schedule: {} };
     if (window.google?.accounts?.id) {
       try {
@@ -793,10 +897,6 @@
     return Boolean(me && me.modelKeySet);
   }
 
-  function accountUsesCursor() {
-    return Boolean(me && me.modelProvider === "cursor");
-  }
-
   function accountKeyCount() {
     const n = Number(me && me.modelKeyCount);
     if (Number.isFinite(n) && n > 0) return n;
@@ -818,7 +918,6 @@
   }
 
   function chatKeySummary() {
-    if (accountUsesCursor()) return "Cursor";
     if (!accountHasKey()) return "Add a Groq key";
     const id = providerLabel();
     const n = accountKeyCount();
@@ -831,11 +930,8 @@
       providerSel.value = id;
     }
     localStorage.setItem(LS_PROV, providerSel.value || id);
-    document.documentElement.dataset.modelProvider = accountUsesCursor()
-      ? "cursor"
-      : providerSel.value || id;
+    document.documentElement.dataset.modelProvider = providerSel.value || id;
     document.documentElement.dataset.modelKeySet = accountHasKey() ? "1" : "";
-    document.documentElement.dataset.cursorAgent = accountUsesCursor() ? "1" : "";
     refreshKeyStatus();
     window.__epsynapseRefreshChatGuide?.();
   }
@@ -1758,10 +1854,11 @@
   function canvasHref(link) {
     const href = String(link || "").trim();
     if (!href || href === "#") return "#";
-    if (/^https?:\/\//i.test(href)) return href;
+    if (/^https?:\/\//i.test(href)) return safeExternalUrl(href) || "#";
     const host = String(me?.canvasHost || defaultCanvasHost()).replace(/\/$/, "");
-    if (!host) return href;
-    return href.startsWith("/") ? `${host}${href}` : `${host}/${href}`;
+    if (!host) return "#";
+    const full = href.startsWith("/") ? `${host}${href}` : `${host}/${href}`;
+    return safeExternalUrl(full) || "#";
   }
 
   function workRow(w, tone) {
@@ -1987,7 +2084,12 @@
     if (todoFile) {
       return `${apiBase}/v1/me/todo-files/file?id=${encodeURIComponent(f.id)}`;
     }
-    if (f.webUrl) return f.webUrl;
+    // Uploads saved in this browser keep a data: URL of the file itself. That
+    // never came from the network, so it is the one non-https href we allow.
+    if (String(f.id || "").startsWith("local:") && f.source === "upload" && f.dataUrl) {
+      return /^data:/i.test(String(f.dataUrl)) ? f.dataUrl : "#";
+    }
+    if (f.webUrl) return safeExternalUrl(f.webUrl) || "#";
     if (String(f.id || "").startsWith("local:")) return "#";
     return `${apiBase}/v1/me/onedrive/file?id=${encodeURIComponent(f.id || "")}`;
   }
@@ -2031,8 +2133,9 @@
   function mailRow(m) {
     const unread = m.unread ? " edu-mail-unread" : "";
     const who = m.fromAddress || m.from || "";
-    const open = m.webLink
-      ? `<a class="set-link edu-mail-open-web" href="${escapeHtml(m.webLink)}" target="_blank" rel="noopener">Open</a>`
+    const webLink = safeExternalUrl(m.webLink);
+    const open = webLink
+      ? `<a class="set-link edu-mail-open-web" href="${escapeHtml(webLink)}" target="_blank" rel="noopener">Open</a>`
       : "";
     return `<li class="edu-row${unread}">
       <button type="button" class="edu-row-link" data-mail-id="${escapeHtml(m.id)}" style="all:unset;cursor:pointer;display:block;width:100%">
@@ -2130,8 +2233,8 @@
           <p class="edu-name">${escapeHtml(openMail.subject || "")}</p>
           <p class="edu-meta">${escapeHtml(openMail.from || "")}</p>
           ${
-            openMail.webLink
-              ? `<a class="set-link" href="${escapeHtml(openMail.webLink)}" target="_blank" rel="noopener">Open</a>`
+            safeExternalUrl(openMail.webLink)
+              ? `<a class="set-link" href="${escapeHtml(safeExternalUrl(openMail.webLink))}" target="_blank" rel="noopener">Open</a>`
               : ""
           }
           <pre class="edu-mail-body">${escapeHtml(openMail.body || openMail.preview || "")}</pre>
@@ -2781,7 +2884,7 @@
     if (emailEl) emailEl.textContent = isConnected && email ? email : "";
 
     if (hasPending) {
-      const href = msAuthorizeUrl(pending);
+      const href = safeExternalUrl(msAuthorizeUrl(pending));
       if (openEl && href) openEl.href = href;
     }
 
@@ -2935,35 +3038,17 @@
 
   function refreshKeyStatus() {
     const hasKey = accountHasKey();
-    const cursor = accountUsesCursor();
     const entry = document.getElementById("key-entry");
     const ready = document.getElementById("key-ready");
     const readyLabel = document.getElementById("key-ready-label");
     const adding = entry && entry.dataset.add === "1";
-    if (entry) entry.hidden = (hasKey && !adding) || cursor;
+    if (entry) entry.hidden = hasKey && !adding;
     if (ready) ready.hidden = !hasKey;
     if (readyLabel) readyLabel.textContent = hasKey ? chatKeySummary() : "";
-    if (!cursor) paintKeyList();
+    paintKeyList();
     paintKeysSummary();
     const steps = document.getElementById("key-steps");
-    if (steps) steps.hidden = (hasKey && !adding) || cursor;
-    const addBtn = document.getElementById("key-add");
-    const clearBtn = document.getElementById("key-clear");
-    const limitHint = document.getElementById("key-limit-hint");
-    const groqLink = document.querySelector('[data-pane="chat"] a.set-link');
-    if (addBtn) addBtn.hidden = cursor;
-    if (clearBtn) clearBtn.hidden = cursor;
-    if (limitHint) limitHint.hidden = cursor;
-    if (groqLink) groqLink.hidden = cursor;
-    if (cursor) {
-      const list = document.getElementById("key-list");
-      if (list) {
-        list.innerHTML = "";
-        list.hidden = true;
-      }
-      setStatus(keyStatus, "This account uses Cursor on the Mac. No Groq key.");
-      return;
-    }
+    if (steps) steps.hidden = hasKey && !adding;
     if (hasKey && !adding) {
       setStatus(keyStatus, "");
       return;
@@ -3286,7 +3371,7 @@
 
   function msAuthorizeUrl(obj) {
     if (!obj) return "";
-    return obj.authorizeUrl || obj.verification_uri_complete || obj.verification_uri || "";
+    return safeExternalUrl(obj.authorizeUrl || obj.verification_uri_complete || obj.verification_uri || "");
   }
 
   function msPendingLive(pending) {
@@ -3843,9 +3928,10 @@
         ? `Your mail app should open with a note to ${cr.to}. The text is below if it did not.`
         : "Your mail app should open with the request. The text is below if it did not."
     );
-    if (cr.mailto) {
+    const mailto = safeExternalUrl(cr.mailto, { allowMailto: true });
+    if (/^mailto:/i.test(mailto)) {
       try {
-        location.href = cr.mailto;
+        location.href = mailto;
       } catch {
         /* nothing else to do */
       }
@@ -3903,7 +3989,20 @@
     }
   }
 
+  function apiOrigin() {
+    try {
+      return apiBase ? new URL(apiBase, location.href).origin : "";
+    } catch {
+      return "";
+    }
+  }
+
+  // The popup posts from this site (redirected return) or from the API host
+  // (server-rendered result page). Any other origin is ignored.
   window.addEventListener("message", (ev) => {
+    const origin = String((ev && ev.origin) || "");
+    const trusted = [location.origin, apiOrigin()].filter(Boolean);
+    if (!trusted.includes(origin)) return;
     const d = ev && ev.data;
     if (!d || typeof d !== "object" || d.type !== "epsynapse-ms") return;
     onMsResult(d.service, d.result, d.reason, d.email);
@@ -3936,7 +4035,7 @@
       try {
         window.opener.postMessage(
           { type: "epsynapse-ms", service: ret.service, result: ret.ms, reason: ret.reason, email: ret.email },
-          "*"
+          location.origin
         );
       } catch {
         /* opener gone */
@@ -3976,8 +4075,9 @@
   function setMsAdminLink(prefix, url) {
     const admin = document.getElementById(`${prefix}-admin`);
     if (!admin) return;
-    if (url) {
-      admin.href = url;
+    const safe = safeExternalUrl(url);
+    if (safe) {
+      admin.href = safe;
       admin.hidden = false;
     } else {
       admin.href = "#";
@@ -4507,8 +4607,12 @@
         .map((s) => s.trim())
         .filter(Boolean)
         .join(",");
-      window.location.href = `mailto:${addrs}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-      if (status) status.textContent = "Opened your mail app.";
+      const mailto = safeExternalUrl(
+        `mailto:${addrs}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`,
+        { allowMailto: true }
+      );
+      if (mailto) window.location.href = mailto;
+      if (status) status.textContent = mailto ? "Opened your mail app." : "Could not open your mail app.";
       return;
     }
     if (!window.confirm(`Send this email to ${to}?`)) return;
@@ -4626,8 +4730,10 @@
       goTo(`/note/${encodeURIComponent(d.noteId)}`);
       return;
     }
-    const href = d.href;
-    if (href) goTo(href);
+    // Only same-origin paths. The agent stream must not be able to send the
+    // page off-site.
+    const href = String(d.href || "");
+    if (href.startsWith("/") && !href.startsWith("//")) goTo(href);
   });
 
   boot();

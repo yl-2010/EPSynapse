@@ -4,17 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
-    <script>
-      (function () {
-        try {
-          var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-          var r = document.documentElement;
-          r.dataset.theme = "system";
-          r.dataset.resolvedTheme = dark ? "dark" : "light";
-          r.style.colorScheme = dark ? "dark" : "light";
-        } catch (e) {}
-      })();
-    </script>
+    <script src="/theme-boot.js?v=sec1"></script>
     <title>Privacy · EPSynapse</title>
     <meta
       name="description"
@@ -23,7 +13,7 @@
     <link rel="icon" href="/favicon.svg?v=logo5" type="image/svg+xml" />
     <link rel="icon" href="/favicon-32.png?v=logo4" type="image/png" sizes="32x32" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="stylesheet" href="/styles.css?v=doors3" />
+    <link rel="stylesheet" href="/styles.css?v=sec1" />
     <style>
       a.corner {
         text-decoration: none;

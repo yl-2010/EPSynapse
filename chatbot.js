@@ -9,8 +9,21 @@
   const LS_KEY = "epsynapse.agent.key";
   const LS_PROV = "epsynapse.agent.provider";
   const LS_SID = "epsynapse.sid";
-  const LS_CHAT = "epsynapse.chat.messages";
+  const LS_CHAT_BASE = "epsynapse.chat.messages";
+  const LS_CHATS_BASE = "epsynapse.chat.threads";
   const MAX_SAVED = 40;
+
+  // Chat caches are keyed by the signed-in account so two students sharing a
+  // browser never see each other's thread. app.js announces the account via
+  // window.__epsynapseAccountKey and the "epsynapse-account" event.
+  function accountKey() {
+    const raw = String(window.__epsynapseAccountKey || "").trim().toLowerCase();
+    return raw || "anon";
+  }
+
+  function chatKeyFor(base) {
+    return `${base}.${accountKey()}`;
+  }
 
   const panel = root.querySelector(".yan-chat-panel");
   const messagesEl = root.querySelector(".yan-chat-messages");
@@ -22,7 +35,6 @@
   const minimizeBtns = root.querySelectorAll("[data-edu-chat-minimize]");
   const historyBtns = root.querySelectorAll("[data-edu-chat-history]");
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const LS_CHATS = "epsynapse.chat.threads";
   const LIMIT_GUIDE = [
     "Chat stopped because Groq refused the saved key. That is Groq, not this page.",
     "",
@@ -47,6 +59,7 @@
   let bubbleSeq = 0;
   let historyPointerSid = null;
   let historyFetchGen = 0;
+  let accountGen = 0;
 
   function apiBase() {
     return window.__epsynapseApiBase || "";
@@ -347,13 +360,8 @@
   function hasChatKey() {
     return (
       Boolean(localStorage.getItem(LS_KEY)) ||
-      document.documentElement.dataset.modelKeySet === "1" ||
-      document.documentElement.dataset.cursorAgent === "1"
+      document.documentElement.dataset.modelKeySet === "1"
     );
-  }
-
-  function usesCursor() {
-    return document.documentElement.dataset.cursorAgent === "1";
   }
 
   function isKeyFailure(text, status, code) {
@@ -392,9 +400,7 @@
     if (!input) return;
     input.placeholder = hasChatKey()
       ? "Ask your personal agent…"
-      : usesCursor()
-        ? "Ask your personal agent…"
-        : "Save a Groq key in Settings first…";
+      : "Save a Groq key in Settings first…";
   }
 
   function clearGuide() {
@@ -435,7 +441,7 @@
 
   function readLocalBag() {
     try {
-      const raw = JSON.parse(localStorage.getItem(LS_CHATS) || "null");
+      const raw = JSON.parse(localStorage.getItem(chatKeyFor(LS_CHATS_BASE)) || "null");
       if (raw && Array.isArray(raw.chats)) return raw;
     } catch {
       /* ignore */
@@ -445,7 +451,7 @@
 
   function writeLocalBag(bag) {
     try {
-      localStorage.setItem(LS_CHATS, JSON.stringify(bag));
+      localStorage.setItem(chatKeyFor(LS_CHATS_BASE), JSON.stringify(bag));
     } catch {
       /* quota */
     }
@@ -469,7 +475,7 @@
 
   function loadSavedChat() {
     try {
-      const raw = JSON.parse(localStorage.getItem(LS_CHAT) || "[]");
+      const raw = JSON.parse(localStorage.getItem(chatKeyFor(LS_CHAT_BASE)) || "[]");
       if (!Array.isArray(raw)) return [];
       return raw
         .filter((m) => m && (m.role === "user" || m.role === "assistant") && String(m.content || "").trim())
@@ -483,10 +489,10 @@
   function saveChat() {
     try {
       if (!messages.length) {
-        localStorage.removeItem(LS_CHAT);
+        localStorage.removeItem(chatKeyFor(LS_CHAT_BASE));
         return;
       }
-      localStorage.setItem(LS_CHAT, JSON.stringify(messages.slice(-MAX_SAVED)));
+      localStorage.setItem(chatKeyFor(LS_CHAT_BASE), JSON.stringify(messages.slice(-MAX_SAVED)));
     } catch {
       /* quota */
     }
@@ -845,7 +851,7 @@
     root.classList.remove("is-busy");
     messagesEl.innerHTML = "";
     try {
-      localStorage.removeItem(LS_CHAT);
+      localStorage.removeItem(chatKeyFor(LS_CHAT_BASE));
     } catch {
       /* ignore */
     }
@@ -855,6 +861,28 @@
     if (input) input.value = "";
     syncComposerSize();
     setState("panel");
+  }
+
+  // Sign-out, delete-account, or a different sign-in. Wipe the panel and load
+  // whatever this account has cached (nothing, for a fresh one). Nothing is
+  // written back here: the previous student's cache is already gone or belongs
+  // to their key.
+  function resetForAccount() {
+    accountGen += 1;
+    hideHistory();
+    busy = false;
+    root.classList.remove("is-busy");
+    if (messagesEl) messagesEl.innerHTML = "";
+    if (historyEl) historyEl.innerHTML = "";
+    if (input) input.value = "";
+    messages = loadSavedChat();
+    sessionId = readLocalBag().currentId || "";
+    if (messages.length && !sessionId) sessionId = newChatId();
+    preferPanel = false;
+    paintSavedChat();
+    syncPlaceholder();
+    syncComposerSize();
+    setState("closed", { skipFocus: true });
   }
 
   async function sendMessage(raw) {
@@ -883,9 +911,13 @@
 
     hideHistory();
     const headers = authHeaders();
+    const gen = accountGen;
 
     try {
       const res = await postChat(headers, messages);
+      // Account changed mid-request (sign-out). Drop the reply on the floor so
+      // it is never saved under the next account.
+      if (gen !== accountGen) return;
       if (!res.ok) {
         let errBody = {};
         try {
@@ -948,6 +980,10 @@
       };
       while (true) {
         const chunk = await reader.read();
+        if (gen !== accountGen) {
+          reader.cancel().catch(() => {});
+          return;
+        }
         if (chunk.done) break;
         buf += decoder.decode(chunk.value, { stream: true });
         buf = parseSseChunk(buf, applyChatDelta);
@@ -986,15 +1022,19 @@
       saveChat();
       await persistThread();
     } catch {
+      if (gen !== accountGen) return;
       writeBubble(slot.body, "assistant", unreachableApiMessage());
       if (slot.think) slot.think.remove();
       messages.pop();
     } finally {
-      busy = false;
-      root.classList.remove("is-busy");
-      if (showingHistory) renderHistory();
-      else if (sessionId) markChatRead(sessionId);
-      if (input && state() !== "closed") input.focus({ preventScroll: true });
+      // After a sign-out mid-request, resetForAccount already repainted.
+      if (gen === accountGen) {
+        busy = false;
+        root.classList.remove("is-busy");
+        if (showingHistory) renderHistory();
+        else if (sessionId) markChatRead(sessionId);
+        if (input && state() !== "closed") input.focus({ preventScroll: true });
+      }
     }
   }
 
@@ -1054,6 +1094,7 @@
   window.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && state() !== "closed") minimizeChat();
   });
+  window.addEventListener("epsynapse-account", resetForAccount);
 
   messages = loadSavedChat();
   sessionId = readLocalBag().currentId || "";

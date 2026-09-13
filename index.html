@@ -4,26 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
-    <script>
-      (function () {
-        try {
-          var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-          var r = document.documentElement;
-          r.dataset.theme = "system";
-          r.dataset.resolvedTheme = dark ? "dark" : "light";
-          r.style.colorScheme = dark ? "dark" : "light";
-        } catch (e) {}
-      })();
-    </script>
+    <script src="/theme-boot.js?v=sec1"></script>
     <title>EPSynapse</title>
     <meta name="description" content="EPSynapse student dashboard" />
     <link rel="icon" href="/favicon.svg?v=logo5" type="image/svg+xml" />
     <link rel="icon" href="/favicon-32.png?v=logo4" type="image/png" sizes="32x32" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="stylesheet" href="/styles.css?v=doors3" />
+    <link rel="stylesheet" href="/styles.css?v=sec1" />
     <link
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css"
+      integrity="sha384-5TcZemv2l/9On385z///+d7MSYlvIEw9FuZTIdZ14vJLqWphw7e7ZPuOiCHJcFCP"
       crossorigin="anonymous"
     />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -772,9 +763,13 @@
 
     <script src="/liquid-glass.js?v=glass14"></script>
     <script src="/theme-orb.js?v=moon6"></script>
-    <script src="/app.js?v=doors3"></script>
-    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js" crossorigin="anonymous"></script>
+    <script src="/app.js?v=sec1"></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js"
+      integrity="sha384-cMkvdD8LoxVzGF/RPUKAcvmm49FQ0oxwDF3BGKtDXcEc+T1b2N+teh/OJfpU0jr6"
+      crossorigin="anonymous"
+    ></script>
     <script src="/markdown.js?v=2"></script>
-    <script src="/chatbot.js?v=userwhite1"></script>
+    <script src="/chatbot.js?v=sec1"></script>
   </body>
 </html>
