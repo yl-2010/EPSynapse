@@ -127,7 +127,7 @@ struct ClassView: View {
             if !schoolClass.period.isEmpty {
                 Text(schoolClass.period)
                     .font(.system(size: 44, weight: .bold))
-                    .foregroundStyle(EPSTheme.accent)
+                    .foregroundStyle(EPSTone.forClass(schoolClass).color)
                     .minimumScaleFactor(0.6)
             }
             VStack(alignment: .leading, spacing: 4) {
@@ -208,7 +208,10 @@ struct ClassView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(classNotes) { note in
                         NavigationLink(value: HomeDestination.note(note.id)) {
-                            ClassNoteRow(note: note)
+                            ClassNoteRow(
+                                note: note,
+                                tone: schoolClass.map { dashboard.tone(for: $0) } ?? EPSTheme.accent
+                            )
                         }
                         .buttonStyle(.plain)
                         .epsHapticNavigation()
@@ -264,6 +267,7 @@ struct ClassView: View {
 
 struct ClassNoteRow: View {
     var note: ClassifiedNote
+    var tone: Color = EPSTheme.accent
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -271,7 +275,7 @@ struct ClassNoteRow: View {
                 if !note.subject.isEmpty {
                     Text(note.subject)
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(EPSTheme.accent)
+                        .foregroundStyle(tone)
                 }
                 Text(note.text)
                     .font(.body)

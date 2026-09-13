@@ -267,13 +267,14 @@ struct TodoRow: View {
                     HStack(spacing: 8) {
                         if !item.courseName.isEmpty {
                             Text(CourseTitle.pretty(item.courseName))
+                                .foregroundStyle(dashboard.tone(for: item))
                         }
                         if !item.due.isEmpty {
                             Text(EPSDueFormat.due(item.due))
+                                .foregroundStyle(EPSTheme.muted)
                         }
                     }
                     .font(.caption)
-                    .foregroundStyle(EPSTheme.muted)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -284,7 +285,7 @@ struct TodoRow: View {
         .padding(.horizontal, 8)
         .background {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(EPSTheme.accent.opacity(hovering ? 0.14 : 0))
+                .fill(dashboard.tone(for: item).opacity(hovering ? 0.14 : 0))
         }
         .opacity(shownDone ? (hovering ? 0.9 : 0.55) : 1)
         .animation(.easeOut(duration: 0.2), value: hovering)
@@ -312,7 +313,7 @@ struct TodoRow: View {
                 .overlay {
                     if shownDone {
                         Circle()
-                            .fill(EPSTheme.accent)
+                            .fill(dashboard.tone(for: item))
                             .frame(width: 8, height: 8)
                             .transition(.scale.combined(with: .opacity))
                     }
@@ -374,7 +375,7 @@ struct ClassRow: View {
             if !course.period.isEmpty {
                 Text(course.period)
                     .font(.caption.weight(.bold))
-                    .foregroundStyle(EPSTheme.accent)
+                    .foregroundStyle(EPSTone.forClass(course).color)
                     .frame(width: 22, alignment: .center)
             }
             Text(CourseTitle.pretty(course.name))
@@ -395,7 +396,7 @@ struct ClassRow: View {
         .background {
             if isCurrent {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(EPSTheme.accent.opacity(0.12))
+                    .fill(EPSTone.forClass(course).color.opacity(0.12))
             }
         }
         .contentShape(Rectangle())

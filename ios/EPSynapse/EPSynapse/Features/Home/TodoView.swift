@@ -141,7 +141,7 @@ struct TodoView: View {
                 if !className.isEmpty {
                     Text(className)
                         .font(.body.weight(.semibold))
-                        .foregroundStyle(EPSTheme.fg)
+                        .foregroundStyle(dashboard.tone(for: item))
                 }
                 if !item.due.isEmpty {
                     Text(EPSDueFormat.due(item.due))
@@ -221,7 +221,7 @@ struct TodoView: View {
                 .overlay {
                     if shownDone {
                         Circle()
-                            .fill(EPSTheme.accent)
+                            .fill(dashboard.tone(for: item))
                             .frame(width: 12, height: 12)
                             .transition(.scale.combined(with: .opacity))
                     }

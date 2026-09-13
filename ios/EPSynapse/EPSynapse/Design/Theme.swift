@@ -150,6 +150,102 @@ enum EPSTheme {
     private static let darkMuted = UIColor(red: 154 / 255, green: 168 / 255, blue: 184 / 255, alpha: 1)
 }
 
+/// Period and course colors from the public site (`--tone-*` in styles.css).
+enum EPSTone: String, CaseIterable {
+    case rose, amber, lime, teal, sky, indigo, orchid, slate
+
+    private static let periodMap: [String: EPSTone] = [
+        "A": .rose, "B": .amber, "C": .lime, "D": .teal,
+        "E": .sky, "F": .indigo, "G": .orchid, "H": .slate
+    ]
+
+    var color: Color {
+        Color(uiColor: UIColor { traits in
+            traits.userInterfaceStyle == .dark ? self.dark : self.light
+        })
+    }
+
+    func color(_ scheme: ColorScheme) -> Color {
+        Color(scheme == .dark ? dark : light)
+    }
+
+    static func forClass(_ klass: SchoolClass) -> EPSTone {
+        let letter = klass.period.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        if letter.count == 1, let mapped = periodMap[letter] { return mapped }
+        return hash(klass.id.isEmpty ? klass.name : klass.id)
+    }
+
+    static func forAssignment(_ item: Assignment, classes: [SchoolClass]) -> EPSTone {
+        if let match = classes.first(where: { assignment(item, matches: $0) }) {
+            return forClass(match)
+        }
+        let seed = item.courseId.isEmpty ? item.courseName : item.courseId
+        return hash(seed)
+    }
+
+    private static func assignment(_ item: Assignment, matches schoolClass: SchoolClass) -> Bool {
+        if !item.courseId.isEmpty, item.courseId == schoolClass.id { return true }
+        if !item.classId.isEmpty, item.classId == schoolClass.id { return true }
+        return namesOverlap(item.courseName, schoolClass.name)
+    }
+
+    private static func namesOverlap(_ a: String, _ b: String) -> Bool {
+        let left = a.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let right = b.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if left.isEmpty || right.isEmpty { return false }
+        if left == right { return true }
+        return left.contains(right) || right.contains(left)
+    }
+
+    /// FNV-1a, same seed and multiply as the site so a class keeps its color.
+    private static func hash(_ raw: String) -> EPSTone {
+        let seed = raw.isEmpty ? "class" : raw
+        var h: UInt32 = 2_166_136_261
+        for unit in seed.utf16 {
+            h ^= UInt32(unit)
+            h &*= 16_777_619
+        }
+        let all = Self.allCases
+        return all[Int(h % UInt32(all.count))]
+    }
+
+    private var light: UIColor {
+        switch self {
+        case .rose: return UIColor(red: 196 / 255, green: 91 / 255, blue: 106 / 255, alpha: 1)
+        case .amber: return UIColor(red: 196 / 255, green: 146 / 255, blue: 20 / 255, alpha: 1)
+        case .lime: return UIColor(red: 95 / 255, green: 143 / 255, blue: 56 / 255, alpha: 1)
+        case .teal: return UIColor(red: 42 / 255, green: 138 / 255, blue: 130 / 255, alpha: 1)
+        case .sky: return UIColor(red: 58 / 255, green: 115 / 255, blue: 160 / 255, alpha: 1)
+        case .indigo: return UIColor(red: 103 / 255, green: 88 / 255, blue: 150 / 255, alpha: 1)
+        case .orchid: return UIColor(red: 168 / 255, green: 93 / 255, blue: 144 / 255, alpha: 1)
+        case .slate: return UIColor(red: 90 / 255, green: 109 / 255, blue: 130 / 255, alpha: 1)
+        }
+    }
+
+    private var dark: UIColor {
+        switch self {
+        case .rose: return UIColor(red: 228 / 255, green: 136 / 255, blue: 146 / 255, alpha: 1)
+        case .amber: return UIColor(red: 224 / 255, green: 180 / 255, blue: 74 / 255, alpha: 1)
+        case .lime: return UIColor(red: 143 / 255, green: 191 / 255, blue: 90 / 255, alpha: 1)
+        case .teal: return UIColor(red: 76 / 255, green: 188 / 255, blue: 176 / 255, alpha: 1)
+        case .sky: return UIColor(red: 106 / 255, green: 168 / 255, blue: 212 / 255, alpha: 1)
+        case .indigo: return UIColor(red: 155 / 255, green: 138 / 255, blue: 212 / 255, alpha: 1)
+        case .orchid: return UIColor(red: 212 / 255, green: 139 / 255, blue: 188 / 255, alpha: 1)
+        case .slate: return UIColor(red: 143 / 255, green: 160 / 255, blue: 180 / 255, alpha: 1)
+        }
+    }
+}
+
+extension DashboardStore {
+    func tone(for klass: SchoolClass) -> Color {
+        EPSTone.forClass(klass).color
+    }
+
+    func tone(for item: Assignment) -> Color {
+        EPSTone.forAssignment(item, classes: displayedClasses).color
+    }
+}
+
 extension View {
     /// Page gradient behind a screen. Also paints the navigation container so
     /// the stack does not show the system white/black behind pushed pages.
