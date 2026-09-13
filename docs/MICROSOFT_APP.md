@@ -87,7 +87,7 @@ Grant tenant-wide admin consent for the delegated Microsoft Graph permissions be
 
 ### Why the earlier sign-ins tripped Defender
 
-On Sep 12 the API signed students in with Microsoft's device-code grant against a first-party Office client id, because we had no app registration. Defender's Attack Disruption matched that to device-code phishing: device-code grant, a `node` user agent, a first-party client, all from one home IP. It disabled or force-signed-out four student accounts. That was a false positive, but the logs look the same as a real attack, so the flow is gone. Students now sign in through EPSynapse's own Entra app with authorization code + PKCE, a browser redirect to login.microsoftonline.com, a consent screen, and a return to https://api.epsynapse.com/v1/ms/callback.
+On Sep 12 EPSynapse had no app registration, so the API signed students in with Microsoft's device-code grant against a first-party Office client id. In the sign-in logs that is the same shape as device-code phishing (device-code grant, a non-browser `node` user agent, a first-party client id, every request from one home IP), and Defender's Attack Disruption disabled or force-signed-out four student accounts. It was a false positive, but the logs cannot tell the two apart, so we removed the flow. Students now sign in through EPSynapse's own registered app with authorization code + PKCE, which means a browser redirect to login.microsoftonline.com, a consent screen that names EPSynapse, a return to https://api.epsynapse.com/v1/ms/callback, and no script ever signing in on a student's behalf.
 
 ### How to approve
 
@@ -113,19 +113,20 @@ Team JYPE, `<team email placeholder>`. Any of the four students can answer quest
 
 ## Part 3. Current state
 
-Device code was removed Sep 13 after Microsoft Defender's Attack Disruption treated the old first-party Office client plus device-code grant as phishing and disabled four student accounts. Microsoft sign-in is off until `MICROSOFT_CLIENT_ID` points at our own registration. School IT admin consent is still required after that.
+Device code was removed Sep 13 after Microsoft Defender's Attack Disruption matched the old flow (device-code grant against a first-party Office client id, from a `node` process on one home IP) to the device-code phishing pattern and disabled four student accounts. Microsoft sign-in is off until `MICROSOFT_CLIENT_ID` points at our own registration. School IT admin consent is still required after that.
 
 What is set up now:
 
 - Sign-in is authorization code + PKCE only, against EPSynapse's own Entra app. The browser goes to login.microsoftonline.com and returns to `https://api.epsynapse.com/v1/ms/callback`.
-- When `MICROSOFT_CLIENT_ID` is unset, `POST /v1/me/ms/start` returns 503 with `{ error, mode: "off", configured: false }`, `GET /v1/me` has `msClientMode: "off"` and `msConfigured: false`, and `adminConsentUrl` is empty.
+- When `MICROSOFT_CLIENT_ID` is unset, `POST /v1/me/ms/start` returns 503 with `{ error, mode: "off", configured: false }`, `GET /v1/me` has `msClientMode: "off"` and `msConfigured: false`, and `adminConsentUrl` is empty. The OneDrive, OneNote, Outlook, and Teams tools in the MCP server return an "off" error. Canvas, notes, todos, and class files keep working.
 - On startup the server drops any stored Microsoft tokens whose `clientId` is not the configured `MICROSOFT_CLIENT_ID`.
+- There is no route that accepts a pasted token.
 - Each Microsoft service pane (OneNote, OneDrive, Outlook, Teams) reports its own status from a real Graph call. The app no longer says Connected when Graph says no.
 - A "Send request to school IT" button emails the admin consent link to `SCHOOL_IT_EMAIL`.
 
 What is blocked on the app registration:
 
 - The consent screen, the admin approval path, and the full scope list in Part 1. None of it can be tested until `MICROSOFT_CLIENT_ID` points at our own registration.
-- OneNote read access and a reliable OneDrive root for every student.
+- Every Microsoft service pane and MCP tool. They stay off until the client id is set and school IT has consented.
 
 The judges' demo account is separate. It uses a Mac-local OneNote session on the studio machine and does not go through Microsoft sign-in, so nothing here changes the demo.
