@@ -20,7 +20,7 @@
     <link rel="icon" href="/favicon.svg?v=logo5" type="image/svg+xml" />
     <link rel="icon" href="/favicon-32.png?v=logo4" type="image/png" sizes="32x32" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="stylesheet" href="/styles.css?v=doors1" />
+    <link rel="stylesheet" href="/styles.css?v=doors2" />
     <link
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css"
@@ -92,7 +92,6 @@
 
     <div id="stage-out" class="stage stage-out" hidden>
       <div class="stage-out-card" id="stage-out-card" data-door="">
-        <p class="stage-out-lead">Your classes, notes, and school apps in one place.</p>
 
         <div class="door-panel" id="door-pick">
           <button type="button" id="door-eps" class="google-native door-btn">Continue as an Eastside Prep student</button>
@@ -120,7 +119,6 @@
             </span>
             Sign in with Google
           </button>
-          <p class="door-copy">Sign in with Google. You'll upload your schedule and add your own API keys in Settings.</p>
           <p class="stage-out-status" id="stage-out-status" hidden></p>
           <button type="button" class="door-back" data-door-back>Back</button>
         </div>
@@ -389,15 +387,6 @@
             <span class="set-nav-copy">
               <span class="set-nav-title">Teams</span>
               <span class="set-nav-meta" id="teams-summary">School chat</span>
-            </span>
-            <svg class="set-nav-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M9 6.2L15.2 12L9 17.8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </button>
-          <button type="button" class="set-nav" data-pane="mcp">
-            <span class="set-nav-copy">
-              <span class="set-nav-title">MCP</span>
-              <span class="set-nav-meta" id="mcp-summary">Not signed in</span>
             </span>
             <svg class="set-nav-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path d="M9 6.2L15.2 12L9 17.8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -724,56 +713,6 @@
           </div>
         </div>
 
-        <div class="edu-sheet edu-sheet--set" data-pane="mcp" hidden>
-          <div class="edu-sheet-head">
-            <h2 class="edu-sheet-title">MCP</h2>
-            <button type="button" class="edu-sheet-close set-pane-close" aria-label="Close MCP">
-              <svg viewBox="0 0 24 24" fill="currentColor" shape-rendering="geometricPrecision" aria-hidden="true">
-                <path d="M5.448 7.252 16.748 18.552a1.275 1.275 0 0 0 1.804-1.804L7.252 5.448a1.275 1.275 0 0 0-1.804 1.804Zm11.3-1.804L5.448 16.748a1.275 1.275 0 0 0 1.804 1.804L18.552 7.252a1.275 1.275 0 0 0-1.804-1.804Z"/>
-              </svg>
-            </button>
-          </div>
-          <div class="edu-sheet-body">
-            <ol class="set-steps" id="mcp-steps">
-              <li>Sign in with Google on this page.</li>
-              <li>Copy the server URL and the connect token below.</li>
-              <li>In Perplexity: Settings &gt; Connectors &gt; Add MCP server. Paste the URL and add header Authorization: Bearer &lt;token&gt;. In Claude Desktop or Cursor, paste the JSON.</li>
-              <li>Ask it to list your classes or read a OneNote page. Microsoft tools work only after school IT approves EPSynapse.</li>
-            </ol>
-            <div id="mcp-ready" hidden>
-              <div class="mcp-block">
-                <div class="mcp-block-head">
-                  <span class="mcp-label">Server URL</span>
-                  <button type="button" class="set-textbtn mcp-copy" data-copy="url">Copy</button>
-                </div>
-                <pre class="ms-request-body mcp-code" id="mcp-url"></pre>
-              </div>
-              <div class="mcp-block">
-                <div class="mcp-block-head">
-                  <span class="mcp-label">Connect token</span>
-                  <div class="set-actions">
-                    <button type="button" class="set-textbtn" id="mcp-reveal">Reveal</button>
-                    <button type="button" class="set-textbtn mcp-copy" data-copy="token">Copy</button>
-                  </div>
-                </div>
-                <pre class="ms-request-body mcp-code" id="mcp-token"></pre>
-              </div>
-              <div class="mcp-block">
-                <div class="mcp-block-head">
-                  <div class="mcp-tabs" role="tablist" aria-label="MCP client">
-                    <button type="button" class="mcp-tab is-on" role="tab" aria-selected="true" data-client="perplexity">Perplexity</button>
-                    <button type="button" class="mcp-tab" role="tab" aria-selected="false" data-client="claude">Claude</button>
-                    <button type="button" class="mcp-tab" role="tab" aria-selected="false" data-client="cursor">Cursor</button>
-                  </div>
-                  <button type="button" class="set-textbtn mcp-copy" data-copy="json">Copy</button>
-                </div>
-                <pre class="ms-request-body mcp-code" id="mcp-json"></pre>
-              </div>
-              <p class="set-hint mcp-warn">This token is your EPSynapse session. Anyone with it can act as you. Sign out to revoke it.</p>
-            </div>
-            <p class="set-hint" id="mcp-status" role="status"></p>
-          </div>
-        </div>
       </div>
       </form>
     </div>
@@ -793,7 +732,7 @@
 
     <script src="/liquid-glass.js?v=glass14"></script>
     <script src="/theme-orb.js?v=moon6"></script>
-    <script src="/app.js?v=doors1"></script>
+    <script src="/app.js?v=doors2"></script>
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js" crossorigin="anonymous"></script>
     <script src="/markdown.js?v=2"></script>
     <script src="/chatbot.js?v=userwhite1"></script>

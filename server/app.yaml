@@ -19,7 +19,6 @@ env_variables:
   GCS_BUCKET: ""
   FIRESTORE_PREFIX: ""
   # Public origin of this API. Matches the custom domain mapped in App Engine.
-  PUBLIC_API_BASE: "https://api.epsynapse.com"
   ALLOWED_ORIGINS: "https://epsynapse.com,https://www.epsynapse.com"
   MICROSOFT_REDIRECT_URI: "https://api.epsynapse.com/v1/ms/callback"
   SECRETS_FROM_MANAGER: "1"

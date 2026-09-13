@@ -145,7 +145,6 @@ import { canvasOAuthPublic, ensureFreshCanvasToken, mountCanvasOAuth } from "./c
 import { four11Configured, mountFour11 } from "./four11.js";
 import { listNotes, mountNotes } from "./notes.js";
 import { mountResearch } from "./research-metrics.js";
-import { mountMcp } from "./mcp-http.js";
 import { loadSchedule, mountSchedule } from "./schedule.js";
 import {
   applyClassAliases,
@@ -199,10 +198,10 @@ app.use(express.json({ limit: "8mb" }));
 /**
  * Paused accounts (EPS students waiting for the school sign-in) can still load
  * /v1/me, which reports paused: true, and log out. Every other student route,
- * the agent, and MCP answer 423 so no tool or sync runs for them.
+ * and the agent answer 423 so no tool or sync runs for them.
  */
 const PAUSE_OPEN_PATHS = new Set(["/v1/me", "/v1/me/logout"]);
-const PAUSE_GATED_PREFIXES = ["/v1/me/", "/v1/agent/", "/mcp"];
+const PAUSE_GATED_PREFIXES = ["/v1/me/", "/v1/agent/"];
 
 function pauseGated(path) {
   if (PAUSE_OPEN_PATHS.has(path)) return false;
@@ -2663,7 +2662,6 @@ mountSchedule(app, {
 });
 mountNotes(app, { requireStudent, fail });
 mountResearch(app, { fail });
-mountMcp(app, { publicMe });
 // EPS door: Canvas via the school's Developer Key, schedule via the four11 API.
 // Both are off until IT hands over the keys (docs/IT_REQUEST.md).
 mountCanvasOAuth(app);

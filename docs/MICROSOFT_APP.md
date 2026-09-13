@@ -118,7 +118,7 @@ Device code was removed Sep 13 after Microsoft Defender's Attack Disruption matc
 What is set up now:
 
 - Sign-in is authorization code + PKCE only, against EPSynapse's own Entra app. The browser goes to login.microsoftonline.com and returns to `https://api.epsynapse.com/v1/ms/callback`.
-- When `MICROSOFT_CLIENT_ID` is unset, `POST /v1/me/ms/start` returns 503 with `{ error, mode: "off", configured: false }`, `GET /v1/me` has `msClientMode: "off"` and `msConfigured: false`, and `adminConsentUrl` is empty. The OneDrive, OneNote, Outlook, and Teams tools in the MCP server return an "off" error. Canvas, notes, todos, and class files keep working.
+- When `MICROSOFT_CLIENT_ID` is unset, `POST /v1/me/ms/start` returns 503 with `{ error, mode: "off", configured: false }`, `GET /v1/me` has `msClientMode: "off"` and `msConfigured: false`, and `adminConsentUrl` is empty. Canvas, notes, todos, and class files keep working.
 - On startup the server drops any stored Microsoft tokens whose `clientId` is not the configured `MICROSOFT_CLIENT_ID`.
 - There is no route that accepts a pasted token.
 - Each Microsoft service pane (OneNote, OneDrive, Outlook, Teams) reports its own status from a real Graph call. The app no longer says Connected when Graph says no.
@@ -127,6 +127,6 @@ What is set up now:
 What is blocked on the app registration:
 
 - The consent screen, the admin approval path, and the full scope list in Part 1. None of it can be tested until `MICROSOFT_CLIENT_ID` points at our own registration.
-- Every Microsoft service pane and MCP tool. They stay off until the client id is set and school IT has consented.
+- Every Microsoft service pane. They stay off until the client id is set and school IT has consented.
 
 The hackathon demo account is retired. Every account, including the team's, goes through this same Microsoft sign-in. The Mac-local `STUDIO_*` path is unset in `server/.env` and stays off.

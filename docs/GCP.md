@@ -51,7 +51,6 @@ The switches, all in `server/app.yaml` under `env_variables`:
 | `FIRESTORE_DATABASE_ID` | unset | unset | Only if IT created a non-default database |
 | `SECRETS_FROM_MANAGER` | `1` | unset | Read `SECRET_NAMES` from Secret Manager at boot. `secrets.js` |
 | `SECRET_NAMES` | comma list | unset | Which secrets to load into `process.env` |
-| `PUBLIC_API_BASE` | `https://api.epsynapse.com` | unset | Used in MCP manifests |
 | `ALLOWED_ORIGINS` | `https://epsynapse.com,...` | from `.env` | CORS allowlist |
 | `MICROSOFT_REDIRECT_URI` | `https://api.epsynapse.com/v1/ms/callback` | from `.env` | Must match the Azure app registration |
 | `EPSYNAPSE_DATA_DIR` | unset | unset | Files-mode root override, only for tests and the migration tool |
