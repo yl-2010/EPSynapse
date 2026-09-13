@@ -93,12 +93,27 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
+        # Debug only. The post-build script below deletes this dictionary from
+        # Release builds, which only ever talk to https://api.epsynapse.com.
         NSAppTransportSecurity:
           NSExceptionDomains:
             localhost:
               NSExceptionAllowsInsecureHTTPLoads: true
             127.0.0.1:
               NSExceptionAllowsInsecureHTTPLoads: true
+    postBuildScripts:
+      - name: Strip local ATS exceptions (Release)
+        basedOnDependencyAnalysis: false
+        shell: /bin/sh
+        script: |
+          # localhost / 127.0.0.1 cleartext exists for the simulator against the Mac API.
+          # XcodeGen writes one Info.plist for every configuration, so drop it here.
+          if [ "$CONFIGURATION" = "Release" ]; then
+            PLIST="$TARGET_BUILD_DIR/$INFOPLIST_PATH"
+            if /usr/libexec/PlistBuddy -c "Print :NSAppTransportSecurity" "$PLIST" >/dev/null 2>&1; then
+              /usr/libexec/PlistBuddy -c "Delete :NSAppTransportSecurity" "$PLIST"
+            fi
+          fi
 
 schemes:
   EPSynapse:

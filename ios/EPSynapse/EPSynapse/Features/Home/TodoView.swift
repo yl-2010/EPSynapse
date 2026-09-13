@@ -167,7 +167,8 @@ struct TodoView: View {
 
     private func canvasButton(_ raw: String) -> some View {
         Button {
-            if let url = URL(string: raw) {
+            // Server-supplied string. Only https and mailto get through.
+            if let url = EPSMarkdown.safeURL(raw) {
                 openURL(url)
             }
         } label: {
@@ -193,7 +194,7 @@ struct TodoView: View {
                             EPSHaptics.tap()
                             if file.isHTML, !file.text.isEmpty {
                                 htmlFile = file
-                            } else if let url = URL(string: file.webUrl), !file.webUrl.isEmpty {
+                            } else if let url = EPSMarkdown.safeURL(file.webUrl) {
                                 openURL(url)
                             } else if file.isHTML {
                                 htmlFile = file

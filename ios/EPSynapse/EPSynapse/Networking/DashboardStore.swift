@@ -114,6 +114,8 @@ final class DashboardStore: ObservableObject {
     notesStatus = ""
     scheduleStatus = ""
     sendStatus = ""
+    // Re-read rather than drop: sign-out wiped the directory, pause did not.
+    localFiles = Self.readImportedFiles()
   }
 
   func load(from session: SessionStore) async {
@@ -222,6 +224,10 @@ final class DashboardStore: ObservableObject {
         try FileManager.default.removeItem(at: dest)
       }
       try FileManager.default.copyItem(at: url, to: dest)
+      try FileManager.default.setAttributes(
+        [.protectionKey: FileProtectionType.complete],
+        ofItemAtPath: dest.path
+      )
       let file = DriveFile(
         id: dest.lastPathComponent,
         name: dest.lastPathComponent,
@@ -557,8 +563,21 @@ final class DashboardStore: ObservableObject {
     let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
       ?? FileManager.default.temporaryDirectory
     let dir = base.appendingPathComponent("ImportedFiles", isDirectory: true)
-    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    try? FileManager.default.createDirectory(
+      at: dir,
+      withIntermediateDirectories: true,
+      attributes: [.protectionKey: FileProtectionType.complete]
+    )
     return dir
+  }
+
+  /// Removes every file this device imported plus the index that lists them.
+  /// SessionStore calls this on sign-out and account delete; `clear()` then
+  /// re-reads the (now empty) directory into `localFiles`.
+  static func wipeImportedFiles() {
+    let dir = importedDirectory()
+    try? FileManager.default.removeItem(at: dir)
+    UserDefaults.standard.removeObject(forKey: importedIndexKey)
   }
 
   private static func uniqueImportedName(_ original: String) -> String {

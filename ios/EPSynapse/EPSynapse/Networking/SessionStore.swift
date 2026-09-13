@@ -39,6 +39,10 @@ final class SessionStore: ObservableObject {
   static let msReturnTo = "epsynapse://ms"
   static let msCallbackScheme = "epsynapse"
   static let msCallbackHost = "ms"
+  static let canvasCallbackHost = "canvas"
+  static let msFailed = "Microsoft sign-in failed. Try again."
+  static let msFinishFailed = "Could not finish the Microsoft sign-in. Try again."
+  static let canvasFinishFailed = "Could not finish the Canvas sign-in. Try again."
   static let keyIdle = "Paste the gsk_ key here, tap Save key, wait until Chat key says Groq, then ask in chat. Do not paste the key in the chat box."
   static let googleFirst = "Sign in with Google first."
   static let signedInHint = "Signed in with Google."
@@ -55,8 +59,16 @@ final class SessionStore: ObservableObject {
     case other
   }
 
+  /// API session token. Lives in the Keychain, never in UserDefaults.
   @Published var sessionId: String {
-    didSet { UserDefaults.standard.set(sessionId, forKey: Keys.sid) }
+    didSet {
+      guard oldValue != sessionId else { return }
+      if sessionId.isEmpty {
+        KeychainStore.delete(account: KeychainStore.sessionAccount)
+      } else {
+        KeychainStore.write(sessionId, account: KeychainStore.sessionAccount)
+      }
+    }
   }
 
   @Published var profile: Profile?
@@ -73,9 +85,9 @@ final class SessionStore: ObservableObject {
     }
   }
 
-  @Published var modelKey: String {
-    didSet { UserDefaults.standard.set(modelKey, forKey: Keys.key) }
-  }
+  /// Model key typed this session and not yet on the account. Memory only.
+  /// Older builds kept it in UserDefaults; that slot is wiped on launch.
+  @Published var modelKey = ""
 
   @Published var provider: String {
     didSet {
@@ -126,16 +138,18 @@ final class SessionStore: ObservableObject {
   private let api = APIClient.shared
 
   private enum Keys {
-    static let sid = "epsynapse.sid"
-    static let key = "epsynapse.agent.key"
+    /// Legacy UserDefaults slot. Moved into the Keychain on first launch.
+    static let legacySid = "epsynapse.sid"
+    /// Legacy UserDefaults slot. Removed on launch; the key is memory only now.
+    static let legacyKey = "epsynapse.agent.key"
     static let provider = "epsynapse.agent.provider"
     static let door = "epsynapse.door"
   }
 
   init() {
     let defaults = UserDefaults.standard
-    sessionId = defaults.string(forKey: Keys.sid) ?? ""
-    modelKey = defaults.string(forKey: Keys.key) ?? ""
+    sessionId = Self.loadSessionId(defaults)
+    defaults.removeObject(forKey: Keys.legacyKey)
     provider = defaults.string(forKey: Keys.provider) ?? "groq"
     door = defaults.string(forKey: Keys.door).flatMap(Door.init(rawValue:))
     refreshKeyStatus()
@@ -149,6 +163,20 @@ final class SessionStore: ObservableObject {
           await self?.markPaused(message: message, door: door)
         }
       }
+  }
+
+  /// Keychain first. A value left in UserDefaults by an older build moves over once.
+  private static func loadSessionId(_ defaults: UserDefaults) -> String {
+    if let stored = KeychainStore.read(account: KeychainStore.sessionAccount), !stored.isEmpty {
+      defaults.removeObject(forKey: Keys.legacySid)
+      return stored
+    }
+    let legacy = defaults.string(forKey: Keys.legacySid) ?? ""
+    if !legacy.isEmpty {
+      KeychainStore.write(legacy, account: KeychainStore.sessionAccount)
+    }
+    defaults.removeObject(forKey: Keys.legacySid)
+    return legacy
   }
 
   /// Remembers which front door the student tapped. Only "other" is auto-restored.
@@ -180,7 +208,7 @@ final class SessionStore: ObservableObject {
       _ = await restoreGoogleSessionIfNeeded()
       providers = await configTask
       paintConnections()
-      await syncAgentFromAccount()
+      syncAgentFromAccount()
       return
     }
 
@@ -197,7 +225,7 @@ final class SessionStore: ObservableObject {
 
     providers = await configTask
     paintConnections()
-    await syncAgentFromAccount()
+    syncAgentFromAccount()
   }
 
   func signInWithGoogle() async {
@@ -217,7 +245,7 @@ final class SessionStore: ObservableObject {
       door = .other
       settingsStatus = Self.signedInHint
       paintConnections()
-      await syncAgentFromAccount()
+      syncAgentFromAccount()
     } catch {
       if Self.isGoogleCancel(error) {
         settingsStatus = ""
@@ -275,7 +303,7 @@ final class SessionStore: ObservableObject {
       profile?.consentRequest?.adminConsentUrl ?? "",
       profile?.adminConsentUrl ?? "",
     ].first { !$0.isEmpty } ?? ""
-    return URL(string: raw)
+    return EPSMarkdown.safeURL(raw)
   }
 
   /// Starts Microsoft sign-in for one service. The API returns authorizeUrl for a
@@ -334,35 +362,116 @@ final class SessionStore: ObservableObject {
     paintConnections()
   }
 
-  /// Handles epsynapse://ms?service=onenote&result=connected|denied|error&reason=...&email=...
+  /// Routes any epsynapse:// URL to the right handler. Returns false if the URL is not ours.
+  @discardableResult
+  func handleAppCallback(_ url: URL) async -> Bool {
+    if Self.isMicrosoftCallback(url) { return await handleMicrosoftCallback(url) }
+    if Self.isCanvasCallback(url) { return await handleCanvasCallback(url) }
+    return false
+  }
+
+  /// Handles epsynapse://ms?service=onenote&result=pending|connected|denied|error&state=...
+  ///
+  /// Any app can open this URL, so the callback only counts while a sign-in
+  /// for that service is in flight, and the query's `reason` is never shown.
+  /// `result=pending` means the server parked the grant under `state`; the app
+  /// finishes it with POST /v1/me/ms/finish using the session header.
   /// Returns false if the URL is not ours.
   @discardableResult
   func handleMicrosoftCallback(_ url: URL) async -> Bool {
     guard Self.isMicrosoftCallback(url) else { return false }
-    let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
-    func value(_ name: String) -> String {
-      (items.first { $0.name == name }?.value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    let query = Self.queryValues(url)
+    guard let service = MSService(rawValue: query("service").lowercased()),
+          msBrowserPending[service] != nil
+    else {
+      // Nothing pending for this service. Ignore the URL.
+      return true
     }
-    let service = MSService(rawValue: value("service").lowercased())
-    let result = value("result").lowercased()
-    let reason = value("reason")
+    let result = query("result").lowercased()
+    let state = query("state")
+    msBrowserPending[service] = nil
 
-    if let service {
-      msBrowserPending[service] = nil
-      switch result {
-      case "denied":
-        // Empty reason is fine. paneState fills in msDenied or the generic line.
-        msLocalDenied[service] = reason
-      case "error":
-        msErrors[service] = reason.isEmpty ? "Microsoft sign-in failed." : reason
-      default:
-        break
+    switch result {
+    case "pending":
+      guard !state.isEmpty, !sessionId.isEmpty else {
+        msErrors[service] = Self.msFinishFailed
+        paintConnections()
+        return true
       }
-    } else {
-      msBrowserPending.removeAll()
+      do {
+        let reply = try await api.msFinish(state: state, sessionId: sessionId)
+        if !reply.ok {
+          msErrors[service] = Self.msFinishFailed
+        }
+      } catch let error as APIError where error.isPaused {
+        /* the paused observer already flipped the profile */
+      } catch {
+        msErrors[service] = Self.shortAPIMessage(error, fallback: Self.msFinishFailed)
+      }
+    case "denied":
+      // Empty local reason. paneState fills in the server's msDenied line or the generic one.
+      msLocalDenied[service] = ""
+    case "error":
+      msErrors[service] = Self.msFailed
+    default:
+      // "connected" or anything else: /v1/me is the truth.
+      break
     }
     await reloadMe()
     return true
+  }
+
+  /// Handles epsynapse://canvas?result=pending&state=... from the Canvas OAuth
+  /// redirect. POSTs /v1/me/canvas/oauth/finish with the state, then re-reads
+  /// /v1/me so the Canvas pane shows Connected. iOS does not start this flow
+  /// yet; the handler is here so the server can redirect to it when it does.
+  @discardableResult
+  func handleCanvasCallback(_ url: URL) async -> Bool {
+    guard Self.isCanvasCallback(url) else { return false }
+    guard !sessionId.isEmpty, profile != nil else { return true }
+    let query = Self.queryValues(url)
+    let result = query("result").lowercased()
+    let state = query("state")
+
+    switch result {
+    case "pending":
+      guard !state.isEmpty else {
+        settingsStatus = Self.canvasFinishFailed
+        return true
+      }
+      settingsStatus = "Finishing Canvas sign-in…"
+      do {
+        let reply = try await api.canvasOAuthFinish(state: state, sessionId: sessionId)
+        settingsStatus = reply.ok ? "Canvas connected." : Self.canvasFinishFailed
+      } catch let error as APIError where error.isPaused {
+        settingsStatus = ""
+      } catch {
+        settingsStatus = Self.shortAPIMessage(error, fallback: Self.canvasFinishFailed)
+      }
+    case "denied":
+      settingsStatus = "Canvas sign-in was cancelled."
+    case "error":
+      settingsStatus = Self.canvasFinishFailed
+    default:
+      break
+    }
+    await reloadMe()
+    return true
+  }
+
+  /// Our own API's `error` string, or the fixed fallback. Never a raw body.
+  private static func shortAPIMessage(_ error: Error, fallback: String) -> String {
+    guard let api = error as? APIError, api.status == 400, !api.message.isEmpty else {
+      return fallback
+    }
+    return api.message
+  }
+
+  private static func queryValues(_ url: URL) -> (String) -> String {
+    let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+    return { name in
+      (items.first { $0.name == name }?.value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
   }
 
   func disconnectMicrosoft(_ service: MSService) async {
@@ -393,7 +502,7 @@ final class SessionStore: ObservableObject {
         msNotes[service] = reply.to.isEmpty ? "Request sent" : "Request sent to \(reply.to)"
         return
       }
-      if let mailto = URL(string: reply.mailto), !reply.mailto.isEmpty {
+      if let mailto = EPSMarkdown.safeURL(reply.mailto) {
         let opened = await UIApplication.shared.open(mailto)
         msNotes[service] = opened ? "Opened Mail" : "Mail did not open. Use Copy request."
         return
@@ -438,11 +547,25 @@ final class SessionStore: ObservableObject {
     paintConnections()
   }
 
+  /// True for any epsynapse:// URL the app knows how to finish.
+  static func isAppCallback(_ url: URL) -> Bool {
+    isMicrosoftCallback(url) || isCanvasCallback(url)
+  }
+
   static func isMicrosoftCallback(_ url: URL) -> Bool {
-    guard url.scheme?.lowercased() == msCallbackScheme else { return false }
+    callbackTarget(url) == msCallbackHost
+  }
+
+  static func isCanvasCallback(_ url: URL) -> Bool {
+    callbackTarget(url) == canvasCallbackHost
+  }
+
+  /// "ms" for epsynapse://ms?... or epsynapse:///ms?...; nil for any other scheme.
+  private static func callbackTarget(_ url: URL) -> String? {
+    guard url.scheme?.lowercased() == msCallbackScheme else { return nil }
     let host = (url.host ?? "").lowercased()
-    if host == msCallbackHost { return true }
-    return url.path.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "/")) == msCallbackHost
+    if !host.isEmpty { return host }
+    return url.path.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "/"))
   }
 
   private func runBrowserSignIn(_ service: MSService, authorizeUrl: String) async {
@@ -561,14 +684,24 @@ final class SessionStore: ObservableObject {
     return true
   }
 
-  /// Drops the Google session, the API session, and the profile. Shared by
-  /// logout and account delete so both leave the device in the same state.
+  /// Drops the Google session, the API session (Keychain item included), the
+  /// profile, any unsaved model key, and the files imported on this device.
+  /// Shared by logout and account delete so both leave the device the same way.
   private func resetLocalSession() {
     GIDSignIn.sharedInstance.signOut()
+    authSession?.cancel()
+    authSession = nil
     sessionId = ""
+    KeychainStore.delete(account: KeychainStore.sessionAccount)
+    UserDefaults.standard.removeObject(forKey: Keys.legacySid)
+    UserDefaults.standard.removeObject(forKey: Keys.legacyKey)
+    modelKey = ""
     profile = nil
     settingsStatus = ""
+    deleteStatus = ""
+    DashboardStore.wipeImportedFiles()
     paintConnections()
+    refreshKeyStatus()
   }
 
   private func configureGoogleSignIn() async {
@@ -627,20 +760,14 @@ final class SessionStore: ObservableObject {
     sessionId = sid
   }
 
-  private func syncAgentFromAccount() async {
+  /// Mirrors the account's provider and key state into the local status line.
+  /// Keys only travel to the server through saveKey; nothing is uploaded here.
+  private func syncAgentFromAccount() {
     if let me = profile, !me.modelProvider.isEmpty {
       provider = me.modelProvider
     }
-    if profile?.modelKeySet == true {
-      if !modelKey.isEmpty { modelKey = "" }
-      refreshKeyStatus()
-      return
-    }
-    let leftover = modelKey.trimmingCharacters(in: .whitespacesAndNewlines)
-    if isSignedIn, !leftover.isEmpty {
-      await persistAgent(modelKey: leftover, provider: provider)
+    if profile?.modelKeySet == true, !modelKey.isEmpty {
       modelKey = ""
-      return
     }
     refreshKeyStatus()
   }

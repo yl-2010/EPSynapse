@@ -1174,6 +1174,28 @@ struct LogoutResponse: Codable {
   }
 }
 
+/// Body for POST /v1/me/ms/finish and /v1/me/canvas/oauth/finish.
+struct OAuthFinishBody: Encodable {
+  var state: String
+}
+
+/// `{ ok: true, service? }` from the two OAuth finish routes.
+struct OAuthFinishResponse: Codable {
+  var ok: Bool
+  var service: String
+
+  init(ok: Bool = false, service: String = "") {
+    self.ok = ok
+    self.service = service
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    ok = c.bool(.ok)
+    service = c.string(.service)
+  }
+}
+
 struct SendMailResponse: Codable {
   var sent: Bool
   var to: String

@@ -24,6 +24,7 @@
 		66043B500B482D908E9704F9 /* ChatHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA51BAECBAEAC04BE7BB1C76 /* ChatHistory.swift */; };
 		6751619D753BB9D8F3AEA426 /* Markdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3AF0A19753DC997EE55CAA3 /* Markdown.swift */; };
 		6BBF05D2B8EAABF7C905058A /* ChatOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 083CC9E2B8BA48AEA4876689 /* ChatOverlay.swift */; };
+		6C762DD9E56A51EF4582C368 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82CB60AFD1DE31EF2043ACAF /* KeychainStore.swift */; };
 		7EA85D7AFE3D8CE315294C1D /* SettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38378331DA95509DDF83EA11 /* SettingsSheet.swift */; };
 		82034A6D465FAE115757D44E /* ChatStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B8C2538723B2F0C9785D1D8 /* ChatStore.swift */; };
 		A0596F306476110AD51BAA71 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 29B721DF81564BD885DDC63C /* LaunchScreen.storyboard */; };
@@ -61,6 +62,7 @@
 		6BD05068815821D26AC8B738 /* ChatHistoryOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatHistoryOverlay.swift; sourceTree = "<group>"; };
 		6FB0D0B241ED5574211F4138 /* EPSynapse.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = EPSynapse.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8241F59CE8C237974E9E4D12 /* TodoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoView.swift; sourceTree = "<group>"; };
+		82CB60AFD1DE31EF2043ACAF /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
 		8388796443CE474081A8311E /* Panels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels.swift; sourceTree = "<group>"; };
 		98FFD2BA92EAF72474A93719 /* NoteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteView.swift; sourceTree = "<group>"; };
 		99B5D6EFD5EA5C91F03602C1 /* CourseTitle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CourseTitle.swift; sourceTree = "<group>"; };
@@ -190,6 +192,7 @@
 				A89D748793FD8AECBFD1275E /* APIClient.swift */,
 				99B5D6EFD5EA5C91F03602C1 /* CourseTitle.swift */,
 				00789498338B32818C6282FE /* DashboardStore.swift */,
+				82CB60AFD1DE31EF2043ACAF /* KeychainStore.swift */,
 				FBA3E1253E1D0707195E2512 /* Models.swift */,
 				4130A4ED23C8BF8A9677E84A /* SessionStore.swift */,
 			);
@@ -231,6 +234,7 @@
 				626B7E7BDDED1724AFF6BED9 /* Sources */,
 				06086BB7DC7202203FBA8284 /* Resources */,
 				ACC28199963FE32EF76FDD2C /* Frameworks */,
+				0302D137150E8578D4021479 /* Strip local ATS exceptions (Release) */,
 			);
 			buildRules = (
 			);
@@ -294,6 +298,28 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		0302D137150E8578D4021479 /* Strip local ATS exceptions (Release) */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Strip local ATS exceptions (Release)";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# localhost / 127.0.0.1 cleartext exists for the simulator against the Mac API.\n# XcodeGen writes one Info.plist for every configuration, so drop it here.\nif [ \"$CONFIGURATION\" = \"Release\" ]; then\n  PLIST=\"$TARGET_BUILD_DIR/$INFOPLIST_PATH\"\n  if /usr/libexec/PlistBuddy -c \"Print :NSAppTransportSecurity\" \"$PLIST\" >/dev/null 2>&1; then\n    /usr/libexec/PlistBuddy -c \"Delete :NSAppTransportSecurity\" \"$PLIST\"\n  fi\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		626B7E7BDDED1724AFF6BED9 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -316,6 +342,7 @@
 				639923CB8E0C1E23F596B1C5 /* HomeDestination.swift in Sources */,
 				A99A08DB40E235E1245F8150 /* HomeView.swift in Sources */,
 				AB155A99C431C77E575913FF /* KeyboardDismiss.swift in Sources */,
+				6C762DD9E56A51EF4582C368 /* KeychainStore.swift in Sources */,
 				B867302471945E2A703774E7 /* Mark.swift in Sources */,
 				6751619D753BB9D8F3AEA426 /* Markdown.swift in Sources */,
 				03338F0771A5563BAD3CBBE2 /* Models.swift in Sources */,

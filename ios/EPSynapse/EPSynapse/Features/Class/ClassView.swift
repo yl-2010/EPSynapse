@@ -187,7 +187,8 @@ struct ClassView: View {
 
     private func canvasButton(_ raw: String) -> some View {
         Button {
-            if let url = URL(string: raw) {
+            // Server-supplied string. Only https and mailto get through.
+            if let url = EPSMarkdown.safeURL(raw) {
                 openURL(url)
             }
         } label: {
@@ -271,7 +272,7 @@ struct ClassView: View {
                             EPSHaptics.tap()
                             if file.isHTML, !file.text.isEmpty {
                                 htmlFile = file
-                            } else if let url = URL(string: file.webUrl), !file.webUrl.isEmpty {
+                            } else if let url = EPSMarkdown.safeURL(file.webUrl) {
                                 openURL(url)
                             } else if file.isHTML {
                                 htmlFile = file
@@ -347,17 +348,62 @@ struct ClassHTMLSheet: View {
     }
 }
 
+/// Read-only rendering of API-provided HTML. Scripts are off, link previews are
+/// off, and the only navigation allowed is the initial loadHTMLString. A tapped
+/// https or mailto link leaves the web view and opens through the system.
 struct ClassHTMLWebView: UIViewRepresentable {
     var html: String
+    @Environment(\.openURL) private var openURL
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(openURL: openURL)
+    }
 
     func makeUIView(context: Context) -> WKWebView {
-        let view = WKWebView(frame: .zero)
+        let configuration = WKWebViewConfiguration()
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = false
+        let view = WKWebView(frame: .zero, configuration: configuration)
         view.isOpaque = false
         view.backgroundColor = .clear
+        view.allowsLinkPreview = false
+        view.navigationDelegate = context.coordinator
         return view
     }
 
     func updateUIView(_ uiView: WKWebView, context: Context) {
+        context.coordinator.openURL = openURL
+        guard context.coordinator.loadedHTML != html else { return }
+        context.coordinator.loadedHTML = html
         uiView.loadHTMLString(html, baseURL: nil)
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, WKNavigationDelegate {
+        var openURL: OpenURLAction
+        var loadedHTML: String?
+
+        init(openURL: OpenURLAction) {
+            self.openURL = openURL
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationAction: WKNavigationAction,
+            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+        ) {
+            let url = navigationAction.request.url
+            if navigationAction.navigationType == .linkActivated {
+                if let raw = url?.absoluteString, let safe = EPSMarkdown.safeURL(raw) {
+                    openURL(safe)
+                }
+                decisionHandler(.cancel)
+                return
+            }
+            // loadHTMLString(_, baseURL: nil) arrives as about:blank on the main frame.
+            let isInitialLoad = navigationAction.navigationType == .other
+                && navigationAction.targetFrame?.isMainFrame == true
+                && url?.scheme?.lowercased() == "about"
+            decisionHandler(isInitialLoad ? .allow : .cancel)
+        }
     }
 }

@@ -116,6 +116,32 @@ struct APIClient {
     }
   }
 
+  /// Native OAuth completion. The server redirected the browser to
+  /// epsynapse://ms?result=pending&service=...&state=... instead of storing
+  /// the grant; this call, sent with the session header, claims it.
+  /// 200 `{ ok: true, service }` or 400 `{ error }`.
+  func msFinish(state: String, sessionId: String) async throws -> OAuthFinishResponse {
+    try await request(
+      "/v1/me/ms/finish",
+      method: "POST",
+      body: OAuthFinishBody(state: state),
+      sessionId: sessionId,
+      timeout: 25
+    )
+  }
+
+  /// Same contract for Canvas: epsynapse://canvas?result=pending&state=...
+  /// then POST /v1/me/canvas/oauth/finish. 200 `{ ok: true }` or 400 `{ error }`.
+  func canvasOAuthFinish(state: String, sessionId: String) async throws -> OAuthFinishResponse {
+    try await request(
+      "/v1/me/canvas/oauth/finish",
+      method: "POST",
+      body: OAuthFinishBody(state: state),
+      sessionId: sessionId,
+      timeout: 25
+    )
+  }
+
   func msStatus(service: MSService, sessionId: String) async throws -> ConnectionStatusResponse {
     try await request(service.statusPath, sessionId: sessionId, timeout: 15)
   }
@@ -425,14 +451,10 @@ struct APIClient {
         door: door
       )
     }
-    if let message = parsed?.error, !message.isEmpty {
+    // Only the API's own `error` string reaches the screen. A non-JSON body
+    // (proxy page, tunnel error, stack trace) is not something to show.
+    if let message = parsed?.error?.trimmingCharacters(in: .whitespacesAndNewlines), !message.isEmpty {
       return APIError(status: status, message: message)
-    }
-    if let text = String(data: data, encoding: .utf8) {
-      let clipped = text.trimmingCharacters(in: .whitespacesAndNewlines)
-      if !clipped.isEmpty {
-        return APIError(status: status, message: String(clipped.prefix(200)))
-      }
     }
     return APIError(status: status, message: "Request failed (\(status))")
   }

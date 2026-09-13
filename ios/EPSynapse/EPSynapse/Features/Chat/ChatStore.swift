@@ -26,8 +26,8 @@ final class ChatStore: ObservableObject {
     @Published var keyboardScrubLift: CGFloat = 0
 
     private let api = APIClient.shared
-    private let defaults = UserDefaults.standard
-    private let cacheKey = "epsynapse.chat.threads"
+    /// Legacy UserDefaults slot. Read once, moved into the protected file, then removed.
+    private static let legacyCacheKey = "epsynapse.chat.threads"
 
     func newChat() {
         let snapshot = turns
@@ -58,7 +58,7 @@ final class ChatStore: ObservableObject {
         wantsChatOpen = false
         composerOpen = false
         setHistoryOpen(false)
-        defaults.removeObject(forKey: cacheKey)
+        Self.deleteCacheFile()
     }
 
     func loadList() async {
@@ -311,13 +311,39 @@ final class ChatStore: ObservableObject {
     }
 
     private func loadCache() -> [CachedChat] {
-        guard let data = defaults.data(forKey: cacheKey) else { return [] }
-        return (try? JSONDecoder().decode([CachedChat].self, from: data)) ?? []
+        if let data = try? Data(contentsOf: Self.cacheFileURL()) {
+            return (try? JSONDecoder().decode([CachedChat].self, from: data)) ?? []
+        }
+        // First run on this build: pull the old UserDefaults blob into the file.
+        let defaults = UserDefaults.standard
+        guard let legacy = defaults.data(forKey: Self.legacyCacheKey) else { return [] }
+        defaults.removeObject(forKey: Self.legacyCacheKey)
+        let rows = (try? JSONDecoder().decode([CachedChat].self, from: legacy)) ?? []
+        if !rows.isEmpty { saveCache(rows) }
+        return rows
     }
 
+    /// Chat threads on disk, readable only while the device is unlocked.
     private func saveCache(_ rows: [CachedChat]) {
         guard let data = try? JSONEncoder().encode(rows) else { return }
-        defaults.set(data, forKey: cacheKey)
+        try? data.write(to: Self.cacheFileURL(), options: [.atomic, .completeFileProtection])
+    }
+
+    private static func cacheFileURL() -> URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        let dir = base.appendingPathComponent("ChatCache", isDirectory: true)
+        try? FileManager.default.createDirectory(
+            at: dir,
+            withIntermediateDirectories: true,
+            attributes: [.protectionKey: FileProtectionType.complete]
+        )
+        return dir.appendingPathComponent("threads.json")
+    }
+
+    private static func deleteCacheFile() {
+        try? FileManager.default.removeItem(at: cacheFileURL())
+        UserDefaults.standard.removeObject(forKey: legacyCacheKey)
     }
 
     static func title(from turns: [ChatTurn]) -> String {

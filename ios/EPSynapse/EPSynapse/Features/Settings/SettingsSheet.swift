@@ -106,6 +106,8 @@ struct SettingsSheet: View {
                 if let url = pickedPDF {
                     Task {
                         await dashboard.uploadSchedule(fileURL: url, session: session)
+                        // The tmp copy has done its job whether or not the upload worked.
+                        Self.removeTempPDF(url)
                         if dashboard.scheduleStatus.hasPrefix("Schedule uploaded") {
                             await dashboard.load(from: session)
                         }
@@ -846,9 +848,21 @@ struct SettingsSheet: View {
                 try FileManager.default.removeItem(at: dest)
             }
             try FileManager.default.copyItem(at: url, to: dest)
+            try FileManager.default.setAttributes(
+                [.protectionKey: FileProtectionType.complete],
+                ofItemAtPath: dest.path
+            )
             return dest
         } catch {
             return url
         }
+    }
+
+    /// Deletes the tmp copy made by `copiedPDF`. Leaves the student's original
+    /// alone when the copy failed and we uploaded straight from the picker URL.
+    private static func removeTempPDF(_ url: URL) {
+        let tmp = FileManager.default.temporaryDirectory.standardizedFileURL.path
+        guard url.isFileURL, url.standardizedFileURL.path.hasPrefix(tmp) else { return }
+        try? FileManager.default.removeItem(at: url)
     }
 }

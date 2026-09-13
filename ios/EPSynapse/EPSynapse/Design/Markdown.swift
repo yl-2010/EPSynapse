@@ -499,11 +499,14 @@ enum EPSMarkdown {
         return (label, url, raw.index(after: closeUrl))
     }
 
+    /// The one filter for any URL string we did not write ourselves: model
+    /// output, Canvas links, file webUrls, admin-consent links. Only https and
+    /// mailto pass. Site-relative paths become https://epsynapse.com links.
     static func safeURL(_ raw: String) -> URL? {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: trimmed) else { return nil }
+        guard !trimmed.isEmpty, let url = URL(string: trimmed) else { return nil }
         let scheme = url.scheme?.lowercased() ?? ""
-        if scheme == "http" || scheme == "https" || scheme == "mailto" { return url }
+        if scheme == "https" || scheme == "mailto" { return url }
         if trimmed.hasPrefix("/"), !trimmed.hasPrefix("//") {
             return URL(string: "https://epsynapse.com\(trimmed)")
         }

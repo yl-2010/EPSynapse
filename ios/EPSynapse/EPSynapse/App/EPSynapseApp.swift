@@ -16,9 +16,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         open url: URL,
         options: [UIApplication.OpenURLOptionsKey: Any] = [:]
     ) -> Bool {
-        if SessionStore.isMicrosoftCallback(url) {
+        if SessionStore.isAppCallback(url) {
             Task { @MainActor in
-                await SessionStore.shared.handleMicrosoftCallback(url)
+                await SessionStore.shared.handleAppCallback(url)
             }
             return true
         }
@@ -65,10 +65,10 @@ struct EPSynapseApp: App {
                 .preferredColorScheme(themeStore.colorScheme)
                 .tint(EPSTheme.accent)
                 .onOpenURL { url in
-                    // epsynapse://ms?... comes back from the Microsoft sign-in when the
-                    // redirect lands outside the in-app web sheet.
-                    if SessionStore.isMicrosoftCallback(url) {
-                        Task { await sessionStore.handleMicrosoftCallback(url) }
+                    // epsynapse://ms?... and epsynapse://canvas?... come back from the
+                    // OAuth sign-ins when the redirect lands outside the in-app web sheet.
+                    if SessionStore.isAppCallback(url) {
+                        Task { await sessionStore.handleAppCallback(url) }
                         return
                     }
                     GIDSignIn.sharedInstance.handle(url)
