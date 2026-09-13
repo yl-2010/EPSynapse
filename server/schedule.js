@@ -1,19 +1,32 @@
 /**
- * EPS term schedule CARD PDFs (Fall / Winter / Spring printed grid, periods A-H).
- * Not a four11 course-list (`NNNN | Physics`). Students do not upload bells.
+ * Student schedules, stored at data/schedules/<ownerId>/classes.json.
+ *
+ * Two doors:
+ * - "eps": the printed EPS term card (Fall / Winter / Spring grid, periods A-H),
+ *   read by the hand-written parser below. Bells come from eps-bells-2026.json.
+ *   Not a four11 course-list (`NNNN | Physics`). Students do not upload bells.
+ * - "other": any school's schedule PDF, read by the student's own model
+ *   (schedule-llm.js). Classes carry their printed period plus a `meetings`
+ *   array of weekday/start/end when the PDF has times. No EPS bells.
+ *
+ * classes.json `source` is "eps-card" (default for old files), "llm", or
+ * "four11" (written by the four11 path).
  */
 
 import { randomBytes } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
-import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
-import { dirname, join, resolve, sep } from "node:path";
+import { unlink, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { fileURLToPath } from "node:url";
+import { getDoc, putDoc } from "./store.js";
+import { putBlob } from "./blobs.js";
 import { ownerIdForStudent } from "./chat-history.js";
 import { prettyCourseName } from "./canvas.js";
 import { applyClassAliases, loadWorkspaceMeta } from "./workspace.js";
 import { subjectFromCourseName } from "./subjects.js";
+import { normalizeDoor } from "./students.js";
+import { parseScheduleWithModel } from "./schedule-llm.js";
 
 const require = createRequire(import.meta.url);
 const pdfParse = require("pdf-parse");
@@ -22,42 +35,44 @@ const PERIODS = ["A", "B", "C", "D", "E", "F", "G", "H"];
 const TERMS = ["fall", "winter", "spring"];
 const FREE_NAME = "Free Period";
 const MAX_PDF = 12 * 1024 * 1024;
+export const SCHEDULE_SOURCES = ["eps-card", "llm", "four11"];
+const DEFAULT_SOURCE = "eps-card";
+const DEFAULT_TZ = "America/Los_Angeles";
 
-function rootDir() {
-  return dirname(fileURLToPath(import.meta.url));
+export function normalizeScheduleSource(raw) {
+  const s = String(raw || "").trim().toLowerCase();
+  return SCHEDULE_SOURCES.includes(s) ? s : DEFAULT_SOURCE;
 }
 
-function schedulesRoot() {
-  return join(rootDir(), "data", "schedules");
+/** Which parser a student's upload goes through. No student means the legacy EPS path. */
+export function scheduleDoorFor(student) {
+  if (!student) return "eps";
+  return normalizeDoor(student.door);
 }
 
 export function loadBells() {
   return require("./eps-bells-2026.json");
 }
 
-function ownerDir(ownerId) {
-  const root = resolve(schedulesRoot());
-  const full = resolve(root, ownerId);
-  if (full !== join(root, ownerId) && !full.startsWith(root + sep)) {
+/**
+ * Storage goes through store.js / blobs.js so the same code runs on the Mac
+ * (files under data/schedules/<owner>/) and on App Engine (Firestore + GCS).
+ * Doc: schedules/<owner> / "classes". Blob: schedules/<owner>/<pdfName>.
+ */
+function ownerKey(ownerId) {
+  const owner = String(ownerId || "").trim();
+  if (!owner || owner.includes("/") || owner.includes("..") || owner.includes("\\")) {
     throw new Error("Invalid schedule owner.");
   }
-  return full;
+  return owner;
 }
 
-function classesPath(ownerId) {
-  return join(ownerDir(ownerId), "classes.json");
+function scheduleCollection(ownerId) {
+  return `schedules/${ownerKey(ownerId)}`;
 }
 
-async function writeJsonAtomic(filePath, data) {
-  await mkdir(dirname(filePath), { recursive: true });
-  const tmp = `${filePath}.${randomBytes(8).toString("hex")}.tmp`;
-  try {
-    await writeFile(tmp, `${JSON.stringify(data, null, 2)}\n`, "utf8");
-    await rename(tmp, filePath);
-  } catch (err) {
-    await unlink(tmp).catch(() => {});
-    throw err;
-  }
+async function writeClassesDoc(ownerId, payload) {
+  await putDoc(scheduleCollection(ownerId), "classes", payload);
 }
 
 function slugName(name) {
@@ -79,9 +94,15 @@ function classIdFor(name, period, term, used) {
     used.add(ws);
     return ws;
   }
-  const extra = `${base}-${term}-${String(period || "").toLowerCase()}`;
-  used.add(extra);
-  return extra;
+  const extra = [base, term, period ? slugName(period) : ""].filter(Boolean).join("-");
+  if (!used.has(extra)) {
+    used.add(extra);
+    return extra;
+  }
+  let n = 2;
+  while (used.has(`${extra}-${n}`)) n += 1;
+  used.add(`${extra}-${n}`);
+  return `${extra}-${n}`;
 }
 
 function looksLikeFour11(text) {
@@ -452,21 +473,76 @@ export function meetingsForToday(classes, bells, now = new Date()) {
   return rows;
 }
 
-export async function loadSchedule(ownerId) {
-  try {
-    const raw = JSON.parse(await readFile(classesPath(ownerId), "utf8"));
-    const classes = Array.isArray(raw?.classes) ? raw.classes : [];
-    return {
-      classes,
-      updated: String(raw.updated || ""),
-    };
-  } catch (err) {
-    if (err && err.code === "ENOENT") return { classes: [], updated: "" };
-    throw err;
+/**
+ * Model output (schedule-llm.js) → the classes.json rows the rest of the app reads.
+ * Same fields as an EPS card row (id, name, period, term, subject, freePeriod)
+ * plus teacher, room, and meetings [{ day, start, end }]. A class with no printed
+ * period gets a generated slot key P1, P2, ... so period stays non-empty.
+ */
+export function classesFromModelSchedule(parsed) {
+  const rows = Array.isArray(parsed?.classes) ? parsed.classes : [];
+  const term = detectTerm(parsed?.termLabel || "");
+  const used = new Set();
+  const usedPeriods = new Set(
+    rows.map((c) => String(c?.period || "").trim().toUpperCase()).filter(Boolean)
+  );
+  let slot = 0;
+  const classes = [];
+  for (const c of rows) {
+    const name = prettyCourseName(String(c?.name || "").replace(/\s+/g, " ").trim());
+    if (!name) continue;
+    let period = String(c?.period || "").trim();
+    if (!period) {
+      do {
+        slot += 1;
+        period = `P${slot}`;
+      } while (usedPeriods.has(period.toUpperCase()));
+      usedPeriods.add(period.toUpperCase());
+    }
+    const freePeriod = Boolean(c?.freePeriod);
+    classes.push({
+      id: classIdFor(name, period, term, used),
+      name,
+      period,
+      term,
+      subject: freePeriod ? "" : subjectFromCourseName(name),
+      freePeriod,
+      teacher: String(c?.teacher || "").trim(),
+      room: String(c?.room || "").trim(),
+      meetings: Array.isArray(c?.meetings) ? c.meetings : [],
+    });
   }
+  return classes;
 }
 
-export async function saveScheduleFromPdf(ownerId, buffer, filename = "schedule.pdf") {
+export async function loadSchedule(ownerId) {
+  const raw = await getDoc(scheduleCollection(ownerId), "classes");
+  if (!raw) {
+    return { classes: [], updated: "", source: "", school: "", termLabel: "", pdf: "" };
+  }
+  const classes = Array.isArray(raw?.classes) ? raw.classes : [];
+  return {
+    classes,
+    updated: String(raw.updated || ""),
+    source: normalizeScheduleSource(raw.source),
+    school: String(raw.school || ""),
+    termLabel: String(raw.termLabel || ""),
+    pdf: String(raw.pdf || ""),
+  };
+}
+
+/**
+ * Parse and store an uploaded schedule PDF.
+ * `student` picks the parser: door "eps" (or no student) uses the EPS card
+ * parser; door "other" sends the text to the student's model. `req` lets the
+ * model path see a Bearer key on the request, same as chat.
+ */
+export async function saveScheduleFromPdf(
+  ownerId,
+  buffer,
+  filename = "schedule.pdf",
+  { student = null, req = null } = {}
+) {
   const owner = String(ownerId || "").trim();
   if (!owner) {
     const err = new Error("Sign in first.");
@@ -491,35 +567,147 @@ export async function saveScheduleFromPdf(ownerId, buffer, filename = "schedule.
   }
 
   const text = await extractPdfText(buffer);
-  const parsed = parseScheduleText(text);
-  const dir = ownerDir(owner);
-  await mkdir(dir, { recursive: true });
-
+  const door = scheduleDoorFor(student);
+  let classes;
+  let source = "eps-card";
+  let school = "";
+  let termLabel = "";
+  if (door === "other") {
+    const parsed = await parseScheduleWithModel(text, { student, req });
+    classes = classesFromModelSchedule(parsed);
+    if (!classes.length) {
+      const err = new Error("Could not find any classes in that PDF. Upload a schedule that lists your courses.");
+      err.status = 400;
+      throw err;
+    }
+    source = "llm";
+    school = parsed.school || "";
+    termLabel = parsed.termLabel || "";
+  } else {
+    classes = parseScheduleText(text).classes;
+  }
   const safeName = String(filename || "schedule.pdf")
     .replace(/[^A-Za-z0-9._-]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 80) || "schedule.pdf";
   const pdfName = safeName.toLowerCase().endsWith(".pdf") ? safeName : `${safeName}.pdf`;
-  await writeFile(join(dir, pdfName), buffer);
+  await putBlob(`${scheduleCollection(owner)}/${pdfName}`, buffer, {
+    contentType: "application/pdf",
+  });
 
   const payload = {
-    classes: parsed.classes,
+    classes,
     updated: new Date().toISOString(),
     pdf: pdfName,
+    source,
+    school,
+    termLabel,
   };
-  await writeJsonAtomic(classesPath(owner), payload);
+  await writeClassesDoc(owner, payload);
   return payload;
 }
 
+/**
+ * Persist a schedule that did not come from a PDF (four11 sync for the EPS door).
+ * Same classes.json shape as the upload path, no pdf field.
+ */
+export async function saveScheduleClasses(ownerId, { classes, source, school = "", termLabel = "" }) {
+  const owner = String(ownerId || "").trim();
+  if (!owner) throw new Error("Schedule owner is required.");
+  if (!Array.isArray(classes) || !classes.length) {
+    const err = new Error("No classes to save.");
+    err.status = 400;
+    throw err;
+  }
+  const payload = {
+    classes,
+    updated: new Date().toISOString(),
+    pdf: "",
+    source: normalizeScheduleSource(source),
+    school: String(school || ""),
+    termLabel: String(termLabel || ""),
+  };
+  await writeClassesDoc(owner, payload);
+  return payload;
+}
+
+/**
+ * Today's meetings for a schedule that stores its own times (source "llm").
+ * Same row shape as meetingsForToday so the client code paths do not change:
+ * { period, start, end, name, classId, freePeriod, current, term, day }.
+ * Returns [] on weekends or when no class has a meeting today.
+ */
+export function todayMeetingsFor(schedule, date = new Date(), timeZone = DEFAULT_TZ) {
+  const classes = Array.isArray(schedule?.classes) ? schedule.classes : [];
+  const parts = zonedParts(date, timeZone);
+  const dow = weekdayNumber(parts.weekday);
+  if (dow < 1 || dow > 5) return [];
+  const today = parts.weekday;
+  const nowMin = Number(parts.hour) * 60 + Number(parts.minute);
+  const rows = [];
+  for (const klass of classes) {
+    for (const m of Array.isArray(klass?.meetings) ? klass.meetings : []) {
+      if (!m || m.day !== today) continue;
+      const startMin = minutesFromHhmm(m.start);
+      const endMin = minutesFromHhmm(m.end);
+      if (startMin < 0 || endMin < 0) continue;
+      rows.push({
+        period: String(klass.period || ""),
+        start: m.start,
+        end: m.end,
+        name: prettyCourseName(klass.name || "") || FREE_NAME,
+        classId: klass.id || "",
+        freePeriod: Boolean(klass.freePeriod),
+        current: nowMin >= startMin && nowMin < endMin,
+        term: klass.term || "",
+        day: today,
+      });
+    }
+  }
+  rows.sort((a, b) => minutesFromHhmm(a.start) - minutesFromHhmm(b.start));
+  return rows;
+}
+
+/** True when a schedule stores at least one weekday/time meeting. */
+export function scheduleHasMeetings(schedule) {
+  return (Array.isArray(schedule?.classes) ? schedule.classes : []).some(
+    (c) => Array.isArray(c?.meetings) && c.meetings.length > 0
+  );
+}
+
 export function publicSchedule(stored, bells = loadBells(), now = new Date()) {
+  const source = normalizeScheduleSource(stored?.source);
   const classes = (Array.isArray(stored?.classes) ? stored.classes : []).map((c) => ({
     ...c,
     name: prettyCourseName(c?.name || ""),
   }));
+  const common = {
+    classes,
+    source,
+    school: String(stored?.school || ""),
+    termLabel: String(stored?.termLabel || ""),
+  };
+
+  if (source === "llm") {
+    // Not an EPS schedule: EPS bells do not apply. Use stored meetings when the
+    // PDF had times, otherwise say so instead of pretending.
+    const hasTimes = scheduleHasMeetings(stored);
+    const parts = zonedParts(now, DEFAULT_TZ);
+    return {
+      ...common,
+      bells: null,
+      noBellTimes: !hasTimes,
+      todayKey: `${parts.year}-${parts.month}-${parts.day}`,
+      meetings: hasTimes ? todayMeetingsFor({ ...stored, classes }, now) : [],
+      term: "",
+    };
+  }
+
   const todayKey = todayKeyFromBells(bells, now);
   return {
-    classes,
+    ...common,
     bells,
+    noBellTimes: false,
     todayKey,
     meetings: meetingsForToday(classes, bells, now),
     term: termForDate(bells, todayKey),
@@ -575,7 +763,10 @@ export function mountSchedule(app, { requireStudent, fail, upload }) {
       if (!file?.buffer) {
         return res.status(400).json({ error: "Attach a PDF as field pdf." });
       }
-      const stored = await saveScheduleFromPdf(ownerId, file.buffer, file.originalname);
+      const stored = await saveScheduleFromPdf(ownerId, file.buffer, file.originalname, {
+        student,
+        req,
+      });
       return res.json(publicSchedule(stored));
     } catch (err) {
       return fail(res, err, err.status || 400);
@@ -592,9 +783,12 @@ export function mountSchedule(app, { requireStudent, fail, upload }) {
       }
       const stored = await loadSchedule(ownerId);
       const meta = await loadWorkspaceMeta(ownerId).catch(() => ({ classAliases: {} }));
+      // No schedule yet: an "other" door student must not be shown EPS bells.
+      const source = stored.source || (scheduleDoorFor(student) === "other" ? "llm" : "eps-card");
       return res.json(
         publicSchedule({
           ...stored,
+          source,
           classes: applyClassAliases(stored.classes || [], meta.classAliases),
         })
       );

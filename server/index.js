@@ -5,6 +5,9 @@
  * Port 3006 — public hostname api.epsynapse.com (own tunnel).
  */
 
+// Must stay the first import: it awaits Secret Manager (App Engine) before any other
+// module reads process.env. See boot-secrets.js and docs/GCP.md.
+import "./boot-secrets.js";
 import express from "express";
 import cors from "cors";
 import {
@@ -138,6 +141,8 @@ import {
 } from "./chat-history.js";
 import multer from "multer";
 import { bertEnabled, probeBertService } from "./bert.js";
+import { canvasOAuthPublic, ensureFreshCanvasToken, mountCanvasOAuth } from "./canvas-oauth.js";
+import { four11Configured, mountFour11 } from "./four11.js";
 import { listNotes, mountNotes } from "./notes.js";
 import { mountResearch } from "./research-metrics.js";
 import { mountMcp } from "./mcp-http.js";
@@ -252,7 +257,8 @@ async function requireStudent(req, res) {
     });
     return null;
   }
-  return student;
+  // No-op unless the student connected Canvas through OAuth and the hour is nearly up.
+  return ensureFreshCanvasToken(student);
 }
 
 const MS_REDIRECT_URI =
@@ -376,6 +382,8 @@ function publicMe(student) {
     msCheckedAt: ms.checkedAt,
     adminConsentUrl: adminConsentUrl(),
     consentRequest: consentRequestFor(student, "onenote"),
+    canvasOAuth: canvasOAuthPublic(student),
+    four11Configured: four11Configured(),
   };
 }
 
@@ -989,6 +997,9 @@ app.post("/v1/me", async (req, res) => {
     if (pasted) {
       const self = await validateToken(patch.canvasHost || student.canvasHost, pasted);
       patch.canvasToken = pasted;
+      patch.canvasRefreshToken = "";
+      patch.canvasTokenExp = 0;
+      patch.canvasAuthMode = "";
       if (self.displayName) patch.displayName = self.displayName;
     }
 
@@ -1065,6 +1076,10 @@ app.post("/v1/me/canvas", async (req, res) => {
     const self = await validateToken(host, token);
     student.canvasHost = host;
     student.canvasToken = token;
+    // A pasted token replaces any OAuth connection; never try to refresh it.
+    student.canvasRefreshToken = "";
+    student.canvasTokenExp = 0;
+    student.canvasAuthMode = "";
     student.displayName = self.displayName || student.displayName;
     await saveStudent(student);
     return res.json(publicMe(student));
@@ -2649,6 +2664,10 @@ mountSchedule(app, {
 mountNotes(app, { requireStudent, fail });
 mountResearch(app, { fail });
 mountMcp(app, { publicMe });
+// EPS door: Canvas via the school's Developer Key, schedule via the four11 API.
+// Both are off until IT hands over the keys (docs/IT_REQUEST.md).
+mountCanvasOAuth(app);
+mountFour11(app);
 
 app.listen(PORT, HOST, () => {
   console.log(`[jype-server] listening on http://${HOST}:${PORT}`);

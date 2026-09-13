@@ -101,10 +101,25 @@ Then hit https://epsynapse.com and confirm it is 200 with the new content.
 
 ## What this is
 
-EPSynapse. Domain `epsynapse.com`. School polling for Eastside Prep first, then the wider school-data idea. Product notes live in [`ideas.md`](ideas.md).
+EPSynapse. Domain `epsynapse.com`. A student home page: schedule, Canvas, notes, todos, and (for EPS) the Microsoft apps. Product notes live in [`ideas.md`](ideas.md).
 
 Live site: https://epsynapse.com
 Public API health: https://api.epsynapse.com/health
+
+### Two doors
+
+Every student record has `door` and `paused` (`server/students.js`).
+
+- `eps`: Eastside Prep student. Will sign in with the school Microsoft account and get four11 schedule, Canvas (OAuth), OneDrive, OneNote, Outlook, Teams in that flow. Not live until IT hands over the keys in [`docs/IT_REQUEST.md`](docs/IT_REQUEST.md). The web and iOS EPS button shows "coming soon". Existing EPS Google accounts are paused: `/v1/me` works and reports `paused: true`, everything else returns 423.
+- `other`: any other school. Google sign-in, schedule PDF parsed by the student's own model (`server/schedule-llm.js`), manual Canvas token, own model keys.
+
+No school picker, no student id, no roster matching. Do not add them back. Flip doors with `node --env-file=.env tools/set-door.mjs` from `server/`.
+
+### Where the API is going
+
+The API will move to a school-owned Google Cloud project on the same stack as epschedule (App Engine, Firestore, Cloud Storage, Secret Manager) so it outlives the current students. See [`docs/GCP.md`](docs/GCP.md). Storage already goes through `server/store.js` and `server/blobs.js`; the Mac runs `STORAGE_BACKEND=files` (today's `server/data/` layout) and App Engine runs `firestore` + `gcs` with no code change. Do not move the API to Vercel.
+
+BERT is off (`BERT_ENABLED` unset). Notes are classified by the student's model. Keep `server/bert.js`, `ml/`, `models/`, and the `bert:*` scripts; do not delete them.
 
 ## Repo map
 
@@ -117,7 +132,10 @@ Public API health: https://api.epsynapse.com/health
 | `ios/` | Native iPhone and iPad app. See `docs/IOS.md`. Not shipped to Vercel. |
 | `server/` | Mac Express API. Port 3006. |
 | `server/.env` | Local secrets. Never commit. Copy from `server/.env.example`. |
-| `ml/`, `models/` | Local BERT. Not shipped to Vercel. |
+| `server/store.js`, `server/blobs.js`, `server/secrets.js` | Storage and secrets layer: files on the Mac, Firestore + GCS + Secret Manager on App Engine. |
+| `server/app.yaml`, `server/tools/migrate-to-gcp.mjs` | App Engine deploy config and the one-time data copy. |
+| `server/canvas-oauth.js`, `server/four11.js` | EPS door: Canvas Developer Key flow and four11 schedule API. Off until IT sends keys. |
+| `ml/`, `models/` | Local BERT. Off by default, kept for later. Not shipped to Vercel. |
 | `docs/` | How to start, tunnel, local API. Not shipped to Vercel. |
 | `deploy/cloudflared/` | Tunnel notes and setup script. Credentials stay in `~/.cloudflared/`. |
 | `deploy/launchagents/` | `com.jype.server` and `com.jype.cloudflared` plists. |
@@ -156,7 +174,7 @@ Do not attach `api.epsynapse.com` as a Vercel project domain.
 | `npm run server` | Start Mac Express API (port 3006) |
 | `npm run server:dev` | Watch mode |
 | `npm run verify:public-api` | `curl https://api.epsynapse.com/health` |
-| `npm run bert:serve` | Local BERT on port 3007 |
+| `npm run bert:serve` | Local BERT on port 3007 (only with `BERT_ENABLED=1`) |
 | `python3 -m http.server 8080` | Static site local preview |
 | `npm run deploy:web` | Production deploy of the Vercel site |
 
@@ -186,6 +204,10 @@ Full rule: [`.cursor/rules/subagent-model.mdc`](.cursor/rules/subagent-model.mdc
 - [`docs/PUBLIC_TUNNEL.md`](docs/PUBLIC_TUNNEL.md)
 - [`docs/LOCAL_BACKEND.md`](docs/LOCAL_BACKEND.md)
 - [`docs/IOS.md`](docs/IOS.md)
+- [`docs/IT_REQUEST.md`](docs/IT_REQUEST.md), what we asked school IT for
+- [`docs/EPS_INTEGRATIONS.md`](docs/EPS_INTEGRATIONS.md), Canvas OAuth and four11
+- [`docs/GCP.md`](docs/GCP.md), the App Engine target
+- [`docs/MICROSOFT_APP.md`](docs/MICROSOFT_APP.md)
 - [`deploy/cloudflared/README.md`](deploy/cloudflared/README.md)
 
 ## Frontend note

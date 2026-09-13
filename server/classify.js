@@ -1,6 +1,7 @@
 /**
  * EPSynapse notes classifier.
- * BERT vs fine-tuned BERT, then the student's model maps onto their classes.
+ * The student's model maps notes onto their classes. When BERT_ENABLED=1, BERT
+ * and fine-tuned BERT vote first and the model judges those votes.
  */
 
 import * as agent from "./agent.js";
@@ -124,10 +125,26 @@ function postJson(provider, useKey, system, user, extra) {
   });
 }
 
-async function completeJson(req, student, system, user) {
+const NO_REQ = { get: () => "" };
+
+/**
+ * Which keys the student can use for the given provider. `req` may be omitted
+ * (server-side callers with no HTTP request); then only stored and demo keys count.
+ */
+export function studentModelKeys(req, student) {
   const providerId = String(student?.modelProvider || "groq");
   const provider = PROVIDERS[providerId] || PROVIDERS.groq;
-  const { keys, source } = resolveStudentKeys(req, provider.id, student);
+  const { keys, source } = resolveStudentKeys(req || NO_REQ, provider.id, student);
+  return { provider, keys, source };
+}
+
+/**
+ * One non-streaming chat completion with the student's own key, low temperature.
+ * Shared by the notes orchestrator and the schedule parser so provider handling
+ * lives in one place.
+ */
+export async function completeJson(req, student, system, user) {
+  const { provider, keys, source } = studentModelKeys(req, student);
   if (!keys.length) {
     const err = new Error(MISSING_KEY_ERROR);
     err.status = 401;
@@ -220,53 +237,76 @@ function agreementSubject(votes) {
   return best || OTHER_SUBJECT;
 }
 
-export async function orchestrateWithStudentKey(rawText, votes, { req, student, classes } = {}) {
-  const classNames = classNamesFrom(classes);
-  const usingClasses = classNames.length > 0;
-  const allowed = usingClasses ? [...classNames, OTHER_SUBJECT] : SUBJECTS_PLUS_OTHER;
-  const system = usingClasses
+function hasVotes(votes) {
+  return Boolean(votes?.baseBert || votes?.fineTunedBert);
+}
+
+const VOTE_SCHEMA =
+  'Schema: {"baseBertCorrect": boolean, "fineTunedBertCorrect": boolean, "subject": string, "confidence": number, "rationale": string}';
+const PLAIN_SCHEMA = 'Schema: {"subject": string, "confidence": number, "rationale": string}';
+
+function orchestratorSystemPrompt({ usingClasses, allowed, withVotes }) {
+  const lead = withVotes
     ? [
         "You orchestrate two subject classifiers for student notes.",
         "BERT and fine-tuned BERT each voted a coarse academic subject.",
         "First decide whether each vote is correct for these notes.",
-        `Then pick exactly one of this student's classes: ${allowed.join(", ")}.`,
+      ]
+    : ["You label student notes with the class they belong to."];
+  const body = usingClasses
+    ? [
+        `${withVotes ? "Then pick" : "Pick"} exactly one of this student's classes: ${allowed.join(", ")}.`,
         "Do not invent a class name.",
-        "Map a correct coarse subject onto the matching class.",
-        "If both votes are wrong, still pick the best class from the notes.",
+        ...(withVotes
+          ? ["Map a correct coarse subject onto the matching class.", "If both votes are wrong, still pick the best class from the notes."]
+          : ["Read the notes and pick the class whose topic matches best."]),
         "Use Other only when none of the classes fit.",
-        "Respond with a single JSON object only, no markdown.",
-        'Schema: {"baseBertCorrect": boolean, "fineTunedBertCorrect": boolean, "subject": string, "confidence": number, "rationale": string}',
-        "confidence is 0..1.",
-      ].join(" ")
+      ]
     : [
-        "You orchestrate two subject classifiers for student notes.",
-        "BERT and fine-tuned BERT each voted a coarse academic subject.",
-        "First decide whether each vote is correct for these notes.",
-        `Then pick exactly one of: ${SUBJECTS_PLUS_OTHER.join(", ")}.`,
+        `${withVotes ? "Then pick" : "Pick"} exactly one of: ${allowed.join(", ")}.`,
         "Do not invent a new subject name.",
-        "Prefer a vote you judged correct. If they agree and both look right, use that subject.",
-        "If they disagree, trust the notes.",
-        "Respond with a single JSON object only, no markdown.",
-        'Schema: {"baseBertCorrect": boolean, "fineTunedBertCorrect": boolean, "subject": string, "confidence": number, "rationale": string}',
-        "confidence is 0..1.",
-      ].join(" ");
+        ...(withVotes
+          ? ["Prefer a vote you judged correct. If they agree and both look right, use that subject.", "If they disagree, trust the notes."]
+          : ["Trust the notes."]),
+      ];
+  return [
+    ...lead,
+    ...body,
+    "Respond with a single JSON object only, no markdown.",
+    withVotes ? VOTE_SCHEMA : PLAIN_SCHEMA,
+    "confidence is 0..1.",
+  ].join(" ");
+}
+
+export async function orchestrateWithStudentKey(rawText, votes, { req, student, classes } = {}) {
+  const classNames = classNamesFrom(classes);
+  const usingClasses = classNames.length > 0;
+  const allowed = usingClasses ? [...classNames, OTHER_SUBJECT] : SUBJECTS_PLUS_OTHER;
+  const withVotes = hasVotes(votes);
+  const system = orchestratorSystemPrompt({ usingClasses, allowed, withVotes });
 
   const classBlock = usingClasses
     ? ["Student classes:", ...(classes || []).map(classLine).filter(Boolean), ""]
     : [];
 
+  const voteBlock = withVotes
+    ? [
+        "Classifier votes (JSON):",
+        JSON.stringify(
+          {
+            baseBert: votes.baseBert,
+            fineTunedBert: votes.fineTunedBert,
+          },
+          null,
+          2
+        ),
+        "",
+      ]
+    : [];
+
   const user = [
     ...classBlock,
-    "Classifier votes (JSON):",
-    JSON.stringify(
-      {
-        baseBert: votes.baseBert,
-        fineTunedBert: votes.fineTunedBert,
-      },
-      null,
-      2
-    ),
-    "",
+    ...voteBlock,
     "Notes:",
     String(rawText || "").slice(0, 8000),
   ].join("\n");
@@ -284,18 +324,22 @@ export async function orchestrateWithStudentKey(rawText, votes, { req, student, 
     rationale: typeof parsed.rationale === "string" ? parsed.rationale : "",
     model: result.model,
     latencyMs: result.latencyMs,
-    baseBertCorrect: parseCorrectFlag(parsed.baseBertCorrect),
-    fineTunedBertCorrect: parseCorrectFlag(parsed.fineTunedBertCorrect),
+    baseBertCorrect: withVotes ? parseCorrectFlag(parsed.baseBertCorrect) : null,
+    fineTunedBertCorrect: withVotes ? parseCorrectFlag(parsed.fineTunedBertCorrect) : null,
   };
 }
 
 export async function classifyEnsemble(rawText, { req, student, classes } = {}) {
+  // BERT is off unless BERT_ENABLED=1 (bert.js). Off is the normal path: no
+  // sidecar call, no votes, and the student's model labels the notes alone.
   const bertResult = await classifyWithBert(rawText);
 
   let bertStatus = { status: "ok" };
   let baseBert = null;
   let fineTunedBert = null;
-  if (!bertResult.ok) {
+  if (!bertResult.ok && bertResult.status === "off") {
+    bertStatus = { status: "off" };
+  } else if (!bertResult.ok) {
     bertStatus = { status: "unavailable", error: bertResult.error };
   } else {
     baseBert = normalizeBertVote(bertResult.votes?.zeroShotBert);
@@ -316,18 +360,21 @@ export async function classifyEnsemble(rawText, { req, student, classes } = {}) 
   try {
     orchestrator = await orchestrateWithStudentKey(rawText, votes, { req, student, classes });
   } catch (err) {
+    const voted = hasVotes(votes);
     const agreed = agreementSubject(votes);
     const fallback = classNamesFrom(classes).length
       ? matchClassForSubject(classes, agreed)?.name || OTHER_SUBJECT
       : agreed;
-    const conf =
-      (fineTunedBert && fineTunedBert.confidence) ||
-      (baseBert && baseBert.confidence) ||
-      0.4;
+    const conf = voted
+      ? (fineTunedBert && fineTunedBert.confidence) || (baseBert && baseBert.confidence) || 0.4
+      : 0;
+    const why = err?.message || "no student key";
     orchestrator = {
       subject: fallback,
       confidence: conf,
-      rationale: `Orchestrator used BERT agreement (${err?.message || "no student key"}).`,
+      rationale: voted
+        ? `Orchestrator used BERT agreement (${why}).`
+        : `The model could not label these notes (${why}). Pick the class by hand.`,
       model: "",
       latencyMs: 0,
       degraded: true,

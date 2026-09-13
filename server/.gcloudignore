@@ -1,0 +1,17 @@
+# Files gcloud app deploy must not upload. Same syntax as .gitignore.
+.gcloudignore
+.git
+.gitignore
+
+# App Engine runs npm install itself.
+node_modules/
+
+# Mac-only state. Firestore and Cloud Storage hold this in the cloud.
+data/
+
+# Secrets stay in Secret Manager.
+.env
+.env.*
+
+*.log
+.DS_Store

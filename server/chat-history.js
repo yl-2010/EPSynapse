@@ -4,19 +4,14 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { mkdir, readdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
-import { dirname, join, resolve, sep } from "node:path";
-import { fileURLToPath } from "node:url";
 import { sanitizeMessages } from "./agent.js";
+import { deleteDoc, getDoc, listIds, putDoc } from "./store.js";
 import { googleFileId as studentFileId } from "./students.js";
 
 const MAX_CHATS = 80;
 const MAX_TITLE = 72;
 const ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-function chatsRoot() {
-  return join(dirname(fileURLToPath(import.meta.url)), "data", "chats");
-}
+const CHATS = "chats";
 
 export function ownerIdForStudent(student) {
   const sub = String(student?.googleSub || "").trim();
@@ -36,22 +31,13 @@ export function assertChatId(raw) {
   return id;
 }
 
-function ownerDir(ownerId) {
-  const root = resolve(chatsRoot());
-  const full = resolve(root, ownerId);
-  if (full !== join(root, ownerId) && !full.startsWith(root + sep)) {
+/** store.js collection for one owner: chats/<ownerId> -> data/chats/<ownerId>/<chatId>.json */
+function chatsCollection(ownerId) {
+  const id = String(ownerId || "").trim();
+  if (!id || id === "." || id === ".." || /[\\/\0]/.test(id)) {
     throw new Error("Invalid chat owner.");
   }
-  return full;
-}
-
-function chatPath(ownerId, chatId) {
-  const dir = ownerDir(ownerId);
-  const full = resolve(dir, `${chatId}.json`);
-  if (full !== join(dir, `${chatId}.json`) && !full.startsWith(dir + sep)) {
-    throw new Error("Invalid chat id.");
-  }
-  return full;
+  return `${CHATS}/${id}`;
 }
 
 function titleFromMessages(messages, fallback = "") {
@@ -99,24 +85,11 @@ function publicRow(chat) {
 }
 
 async function readChatFile(ownerId, chatId) {
-  try {
-    const raw = await readFile(chatPath(ownerId, chatId), "utf8");
-    const data = JSON.parse(raw);
-    if (!data || typeof data !== "object") return null;
-    return data;
-  } catch (err) {
-    if (err && err.code === "ENOENT") return null;
-    throw err;
-  }
+  return getDoc(chatsCollection(ownerId), chatId);
 }
 
 async function writeChatFile(ownerId, chat) {
-  const dir = ownerDir(ownerId);
-  await mkdir(dir, { recursive: true });
-  const dest = chatPath(ownerId, chat.sessionId);
-  const tmp = `${dest}.${process.pid}.${Date.now()}.tmp`;
-  await writeFile(tmp, JSON.stringify(chat, null, 2), "utf8");
-  await rename(tmp, dest);
+  await putDoc(chatsCollection(ownerId), chat.sessionId, chat);
 }
 
 export async function persistChat({ ownerId, sessionId, messages, title }) {
@@ -148,24 +121,16 @@ async function pruneOldChats(ownerId) {
   const rows = await listChatFiles(ownerId);
   if (rows.length <= MAX_CHATS) return;
   const extra = rows.slice(MAX_CHATS);
+  const collection = chatsCollection(ownerId);
   await Promise.all(
-    extra.map((row) => unlink(chatPath(ownerId, row.sessionId)).catch(() => {}))
+    extra.map((row) => deleteDoc(collection, row.sessionId).catch(() => {}))
   );
 }
 
 async function listChatFiles(ownerId) {
-  const dir = ownerDir(ownerId);
-  let names = [];
-  try {
-    names = await readdir(dir);
-  } catch (err) {
-    if (err && err.code === "ENOENT") return [];
-    throw err;
-  }
+  const ids = await listIds(chatsCollection(ownerId));
   const rows = [];
-  for (const name of names) {
-    if (!name.endsWith(".json")) continue;
-    const id = name.slice(0, -5);
+  for (const id of ids) {
     if (!ID_RE.test(id)) continue;
     const chat = await readChatFile(ownerId, id);
     if (!chat?.sessionId) continue;

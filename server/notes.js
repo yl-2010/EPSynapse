@@ -3,59 +3,35 @@
  * Research events never store full note text. Metrics never return raw notes.
  */
 
-import { randomBytes, randomUUID } from "node:crypto";
-import { mkdir, readdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
-import { dirname, join, resolve, sep } from "node:path";
-import { fileURLToPath } from "node:url";
+import { randomUUID } from "node:crypto";
 import { ownerIdForStudent } from "./chat-history.js";
 import { isHiddenClassCourse, listCourses } from "./canvas.js";
 import { classifyEnsemble } from "./classify.js";
 import { loadSchedule, matchClassByLabel, matchClassForSubject } from "./schedule.js";
+import { deleteDoc, getDoc, listDocs, listIds, putDoc } from "./store.js";
 import { OTHER_SUBJECT, isKnownSubject, normalizeSubjectLabel, subjectFromCourseName } from "./subjects.js";
 
 const ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_TEXT = 12000;
 const PREVIEW = 80;
+const NOTES = "notes";
+const RESEARCH = "research";
 
-function rootDir() {
-  return dirname(fileURLToPath(import.meta.url));
-}
-
-function notesRoot() {
-  return join(rootDir(), "data", "notes");
-}
-
-function researchRoot() {
-  return join(rootDir(), "data", "research");
-}
-
-function ownerDir(root, ownerId) {
-  const base = resolve(root);
-  const full = resolve(base, ownerId);
-  if (full !== join(base, ownerId) && !full.startsWith(base + sep)) {
+function assertOwner(ownerId) {
+  const id = String(ownerId || "").trim();
+  if (!id || id === "." || id === ".." || /[\\/\0]/.test(id)) {
     throw new Error("Invalid notes owner.");
   }
-  return full;
+  return id;
 }
 
-function notePath(ownerId, id) {
-  return join(ownerDir(notesRoot(), ownerId), `${id}.json`);
+/** store.js collection for one owner: notes/<ownerId> -> data/notes/<ownerId>/<id>.json */
+function notesCollection(ownerId) {
+  return `${NOTES}/${assertOwner(ownerId)}`;
 }
 
-function eventPath(ownerId, eventId) {
-  return join(ownerDir(researchRoot(), ownerId), `${eventId}.json`);
-}
-
-async function writeJsonAtomic(filePath, data) {
-  await mkdir(dirname(filePath), { recursive: true });
-  const tmp = `${filePath}.${randomBytes(8).toString("hex")}.tmp`;
-  try {
-    await writeFile(tmp, `${JSON.stringify(data, null, 2)}\n`, "utf8");
-    await rename(tmp, filePath);
-  } catch (err) {
-    await unlink(tmp).catch(() => {});
-    throw err;
-  }
+function researchCollection(ownerId) {
+  return `${RESEARCH}/${assertOwner(ownerId)}`;
 }
 
 function titleFromText(text) {
@@ -75,16 +51,6 @@ function assertNoteId(raw) {
     throw err;
   }
   return id;
-}
-
-async function readJson(filePath) {
-  try {
-    const data = JSON.parse(await readFile(filePath, "utf8"));
-    return data && typeof data === "object" ? data : null;
-  } catch (err) {
-    if (err && err.code === "ENOENT") return null;
-    throw err;
-  }
 }
 
 function publicNote(note) {
@@ -130,17 +96,25 @@ function researchEventFromNote(note, { includePreview = true } = {}) {
 }
 
 async function saveNote(ownerId, note) {
-  await writeJsonAtomic(notePath(ownerId, note.id), note);
+  await putDoc(notesCollection(ownerId), note.id, note);
 }
 
 async function saveEvent(ownerId, event) {
   const stored = { ...event };
   delete stored.text;
-  await writeJsonAtomic(eventPath(ownerId, event.eventId), stored);
+  const id = String(stored.eventId || "").trim();
+  if (!id) return;
+  await putDoc(researchCollection(ownerId), id, stored);
+}
+
+async function readEvent(ownerId, eventId) {
+  const id = String(eventId || "").trim();
+  if (!id) return null;
+  return getDoc(researchCollection(ownerId), id);
 }
 
 export async function loadNote(ownerId, id) {
-  const note = await readJson(notePath(ownerId, assertNoteId(id)));
+  const note = await getDoc(notesCollection(ownerId), assertNoteId(id));
   if (!note) {
     const err = new Error("Unknown note.");
     err.status = 404;
@@ -150,20 +124,12 @@ export async function loadNote(ownerId, id) {
 }
 
 export async function listNotes(ownerId) {
-  const dir = ownerDir(notesRoot(), ownerId);
-  let names = [];
-  try {
-    names = await readdir(dir);
-  } catch (err) {
-    if (err && err.code === "ENOENT") return [];
-    throw err;
-  }
+  const collection = notesCollection(ownerId);
+  const ids = await listIds(collection);
   const rows = [];
-  for (const name of names) {
-    if (!name.endsWith(".json")) continue;
-    const id = name.slice(0, -5);
+  for (const id of ids) {
     if (!ID_RE.test(id)) continue;
-    const note = await readJson(join(dir, name));
+    const note = await getDoc(collection, id);
     if (note?.id) rows.push(note);
   }
   rows.sort((a, b) => String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")));
@@ -171,26 +137,17 @@ export async function listNotes(ownerId) {
 }
 
 export async function listResearchEvents() {
-  const root = researchRoot();
-  let owners = [];
-  try {
-    owners = await readdir(root);
-  } catch (err) {
-    if (err && err.code === "ENOENT") return [];
-    throw err;
-  }
+  const owners = await listIds(RESEARCH);
   const events = [];
   for (const owner of owners) {
     if (owner.startsWith(".")) continue;
-    let names = [];
+    let docs = [];
     try {
-      names = await readdir(join(root, owner));
+      docs = await listDocs(researchCollection(owner));
     } catch {
       continue;
     }
-    for (const name of names) {
-      if (!name.endsWith(".json")) continue;
-      const event = await readJson(join(root, owner, name));
+    for (const { data: event } of docs) {
       if (!event || typeof event !== "object") continue;
       const { text, ...safe } = event;
       events.push(safe);
@@ -297,7 +254,7 @@ export async function patchNoteSubject(ownerId, id, subject, { student } = {}) {
   note.subject = label;
   note.updatedAt = new Date().toISOString();
   await saveNote(ownerId, note);
-  const existing = await readJson(eventPath(ownerId, note.eventId));
+  const existing = await readEvent(ownerId, note.eventId);
   const event = existing || researchEventFromNote(note);
   event.userGoldSubject = label;
   event.finalSubject = event.finalSubject || note.subject;
@@ -324,7 +281,7 @@ export async function updateNoteText(ownerId, id, rawText) {
   note.title = titleFromText(text);
   note.updatedAt = new Date().toISOString();
   await saveNote(ownerId, note);
-  const existing = await readJson(eventPath(ownerId, note.eventId));
+  const existing = await readEvent(ownerId, note.eventId);
   const event = existing || researchEventFromNote(note);
   event.textLength = text.length;
   event.textPreview = text.replace(/\s+/g, " ").trim().slice(0, PREVIEW);
@@ -335,11 +292,9 @@ export async function updateNoteText(ownerId, id, rawText) {
 
 export async function deleteNote(ownerId, id) {
   const note = await loadNote(ownerId, id);
-  await unlink(notePath(ownerId, note.id)).catch((err) => {
-    if (err && err.code !== "ENOENT") throw err;
-  });
+  await deleteDoc(notesCollection(ownerId), note.id);
   if (note.eventId) {
-    await unlink(eventPath(ownerId, note.eventId)).catch(() => {});
+    await deleteDoc(researchCollection(ownerId), note.eventId).catch(() => {});
   }
   return { ok: true, id: note.id };
 }

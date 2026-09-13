@@ -7,14 +7,22 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { listResearchEvents } from "./notes.js";
+import { getDoc } from "./store.js";
 import { FIXED_SUBJECTS, isFixedSubject, normalizeSubjectLabel, taxonomyFromLabel } from "./subjects.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..");
+/**
+ * Frozen eval lives in the repo root (shipped with the site). The second entry is
+ * the files-mode path of store.js doc meta/research-metrics, which is what the
+ * App Engine deploy reads because the repo root is not uploaded with server/.
+ */
 const DEFAULT_FROZEN_PATHS = [
   path.join(REPO_ROOT, "research-metrics.json"),
   path.join(__dirname, "data", "research-metrics.json"),
 ];
+const FROZEN_COLLECTION = "meta";
+const FROZEN_DOC = "research-metrics";
 
 const ARM_META = {
   zero_shot: { label: "BERT", voteKey: "baseBert" },
@@ -146,17 +154,24 @@ export function accumulateUserEvents(events) {
   return { byArm, used };
 }
 
-export async function loadFrozenMetrics(filePath) {
-  const paths = filePath ? [filePath] : DEFAULT_FROZEN_PATHS;
-  for (const p of paths) {
-    try {
-      return JSON.parse(await fs.readFile(p, "utf8"));
-    } catch (err) {
-      if (err && err.code === "ENOENT") continue;
-      throw err;
-    }
+async function readJsonFile(p) {
+  try {
+    return JSON.parse(await fs.readFile(p, "utf8"));
+  } catch (err) {
+    if (err && err.code === "ENOENT") return null;
+    throw err;
   }
-  return emptyFrozen();
+}
+
+export async function loadFrozenMetrics(filePath) {
+  if (filePath) {
+    const explicit = await readJsonFile(filePath);
+    return explicit ?? emptyFrozen();
+  }
+  const fromRepo = await readJsonFile(DEFAULT_FROZEN_PATHS[0]);
+  if (fromRepo) return fromRepo;
+  const stored = await getDoc(FROZEN_COLLECTION, FROZEN_DOC);
+  return stored ?? emptyFrozen();
 }
 
 function emptyFrozen() {

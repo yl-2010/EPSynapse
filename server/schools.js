@@ -3,12 +3,11 @@
  * Public JSON never includes roster names.
  */
 
-import { randomBytes } from "node:crypto";
-import { mkdir, readdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
-import { dirname, join, resolve, sep } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { dataRoot, getDoc, listIds, putDoc } from "./store.js";
 
 const LIST_CAP = 50;
+const SCHOOLS = "schools";
 
 const EASTSIDE = {
   slug: "eastside-prep",
@@ -19,8 +18,9 @@ const EASTSIDE = {
   roster: {},
 };
 
+/** Files-mode directory (server/data/schools). Meaningless under Firestore. */
 export function schoolsDir() {
-  return join(dirname(fileURLToPath(import.meta.url)), "data", "schools");
+  return join(dataRoot(), SCHOOLS);
 }
 
 function assertSlug(raw) {
@@ -31,16 +31,6 @@ function assertSlug(raw) {
     throw new Error("Invalid school slug.");
   }
   return slug;
-}
-
-function schoolPath(slug) {
-  const id = assertSlug(slug);
-  const dir = resolve(schoolsDir());
-  const full = resolve(dir, `${id}.json`);
-  if (full !== join(dir, `${id}.json`) && !full.startsWith(dir + sep)) {
-    throw new Error("Invalid school slug.");
-  }
-  return full;
 }
 
 function hydrate(raw) {
@@ -77,47 +67,23 @@ export function publicSchool(school) {
   };
 }
 
-async function writeJsonAtomic(filePath, data) {
-  await mkdir(dirname(filePath), { recursive: true });
-  const tmp = `${filePath}.${randomBytes(8).toString("hex")}.tmp`;
-  try {
-    await writeFile(tmp, `${JSON.stringify(data, null, 2)}\n`, {
-      encoding: "utf8",
-      mode: 0o600,
-    });
-    await rename(tmp, filePath);
-  } catch (err) {
-    await unlink(tmp).catch(() => {});
-    throw err;
-  }
-}
-
 async function seedEastside() {
-  await mkdir(schoolsDir(), { recursive: true });
-  try {
-    await readFile(schoolPath(EASTSIDE.slug), "utf8");
-  } catch (err) {
-    if (err.code !== "ENOENT") throw err;
-    await writeJsonAtomic(schoolPath(EASTSIDE.slug), EASTSIDE);
-  }
+  const existing = await getDoc(SCHOOLS, EASTSIDE.slug);
+  if (!existing) await putDoc(SCHOOLS, EASTSIDE.slug, EASTSIDE);
 }
 
 const seedReady = seedEastside();
 
 export async function getSchool(slug) {
   await seedReady;
-  let path;
+  let id;
   try {
-    path = schoolPath(slug);
+    id = assertSlug(slug);
   } catch {
     return null;
   }
-  try {
-    return hydrate(JSON.parse(await readFile(path, "utf8")));
-  } catch (err) {
-    if (err.code === "ENOENT") return null;
-    throw err;
-  }
+  const raw = await getDoc(SCHOOLS, id);
+  return raw ? hydrate(raw) : null;
 }
 
 function haystack(school) {
@@ -131,18 +97,11 @@ export async function listSchools(query) {
   const q = String(query ?? "")
     .trim()
     .toLowerCase();
-  let names;
-  try {
-    names = await readdir(schoolsDir());
-  } catch (err) {
-    if (err.code === "ENOENT") return [];
-    throw err;
-  }
+  const ids = await listIds(SCHOOLS);
 
   const out = [];
-  for (const name of names.sort()) {
-    if (!name.endsWith(".json")) continue;
-    const school = await getSchool(name.slice(0, -5));
+  for (const id of ids.sort()) {
+    const school = await getSchool(id);
     if (!school) continue;
     if (q && !haystack(school).includes(q)) continue;
     out.push(publicSchool(school));
@@ -211,6 +170,6 @@ export async function setRoster(slug, entries) {
     throw err;
   }
   school.roster = { ...school.roster, ...rosterEntries(entries) };
-  await writeJsonAtomic(schoolPath(school.slug), school);
+  await putDoc(SCHOOLS, assertSlug(school.slug), school);
   return school;
 }

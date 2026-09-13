@@ -4,6 +4,8 @@ Copy-paste card for the person at the Mac Studio: [`MAC_STUDIO.md`](MAC_STUDIO.m
 
 Production site (**https://epsynapse.com**) is on Vercel. The Mac exposes the Express API on port **3006** through a dedicated Cloudflare Tunnel (**https://api.epsynapse.com**).
 
+The same `server/` code can also run on Google App Engine with Firestore and Cloud Storage once school IT gives us a project. Setup, env vars, deploy, and the data migration are in [`GCP.md`](GCP.md). Nothing below changes until that cutover.
+
 ---
 
 ## Pick up a server change (do this on the Mac Studio)

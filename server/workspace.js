@@ -1,12 +1,14 @@
 /**
  * Student-owned todos, class files, and class name overrides.
  * Lives under server/data/workspace/{ownerId}/. Hidden from git with the rest of data/.
+ *
+ * JSON (meta.json, todos/<id>.json, files/.../_meta.json) goes through store.js.
+ * File bytes (files/<classKey>/<name>, files/todos/<todoKey>/<name>) go through blobs.js.
  */
 
-import { randomBytes, randomUUID } from "node:crypto";
-import { mkdir, readdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
-import { dirname, join, resolve, sep } from "node:path";
-import { fileURLToPath } from "node:url";
+import { randomUUID } from "node:crypto";
+import { deleteBlob, getBlob, listBlobs, putBlob } from "./blobs.js";
+import { deleteDoc, getDoc, listIds, putDoc } from "./store.js";
 
 const ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const LOCAL_PREFIX = "local:";
@@ -15,28 +17,21 @@ const TODO_FILE_PREFIX = "todo:";
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const MAX_HTML_PREVIEW = 200 * 1024;
 const META_NAME = "_meta.json";
+const META_DOC = "_meta";
+const WORKSPACE = "workspace";
 const TAGS = new Set(["CW", "HW", "QA", "MA"]);
-
-function rootDir() {
-  return join(dirname(fileURLToPath(import.meta.url)), "data", "workspace");
-}
 
 function assertOwner(ownerId) {
   const id = String(ownerId || "").trim();
-  if (!id || id.includes("..") || /[\\/]/.test(id)) {
+  if (!id || id === "." || id.includes("..") || /[\\/\0]/.test(id)) {
     throw new Error("Invalid workspace owner.");
   }
   return id;
 }
 
-function ownerDir(ownerId) {
-  const id = assertOwner(ownerId);
-  const root = resolve(rootDir());
-  const full = resolve(root, id);
-  if (full !== join(root, id) && !full.startsWith(root + sep)) {
-    throw new Error("Invalid workspace owner.");
-  }
-  return full;
+/** store.js collection workspace/<ownerId> -> data/workspace/<ownerId>/<doc>.json */
+function ownerCollection(ownerId) {
+  return `${WORKSPACE}/${assertOwner(ownerId)}`;
 }
 
 function safeClassKey(raw) {
@@ -67,42 +62,18 @@ export function safeFileName(name) {
   return n;
 }
 
-async function writeJsonAtomic(filePath, data) {
-  await mkdir(dirname(filePath), { recursive: true });
-  const tmp = `${filePath}.${randomBytes(8).toString("hex")}.tmp`;
-  try {
-    await writeFile(tmp, `${JSON.stringify(data, null, 2)}\n`, "utf8");
-    await rename(tmp, filePath);
-  } catch (err) {
-    await unlink(tmp).catch(() => {});
-    throw err;
-  }
+/** store.js collection workspace/<ownerId>/todos -> data/workspace/<ownerId>/todos/<id>.json */
+function todosCollection(ownerId) {
+  return `${ownerCollection(ownerId)}/todos`;
 }
 
-async function readJson(filePath) {
-  try {
-    const data = JSON.parse(await readFile(filePath, "utf8"));
-    return data && typeof data === "object" ? data : null;
-  } catch (err) {
-    if (err && err.code === "ENOENT") return null;
-    throw err;
-  }
-}
-
-function metaPath(ownerId) {
-  return join(ownerDir(ownerId), "meta.json");
-}
-
-function todosDir(ownerId) {
-  return join(ownerDir(ownerId), "todos");
-}
-
-function todoPath(ownerId, id) {
-  return join(todosDir(ownerId), `${id}.json`);
-}
-
-function classFilesDir(ownerId, classId) {
-  return join(ownerDir(ownerId), "files", safeClassKey(classId));
+/**
+ * Class files live at blob key workspace/<ownerId>/files/<classKey>/<name>.
+ * Their sidecar is doc _meta in collection workspace/<ownerId>/files/<classKey>,
+ * which in files mode is data/workspace/<ownerId>/files/<classKey>/_meta.json.
+ */
+function classFilesPrefix(ownerId, classId) {
+  return `${ownerCollection(ownerId)}/files/${safeClassKey(classId)}`;
 }
 
 function safeTodoKey(raw) {
@@ -120,8 +91,9 @@ function safeTodoKey(raw) {
   return key;
 }
 
-function todoFilesDir(ownerId, todoId) {
-  return join(ownerDir(ownerId), "files", "todos", safeTodoKey(todoId));
+/** Todo files: blob key workspace/<ownerId>/files/todos/<todoKey>/<name>, sidecar doc _meta. */
+function todoFilesPrefix(ownerId, todoId) {
+  return `${ownerCollection(ownerId)}/files/todos/${safeTodoKey(todoId)}`;
 }
 
 function originalTodoId(raw, stored = "") {
@@ -163,7 +135,7 @@ function cleanCanvasTodoDone(raw) {
 }
 
 export async function loadWorkspaceMeta(ownerId) {
-  const raw = await readJson(metaPath(ownerId));
+  const raw = await getDoc(ownerCollection(ownerId), "meta");
   const aliases =
     raw?.classAliases && typeof raw.classAliases === "object" && !Array.isArray(raw.classAliases)
       ? raw.classAliases
@@ -175,7 +147,7 @@ export async function loadWorkspaceMeta(ownerId) {
 }
 
 async function saveWorkspaceMeta(ownerId, meta) {
-  await writeJsonAtomic(metaPath(ownerId), {
+  await putDoc(ownerCollection(ownerId), "meta", {
     classAliases: meta.classAliases || {},
     hiddenTodoIds: meta.hiddenTodoIds || [],
     canvasTodoDone: cleanCanvasTodoDone(meta.canvasTodoDone),
@@ -205,20 +177,12 @@ function publicTodo(todo) {
 }
 
 export async function listTodos(ownerId) {
-  const dir = todosDir(ownerId);
-  let names = [];
-  try {
-    names = await readdir(dir);
-  } catch (err) {
-    if (err && err.code === "ENOENT") return [];
-    throw err;
-  }
+  const collection = todosCollection(ownerId);
+  const ids = await listIds(collection);
   const rows = [];
-  for (const name of names) {
-    if (!name.endsWith(".json")) continue;
-    const id = name.slice(0, -5);
+  for (const id of ids) {
     if (!ID_RE.test(id)) continue;
-    const todo = await readJson(join(dir, name));
+    const todo = await getDoc(collection, id);
     if (todo?.id) rows.push(publicTodo(todo));
   }
   rows.sort((a, b) => String(a.due || a.createdAt || "").localeCompare(String(b.due || b.createdAt || "")));
@@ -232,7 +196,7 @@ export async function loadTodo(ownerId, rawId) {
     err.status = 404;
     throw err;
   }
-  const todo = await readJson(todoPath(ownerId, id));
+  const todo = await getDoc(todosCollection(ownerId), id);
   if (!todo) {
     const err = new Error("Unknown todo.");
     err.status = 404;
@@ -272,8 +236,7 @@ export async function createTodo(ownerId, input = {}) {
     createdAt: now,
     completedAt: input.done ? now : "",
   };
-  await mkdir(todosDir(ownerId), { recursive: true });
-  await writeJsonAtomic(todoPath(ownerId, todo.id), todo);
+  await putDoc(todosCollection(ownerId), todo.id, todo);
   return publicTodo(todo);
 }
 
@@ -312,15 +275,13 @@ export async function patchTodo(ownerId, rawId, input = {}) {
     todo.done = done;
     todo.completedAt = done ? new Date().toISOString() : "";
   }
-  await writeJsonAtomic(todoPath(ownerId, todo.id), todo);
+  await putDoc(todosCollection(ownerId), todo.id, todo);
   return publicTodo(todo);
 }
 
 export async function deleteTodo(ownerId, rawId) {
   const todo = await loadTodo(ownerId, rawId);
-  await unlink(todoPath(ownerId, todo.id)).catch((err) => {
-    if (err && err.code !== "ENOENT") throw err;
-  });
+  await deleteDoc(todosCollection(ownerId), todo.id);
   return { ok: true, id: publicTodoId(todo.id) };
 }
 
@@ -453,13 +414,55 @@ function isTextType(contentType, name) {
   );
 }
 
-async function readClassFileMeta(dir) {
-  const raw = await readJson(join(dir, META_NAME));
+/** `prefix` is a class or todo files prefix (collection for the sidecar, key prefix for blobs). */
+async function readClassFileMeta(prefix) {
+  const raw = await getDoc(prefix, META_DOC);
   return raw && typeof raw === "object" ? raw : {};
 }
 
-async function writeClassFileMeta(dir, meta) {
-  await writeFile(join(dir, META_NAME), `${JSON.stringify(meta, null, 2)}\n`, "utf8");
+async function writeClassFileMeta(prefix, meta) {
+  await putDoc(prefix, META_DOC, meta);
+}
+
+/**
+ * Direct children of a blob prefix, like the old readdir + stat.isFile.
+ * Returns [{ name, size, updated }] and skips the sidecar and dotfiles.
+ */
+async function listFilesUnder(prefix) {
+  const base = `${prefix}/`;
+  const rows = await listBlobs(base);
+  const out = [];
+  for (const blob of rows) {
+    const name = blob.key.slice(base.length);
+    if (!name || name.includes("/")) continue;
+    if (name === META_NAME || name.startsWith(".")) continue;
+    out.push({ name, size: blob.size, updated: blob.updated });
+  }
+  return out;
+}
+
+/** First path segment under `<prefix>/` for every blob, deduped. Stands in for readdir of subfolders. */
+async function listChildDirs(prefix) {
+  const base = `${prefix}/`;
+  const rows = await listBlobs(base);
+  const seen = new Set();
+  for (const blob of rows) {
+    const rest = blob.key.slice(base.length);
+    const slash = rest.indexOf("/");
+    if (slash <= 0) continue;
+    seen.add(rest.slice(0, slash));
+  }
+  return [...seen];
+}
+
+async function readTextPreview(key, contentType, name, size) {
+  if (!isTextType(contentType, name) || size > MAX_HTML_PREVIEW) return undefined;
+  try {
+    const buf = await getBlob(key);
+    return buf ? buf.toString("utf8") : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function classFileId(classId, name) {
@@ -494,41 +497,23 @@ function publicClassFile(classId, name, size, lastModified, contentType, text) {
 
 export async function listClassFiles(ownerId, classId, { includeText = false } = {}) {
   const key = safeClassKey(classId);
-  const dir = classFilesDir(ownerId, key);
-  let names;
-  try {
-    names = await readdir(dir);
-  } catch (err) {
-    if (err?.code === "ENOENT") return [];
-    throw err;
-  }
-  const meta = await readClassFileMeta(dir);
+  const prefix = classFilesPrefix(ownerId, key);
+  const files = await listFilesUnder(prefix);
+  if (!files.length) return [];
+  const meta = await readClassFileMeta(prefix);
   const out = [];
-  for (const name of names) {
-    if (name === META_NAME || name.startsWith(".")) continue;
-    let info;
-    try {
-      info = await stat(join(dir, name));
-    } catch {
-      continue;
-    }
-    if (!info.isFile()) continue;
-    const row = meta[name] && typeof meta[name] === "object" ? meta[name] : {};
-    const contentType = String(row.contentType || guessContentType(name, ""));
-    let text;
-    if (includeText && isTextType(contentType, name) && info.size <= MAX_HTML_PREVIEW) {
-      try {
-        text = await readFile(join(dir, name), "utf8");
-      } catch {
-        text = undefined;
-      }
-    }
+  for (const file of files) {
+    const row = meta[file.name] && typeof meta[file.name] === "object" ? meta[file.name] : {};
+    const contentType = String(row.contentType || guessContentType(file.name, ""));
+    const text = includeText
+      ? await readTextPreview(`${prefix}/${file.name}`, contentType, file.name, file.size)
+      : undefined;
     out.push(
       publicClassFile(
         classId,
-        name,
-        info.size,
-        row.lastModified || info.mtime.toISOString(),
+        file.name,
+        file.size,
+        row.lastModified || file.updated,
         contentType,
         text
       )
@@ -539,14 +524,7 @@ export async function listClassFiles(ownerId, classId, { includeText = false } =
 }
 
 export async function listAllClassFiles(ownerId, { includeText = false } = {}) {
-  const root = join(ownerDir(ownerId), "files");
-  let classIds = [];
-  try {
-    classIds = await readdir(root);
-  } catch (err) {
-    if (err?.code === "ENOENT") return [];
-    throw err;
-  }
+  const classIds = await listChildDirs(`${ownerCollection(ownerId)}/files`);
   const out = [];
   for (const classId of classIds) {
     if (classId.startsWith(".") || classId === "todos") continue;
@@ -562,14 +540,13 @@ export async function writeClassFile(ownerId, classId, { name, content, contentT
   if (buf.length > MAX_FILE_BYTES) {
     throw Object.assign(new Error("File is too large (2MB max)."), { status: 400 });
   }
-  const dir = classFilesDir(ownerId, key);
-  await mkdir(dir, { recursive: true });
+  const prefix = classFilesPrefix(ownerId, key);
   const type = guessContentType(safe, contentType);
-  await writeFile(join(dir, safe), buf);
+  await putBlob(`${prefix}/${safe}`, buf, { contentType: type });
   const lastModified = new Date().toISOString();
-  const meta = await readClassFileMeta(dir);
+  const meta = await readClassFileMeta(prefix);
   meta[safe] = { contentType: type, lastModified };
-  await writeClassFileMeta(dir, meta);
+  await writeClassFileMeta(prefix, meta);
   const text = isTextType(type, safe) && buf.length <= MAX_HTML_PREVIEW ? buf.toString("utf8") : undefined;
   return publicClassFile(classId, safe, buf.length, lastModified, type, text);
 }
@@ -577,17 +554,12 @@ export async function writeClassFile(ownerId, classId, { name, content, contentT
 export async function readClassFile(ownerId, classId, name) {
   const key = safeClassKey(classId);
   const safe = safeFileName(name);
-  const dir = classFilesDir(ownerId, key);
-  let buffer;
-  try {
-    buffer = await readFile(join(dir, safe));
-  } catch (err) {
-    if (err?.code === "ENOENT") {
-      throw Object.assign(new Error("file not found"), { status: 404 });
-    }
-    throw err;
+  const prefix = classFilesPrefix(ownerId, key);
+  const buffer = await getBlob(`${prefix}/${safe}`);
+  if (!buffer) {
+    throw Object.assign(new Error("file not found"), { status: 404 });
   }
-  const meta = await readClassFileMeta(dir);
+  const meta = await readClassFileMeta(prefix);
   const contentType = String(meta[safe]?.contentType || guessContentType(safe, ""));
   return { name: safe, classId: key, contentType, buffer };
 }
@@ -595,16 +567,14 @@ export async function readClassFile(ownerId, classId, name) {
 export async function deleteClassFile(ownerId, classId, name) {
   const key = safeClassKey(classId);
   const safe = safeFileName(name);
-  const dir = classFilesDir(ownerId, key);
-  await unlink(join(dir, safe)).catch((err) => {
-    if (err?.code === "ENOENT") {
-      throw Object.assign(new Error("file not found"), { status: 404 });
-    }
-    throw err;
-  });
-  const meta = await readClassFileMeta(dir);
+  const prefix = classFilesPrefix(ownerId, key);
+  const removed = await deleteBlob(`${prefix}/${safe}`);
+  if (!removed) {
+    throw Object.assign(new Error("file not found"), { status: 404 });
+  }
+  const meta = await readClassFileMeta(prefix);
   delete meta[safe];
-  await writeClassFileMeta(dir, meta);
+  await writeClassFileMeta(prefix, meta);
   return { ok: true, id: classFileId(classId, safe) };
 }
 
@@ -646,42 +616,24 @@ function publicTodoFile(todoId, name, size, lastModified, contentType, text) {
 
 export async function listTodoFiles(ownerId, todoId, { includeText = false } = {}) {
   const publicId = originalTodoId(todoId);
-  const dir = todoFilesDir(ownerId, todoId);
-  let names;
-  try {
-    names = await readdir(dir);
-  } catch (err) {
-    if (err?.code === "ENOENT") return [];
-    throw err;
-  }
-  const meta = await readClassFileMeta(dir);
+  const prefix = todoFilesPrefix(ownerId, todoId);
+  const files = await listFilesUnder(prefix);
+  if (!files.length) return [];
+  const meta = await readClassFileMeta(prefix);
   const keptId = originalTodoId(publicId, meta._todoId);
   const out = [];
-  for (const name of names) {
-    if (name === META_NAME || name.startsWith(".")) continue;
-    let info;
-    try {
-      info = await stat(join(dir, name));
-    } catch {
-      continue;
-    }
-    if (!info.isFile()) continue;
-    const row = meta[name] && typeof meta[name] === "object" ? meta[name] : {};
-    const contentType = String(row.contentType || guessContentType(name, ""));
-    let text;
-    if (includeText && isTextType(contentType, name) && info.size <= MAX_HTML_PREVIEW) {
-      try {
-        text = await readFile(join(dir, name), "utf8");
-      } catch {
-        text = undefined;
-      }
-    }
+  for (const file of files) {
+    const row = meta[file.name] && typeof meta[file.name] === "object" ? meta[file.name] : {};
+    const contentType = String(row.contentType || guessContentType(file.name, ""));
+    const text = includeText
+      ? await readTextPreview(`${prefix}/${file.name}`, contentType, file.name, file.size)
+      : undefined;
     out.push(
       publicTodoFile(
         keptId || publicId,
-        name,
-        info.size,
-        row.lastModified || info.mtime.toISOString(),
+        file.name,
+        file.size,
+        row.lastModified || file.updated,
         contentType,
         text
       )
@@ -692,26 +644,12 @@ export async function listTodoFiles(ownerId, todoId, { includeText = false } = {
 }
 
 export async function listAllTodoFiles(ownerId, { includeText = false } = {}) {
-  const root = join(ownerDir(ownerId), "files", "todos");
-  let keys = [];
-  try {
-    keys = await readdir(root);
-  } catch (err) {
-    if (err?.code === "ENOENT") return [];
-    throw err;
-  }
+  const root = `${ownerCollection(ownerId)}/files/todos`;
+  const keys = await listChildDirs(root);
   const out = [];
   for (const key of keys) {
     if (key.startsWith(".")) continue;
-    const dir = join(root, key);
-    let info;
-    try {
-      info = await stat(dir);
-    } catch {
-      continue;
-    }
-    if (!info.isDirectory()) continue;
-    const meta = await readClassFileMeta(dir);
+    const meta = await readClassFileMeta(`${root}/${key}`);
     const todoId = originalTodoId(meta._todoId, ID_RE.test(key) ? publicTodoId(key) : key);
     out.push(...(await listTodoFiles(ownerId, todoId || key, { includeText })));
   }
@@ -728,15 +666,14 @@ export async function writeTodoFile(ownerId, todoId, { name, content, contentTyp
   if (buf.length > MAX_FILE_BYTES) {
     throw Object.assign(new Error("File is too large (2MB max)."), { status: 400 });
   }
-  const dir = todoFilesDir(ownerId, publicId);
-  await mkdir(dir, { recursive: true });
+  const prefix = todoFilesPrefix(ownerId, publicId);
   const type = guessContentType(safe, contentType);
-  await writeFile(join(dir, safe), buf);
+  await putBlob(`${prefix}/${safe}`, buf, { contentType: type });
   const lastModified = new Date().toISOString();
-  const meta = await readClassFileMeta(dir);
+  const meta = await readClassFileMeta(prefix);
   meta._todoId = publicId;
   meta[safe] = { contentType: type, lastModified };
-  await writeClassFileMeta(dir, meta);
+  await writeClassFileMeta(prefix, meta);
   const text = isTextType(type, safe) && buf.length <= MAX_HTML_PREVIEW ? buf.toString("utf8") : undefined;
   return publicTodoFile(publicId, safe, buf.length, lastModified, type, text);
 }
@@ -744,17 +681,12 @@ export async function writeTodoFile(ownerId, todoId, { name, content, contentTyp
 export async function readTodoFile(ownerId, todoId, name) {
   const publicId = originalTodoId(todoId);
   const safe = safeFileName(name);
-  const dir = todoFilesDir(ownerId, publicId || todoId);
-  let buffer;
-  try {
-    buffer = await readFile(join(dir, safe));
-  } catch (err) {
-    if (err?.code === "ENOENT") {
-      throw Object.assign(new Error("file not found"), { status: 404 });
-    }
-    throw err;
+  const prefix = todoFilesPrefix(ownerId, publicId || todoId);
+  const buffer = await getBlob(`${prefix}/${safe}`);
+  if (!buffer) {
+    throw Object.assign(new Error("file not found"), { status: 404 });
   }
-  const meta = await readClassFileMeta(dir);
+  const meta = await readClassFileMeta(prefix);
   const contentType = String(meta[safe]?.contentType || guessContentType(safe, ""));
   return { name: safe, todoId: originalTodoId(publicId, meta._todoId), contentType, buffer };
 }
@@ -762,16 +694,14 @@ export async function readTodoFile(ownerId, todoId, name) {
 export async function deleteTodoFile(ownerId, todoId, name) {
   const publicId = originalTodoId(todoId);
   const safe = safeFileName(name);
-  const dir = todoFilesDir(ownerId, publicId || todoId);
-  await unlink(join(dir, safe)).catch((err) => {
-    if (err?.code === "ENOENT") {
-      throw Object.assign(new Error("file not found"), { status: 404 });
-    }
-    throw err;
-  });
-  const meta = await readClassFileMeta(dir);
+  const prefix = todoFilesPrefix(ownerId, publicId || todoId);
+  const removed = await deleteBlob(`${prefix}/${safe}`);
+  if (!removed) {
+    throw Object.assign(new Error("file not found"), { status: 404 });
+  }
+  const meta = await readClassFileMeta(prefix);
   delete meta[safe];
-  await writeClassFileMeta(dir, meta);
+  await writeClassFileMeta(prefix, meta);
   return { ok: true, id: todoFileId(originalTodoId(publicId, meta._todoId) || publicId, safe) };
 }
 

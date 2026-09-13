@@ -5,10 +5,13 @@
  */
 
 import { randomBytes } from "node:crypto";
-import { mkdir, readdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
-import { dirname, join, resolve, sep } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { usesCursorAgent } from "./cursor-demo.js";
+import { dataRoot, getDoc, listIds, putDoc } from "./store.js";
+
+const STUDENTS = "students";
+const SESSIONS = "sessions";
+const SESSIONS_DOC = "all";
 
 export const COOKIE = "epsynapse_sid";
 export const HEADER = "x-epsynapse-session";
@@ -37,16 +40,9 @@ const sessions = new Map();
 const sessionsReady = loadSessions();
 let persistChain = sessionsReady;
 
+/** Files-mode directory of student JSON (server/data/students). Meaningless under Firestore. */
 export function studentsDir() {
-  return join(dirname(fileURLToPath(import.meta.url)), "data", "students");
-}
-
-function dataDir() {
-  return join(dirname(fileURLToPath(import.meta.url)), "data");
-}
-
-function sessionsPath() {
-  return join(dataDir(), "sessions.json");
+  return join(dataRoot(), STUDENTS);
 }
 
 function emptyGraph() {
@@ -236,16 +232,6 @@ function assertFileId(fileId) {
   return id;
 }
 
-function studentPath(fileId) {
-  const id = assertFileId(fileId);
-  const dir = resolve(studentsDir());
-  const full = resolve(dir, `${id}.json`);
-  if (full !== join(dir, `${id}.json`) && !full.startsWith(dir + sep)) {
-    throw new Error("Invalid student file id.");
-  }
-  return full;
-}
-
 function hydrate(raw) {
   const src = raw && typeof raw === "object" ? raw : {};
   const graph = src.graph && typeof src.graph === "object" ? src.graph : {};
@@ -265,6 +251,17 @@ function hydrate(raw) {
     studentId: String(src.studentId || ""),
     canvasHost: String(src.canvasHost || DEFAULT_CANVAS_HOST),
     canvasToken: String(src.canvasToken || ""),
+    // Canvas OAuth (EPS door, canvas-oauth.js). Empty for a pasted manual token.
+    canvasRefreshToken: String(src.canvasRefreshToken || ""),
+    canvasTokenExp: Number(src.canvasTokenExp) || 0,
+    canvasAuthMode: src.canvasAuthMode === "oauth" ? "oauth" : "",
+    canvasAuth: src.canvasAuth?.state
+      ? {
+          state: String(src.canvasAuth.state),
+          returnTo: String(src.canvasAuth.returnTo || ""),
+          createdAt: String(src.canvasAuth.createdAt || ""),
+        }
+      : null,
     modelKeys,
     modelKey: modelKeys[0] || "",
     modelProvider: normalizeModelProvider(src.modelProvider),
@@ -358,34 +355,37 @@ export function publicProfile(student) {
   };
 }
 
-async function writeJsonAtomic(filePath, data) {
-  await mkdir(dirname(filePath), { recursive: true });
-  const tmp = `${filePath}.${randomBytes(8).toString("hex")}.tmp`;
-  try {
-    await writeFile(tmp, `${JSON.stringify(data, null, 2)}\n`, {
-      encoding: "utf8",
-      mode: 0o600,
-    });
-    await rename(tmp, filePath);
-  } catch (err) {
-    await unlink(tmp).catch(() => {});
-    throw err;
-  }
+async function writeStudent(fileId, data) {
+  await putDoc(STUDENTS, assertFileId(fileId), data);
 }
 
-export async function loadStudentByFileId(fileId) {
-  let path;
+/** Every student file id on disk (or in Firestore). Skips names that are not valid ids. */
+async function listStudentFileIds() {
+  let ids;
   try {
-    path = studentPath(fileId);
+    ids = await listIds(STUDENTS);
   } catch {
     return null;
   }
+  return ids.filter((id) => {
+    try {
+      assertFileId(id);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+}
+
+export async function loadStudentByFileId(fileId) {
+  let id;
   try {
-    return hydrate(JSON.parse(await readFile(path, "utf8")));
-  } catch (err) {
-    if (err.code === "ENOENT") return null;
-    throw err;
+    id = assertFileId(fileId);
+  } catch {
+    return null;
   }
+  const raw = await getDoc(STUDENTS, id);
+  return raw ? hydrate(raw) : null;
 }
 
 export async function loadStudent(school, studentId) {
@@ -399,7 +399,7 @@ export async function saveStudent(student) {
   s.studentId = normalizeStudentId(s.studentId);
   if (!s.createdAt) s.createdAt = new Date().toISOString();
   if (!s.updatedAt) s.updatedAt = s.createdAt;
-  await writeJsonAtomic(studentPath(googleFileId(s.googleSub)), s);
+  await writeStudent(googleFileId(s.googleSub), s);
   return s;
 }
 
@@ -465,6 +465,9 @@ export async function updateStudentProfile(student, patch) {
     s.canvasHost = host || DEFAULT_CANVAS_HOST;
   }
   if (src.canvasToken !== undefined) s.canvasToken = String(src.canvasToken);
+  if (src.canvasRefreshToken !== undefined) s.canvasRefreshToken = String(src.canvasRefreshToken || "");
+  if (src.canvasTokenExp !== undefined) s.canvasTokenExp = Number(src.canvasTokenExp) || 0;
+  if (src.canvasAuthMode !== undefined) s.canvasAuthMode = src.canvasAuthMode === "oauth" ? "oauth" : "";
   if (src.modelKeys !== undefined) {
     s.modelKeys = normalizeModelKeys(src.modelKeys, "");
     s.modelKey = s.modelKeys[0] || "";
@@ -494,25 +497,21 @@ export async function updateStudentProfile(student, patch) {
 }
 
 async function loadSessions() {
-  try {
-    const raw = JSON.parse(await readFile(sessionsPath(), "utf8"));
-    if (!raw || typeof raw !== "object") return;
-    for (const [sid, rec] of Object.entries(raw)) {
-      if (!sid || !rec || typeof rec.studentId !== "string") continue;
-      sessions.set(sid, {
-        studentId: rec.studentId,
-        createdAt: rec.createdAt || "",
-      });
-    }
-  } catch (err) {
-    if (err.code !== "ENOENT") throw err;
+  const raw = await getDoc(SESSIONS, SESSIONS_DOC);
+  if (!raw || typeof raw !== "object") return;
+  for (const [sid, rec] of Object.entries(raw)) {
+    if (!sid || !rec || typeof rec.studentId !== "string") continue;
+    sessions.set(sid, {
+      studentId: rec.studentId,
+      createdAt: rec.createdAt || "",
+    });
   }
 }
 
 async function persistSessions() {
   const obj = {};
   for (const [sid, rec] of sessions) obj[sid] = rec;
-  await writeJsonAtomic(sessionsPath(), obj);
+  await putDoc(SESSIONS, SESSIONS_DOC, obj);
 }
 
 function schedulePersist() {
@@ -674,15 +673,10 @@ export function mergeMsAuth(student, patch) {
 export async function findStudentByMsAuthState(state) {
   const needle = String(state || "").trim();
   if (!needle) return null;
-  let names;
-  try {
-    names = await readdir(studentsDir());
-  } catch {
-    return null;
-  }
-  for (const name of names) {
-    if (!name.endsWith(".json")) continue;
-    const student = await loadStudentByFileId(name.slice(0, -5)).catch(() => null);
+  const ids = await listStudentFileIds();
+  if (!ids) return null;
+  for (const fileId of ids) {
+    const student = await loadStudentByFileId(fileId).catch(() => null);
     if (student?.msAuth?.state === needle) return student;
   }
   return null;
@@ -692,15 +686,9 @@ export async function findStudentByMsAuthState(state) {
 export async function findStudentByEmail(email) {
   const needle = String(email || "").trim().toLowerCase();
   if (!needle) return null;
-  let names;
-  try {
-    names = await readdir(studentsDir());
-  } catch {
-    return null;
-  }
-  for (const name of names) {
-    if (!name.endsWith(".json")) continue;
-    const fileId = name.slice(0, -5);
+  const ids = await listStudentFileIds();
+  if (!ids) return null;
+  for (const fileId of ids) {
     const student = await loadStudentByFileId(fileId).catch(() => null);
     if (student && String(student.email || "").toLowerCase() === needle) {
       return { student, fileId };
@@ -726,20 +714,14 @@ export async function setStudentDoor(student, { door, paused } = {}) {
  * student; the file is then written back in place. Used for one-off cleanups at boot.
  */
 export async function forEachStudentFile(fn) {
-  let names;
-  try {
-    names = await readdir(studentsDir());
-  } catch {
-    return 0;
-  }
+  const ids = await listStudentFileIds();
+  if (!ids) return 0;
   let changed = 0;
-  for (const name of names) {
-    if (!name.endsWith(".json")) continue;
-    const fileId = name.slice(0, -5);
+  for (const fileId of ids) {
     const student = await loadStudentByFileId(fileId).catch(() => null);
     if (!student) continue;
     if (await fn(student, fileId)) {
-      await writeJsonAtomic(studentPath(fileId), student);
+      await writeStudent(fileId, student);
       changed += 1;
     }
   }

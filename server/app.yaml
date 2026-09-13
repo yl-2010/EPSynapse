@@ -1,0 +1,37 @@
+# App Engine standard config for the EPSynapse API.
+# Same shape as epschedule's app.yaml, Node instead of Python.
+#
+# Deploy from the repo root once a school-owned project is linked:
+#   gcloud app deploy server/app.yaml
+#
+# App Engine sets PORT (8080) and GOOGLE_CLOUD_PROJECT itself. Secrets come
+# from Secret Manager via secrets.js; nothing sensitive belongs in this file.
+runtime: nodejs22
+entrypoint: node index.js
+instance_class: F2
+
+env_variables:
+  NODE_ENV: production
+  STORAGE_BACKEND: firestore
+  BLOB_BACKEND: gcs
+  # GCS_BUCKET is optional. Empty means blobs.js uses <project>.appspot.com,
+  # the bucket App Engine creates for every project.
+  GCS_BUCKET: ""
+  FIRESTORE_PREFIX: ""
+  # Public origin of this API. Matches the custom domain mapped in App Engine.
+  PUBLIC_API_BASE: "https://api.epsynapse.com"
+  ALLOWED_ORIGINS: "https://epsynapse.com,https://www.epsynapse.com"
+  MICROSOFT_REDIRECT_URI: "https://api.epsynapse.com/v1/ms/callback"
+  SECRETS_FROM_MANAGER: "1"
+  # Every name here is read from Secret Manager at boot when not already in env.
+  # Client ids are not secret but they are per project, so they live there too.
+  SECRET_NAMES: "GOOGLE_WEB_CLIENT_ID,GOOGLE_IOS_CLIENT_ID,GOOGLE_CLIENT_IDS,MICROSOFT_CLIENT_ID,MICROSOFT_CLIENT_SECRET,MICROSOFT_TENANT,CANVAS_OAUTH_CLIENT_ID,CANVAS_OAUTH_CLIENT_SECRET,FOUR11_API_KEY,ADMIN_KEY,DEMO_GROQ_KEYS,SCHOOL_IT_EMAIL"
+
+automatic_scaling:
+  min_instances: 0
+  max_instances: 2
+
+handlers:
+  - url: /.*
+    script: auto
+    secure: always

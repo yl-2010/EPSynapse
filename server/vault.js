@@ -1,17 +1,22 @@
 /**
  * Local per-student files so the Files page still works when Graph is blocked.
  * Lives next to student profiles: server/data/vault/{googleFileId}/
+ * Bytes go through blobs.js (key vault/<fileId>/<name>), the per-file
+ * contentType/lastModified sidecar through store.js (vault/<fileId> doc _meta).
  */
 
-import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
-import { dirname, join, resolve, sep } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { getBlob, listBlobs, putBlob } from "./blobs.js";
+import { dataRoot, getDoc, putDoc } from "./store.js";
 
 const MAX_BYTES = 2 * 1024 * 1024;
 const META_NAME = "_meta.json";
+const META_DOC = "_meta";
+const VAULT = "vault";
 
+/** Files-mode directory (server/data/vault). Meaningless under GCS. */
 export function vaultRoot() {
-  return join(dirname(fileURLToPath(import.meta.url)), "data", "vault");
+  return join(dataRoot(), VAULT);
 }
 
 function assertFileId(fileId) {
@@ -27,14 +32,14 @@ function assertFileId(fileId) {
   return id;
 }
 
-function studentDir(fileId) {
-  const id = assertFileId(fileId);
-  const root = resolve(vaultRoot());
-  const full = resolve(root, id);
-  if (full !== join(root, id) && !full.startsWith(root + sep)) {
-    throw new Error("Invalid student file id.");
-  }
-  return full;
+/** store.js collection: vault/<fileId> -> data/vault/<fileId>/_meta.json */
+function metaCollection(fileId) {
+  return `${VAULT}/${assertFileId(fileId)}`;
+}
+
+/** blobs.js key prefix: vault/<fileId>/ */
+function blobPrefix(fileId) {
+  return `${VAULT}/${assertFileId(fileId)}/`;
 }
 
 export function safeVaultName(name) {
@@ -48,13 +53,8 @@ export function safeVaultName(name) {
   return n;
 }
 
-function filePath(dir, name) {
-  const safe = safeVaultName(name);
-  const full = resolve(dir, safe);
-  if (full !== join(dir, safe) && !full.startsWith(dir + sep)) {
-    throw new Error("invalid file name");
-  }
-  return full;
+function blobKey(fileId, name) {
+  return `${blobPrefix(fileId)}${safeVaultName(name)}`;
 }
 
 function toBuffer(content) {
@@ -77,81 +77,66 @@ function vaultItem(name, size, lastModified) {
   };
 }
 
-async function readMeta(dir) {
+async function readMeta(fileId) {
   try {
-    const raw = JSON.parse(await readFile(join(dir, META_NAME), "utf8"));
+    const raw = await getDoc(metaCollection(fileId), META_DOC);
     return raw && typeof raw === "object" ? raw : {};
   } catch {
     return {};
   }
 }
 
-async function writeMeta(dir, meta) {
-  await writeFile(join(dir, META_NAME), JSON.stringify(meta, null, 2), "utf8");
+async function writeMeta(fileId, meta) {
+  await putDoc(metaCollection(fileId), META_DOC, meta);
 }
 
 export async function listVault(fileId) {
-  let dir;
+  let id;
   try {
-    dir = studentDir(fileId);
+    id = assertFileId(fileId);
   } catch {
     return [];
   }
-  let names;
-  try {
-    names = await readdir(dir);
-  } catch (err) {
-    if (err?.code === "ENOENT") return [];
-    throw err;
-  }
-  const meta = await readMeta(dir);
+  const prefix = blobPrefix(id);
+  const blobs = await listBlobs(prefix);
+  const meta = await readMeta(id);
   const out = [];
-  for (const name of names) {
+  for (const blob of blobs) {
+    const name = blob.key.slice(prefix.length);
+    // Only direct children, same as the old readdir + isFile.
+    if (!name || name.includes("/")) continue;
     if (name === META_NAME || name.startsWith(".")) continue;
-    let info;
-    try {
-      info = await stat(join(dir, name));
-    } catch {
-      continue;
-    }
-    if (!info.isFile()) continue;
     const row = meta[name] && typeof meta[name] === "object" ? meta[name] : {};
-    out.push(vaultItem(name, info.size, row.lastModified || info.mtime.toISOString()));
+    out.push(vaultItem(name, blob.size, row.lastModified || blob.updated));
   }
   out.sort((a, b) => String(b.lastModified).localeCompare(String(a.lastModified)));
   return out;
 }
 
 export async function saveVault(fileId, { name, content, contentType } = {}) {
-  const dir = studentDir(fileId);
+  const id = assertFileId(fileId);
   const safe = safeVaultName(name);
   const buf = toBuffer(content);
   if (buf.length > MAX_BYTES) throw new Error("File is too large (2MB max).");
-  await mkdir(dir, { recursive: true });
-  await writeFile(filePath(dir, safe), buf);
-  const lastModified = new Date().toISOString();
   const type = String(contentType || "application/octet-stream").trim();
-  const meta = await readMeta(dir);
+  await putBlob(blobKey(id, safe), buf, { contentType: type });
+  const lastModified = new Date().toISOString();
+  const meta = await readMeta(id);
   meta[safe] = { contentType: type, lastModified };
-  await writeMeta(dir, meta);
+  await writeMeta(id, meta);
   return vaultItem(safe, buf.length, lastModified);
 }
 
 export async function readVault(fileId, name) {
-  const dir = studentDir(fileId);
+  const id = assertFileId(fileId);
   const safe = safeVaultName(name);
-  let buffer;
-  try {
-    buffer = await readFile(filePath(dir, safe));
-  } catch (err) {
-    if (err?.code === "ENOENT") {
-      const missing = new Error("file not found");
-      missing.status = 404;
-      throw missing;
-    }
-    throw err;
+  const buffer = await getBlob(blobKey(id, safe));
+  if (!buffer) {
+    const missing = new Error("file not found");
+    missing.status = 404;
+    throw missing;
   }
-  const meta = await readMeta(dir);
+  const meta = await readMeta(id);
   const type = String(meta[safe]?.contentType || "application/octet-stream").trim();
   return { name: safe, contentType: type, buffer };
 }
