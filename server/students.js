@@ -13,6 +13,17 @@ import { usesCursorAgent } from "./cursor-demo.js";
 export const COOKIE = "epsynapse_sid";
 export const HEADER = "x-epsynapse-session";
 
+/**
+ * Which front door the student came through.
+ * - "eps": Eastside Prep student. Signs in with the school Microsoft account, gets
+ *   the four11 schedule and the Microsoft apps in the sign-in flow. Not live yet.
+ * - "other": any other student. Google sign-in, uploads a schedule PDF, brings own keys.
+ */
+export const DOORS = new Set(["eps", "other"]);
+export const DEFAULT_DOOR = "other";
+export const PAUSED_MESSAGE =
+  "EPSynapse for Eastside Prep is almost ready. Your account is paused while the school Microsoft sign-in, four11 schedule, and Canvas connection get set up. You'll sign in with your @eastsideprep.org account once it's live.";
+
 const DEFAULT_CANVAS_HOST = "https://eastsideprep.instructure.com";
 const MAX_LEN = 80;
 const SESSION_MAX_AGE = 2592000;
@@ -129,6 +140,15 @@ function emptyTeams() {
   };
 }
 
+export function normalizeDoor(raw) {
+  const door = String(raw || "").trim().toLowerCase();
+  return DOORS.has(door) ? door : DEFAULT_DOOR;
+}
+
+export function isPaused(student) {
+  return Boolean(student?.paused);
+}
+
 export function normalizeSchool(raw) {
   const school = String(raw ?? "").trim().replace(/\s+/g, " ");
   if (!school) return "";
@@ -239,6 +259,8 @@ function hydrate(raw) {
     picture: String(src.picture || ""),
     rosterName: String(src.rosterName || ""),
     rosterMatched: Boolean(src.rosterMatched),
+    door: normalizeDoor(src.door),
+    paused: Boolean(src.paused),
     school: String(src.school || ""),
     studentId: String(src.studentId || ""),
     canvasHost: String(src.canvasHost || DEFAULT_CANVAS_HOST),
@@ -308,6 +330,9 @@ export function publicProfile(student) {
     email: s.email,
     googleName: s.googleName,
     picture: s.picture,
+    door: s.door,
+    paused: s.paused,
+    pausedMessage: s.paused ? PAUSED_MESSAGE : "",
     school: s.school,
     studentId: s.studentId,
     rosterName: s.rosterName,
@@ -398,6 +423,8 @@ export async function upsertGoogleStudent({ googleSub, email, googleName, pictur
     picture: "",
     rosterName: "",
     rosterMatched: false,
+    door: DEFAULT_DOOR,
+    paused: false,
     school: "",
     studentId: "",
     canvasHost: DEFAULT_CANVAS_HOST,
@@ -659,6 +686,39 @@ export async function findStudentByMsAuthState(state) {
     if (student?.msAuth?.state === needle) return student;
   }
   return null;
+}
+
+/** Case-insensitive lookup by Google email. Returns { student, fileId } or null. */
+export async function findStudentByEmail(email) {
+  const needle = String(email || "").trim().toLowerCase();
+  if (!needle) return null;
+  let names;
+  try {
+    names = await readdir(studentsDir());
+  } catch {
+    return null;
+  }
+  for (const name of names) {
+    if (!name.endsWith(".json")) continue;
+    const fileId = name.slice(0, -5);
+    const student = await loadStudentByFileId(fileId).catch(() => null);
+    if (student && String(student.email || "").toLowerCase() === needle) {
+      return { student, fileId };
+    }
+  }
+  return null;
+}
+
+/**
+ * Move a student to a door and pause or resume them. Only the set-door tool and
+ * the future EPS sign-in call this; there is no student-facing route for it.
+ */
+export async function setStudentDoor(student, { door, paused } = {}) {
+  const s = hydrate(student);
+  if (door !== undefined) s.door = normalizeDoor(door);
+  if (paused !== undefined) s.paused = Boolean(paused);
+  s.updatedAt = new Date().toISOString();
+  return saveStudent(s);
 }
 
 /**

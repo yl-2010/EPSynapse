@@ -103,14 +103,7 @@ import {
   writeStudioFile,
 } from "./studio-ms.js";
 import { listVault, readVault, saveVault } from "./vault.js";
-import {
-  getSchool,
-  listSchools,
-  lookupRosterName,
-  publicSchool,
-  resolveSchool,
-  setRoster,
-} from "./schools.js";
+import { getSchool, listSchools, publicSchool, setRoster } from "./schools.js";
 import {
   clearSessionCookie,
   createSession,
@@ -118,6 +111,7 @@ import {
   findStudentByMsAuthState,
   forEachStudentFile,
   googleFileId,
+  isPaused,
   loadStudentByFileId,
   mergeGraph,
   mergeMsAuth,
@@ -126,6 +120,7 @@ import {
   mergeTeams,
   publicProfile,
   saveStudent,
+  PAUSED_MESSAGE,
   sessionIdFromRequest,
   setSessionCookie,
   studentFromRequest,
@@ -142,7 +137,7 @@ import {
   persistChat,
 } from "./chat-history.js";
 import multer from "multer";
-import { probeBertService } from "./bert.js";
+import { bertEnabled, probeBertService } from "./bert.js";
 import { listNotes, mountNotes } from "./notes.js";
 import { mountResearch } from "./research-metrics.js";
 import { mountMcp } from "./mcp-http.js";
@@ -195,6 +190,37 @@ app.use(
   })
 );
 app.use(express.json({ limit: "8mb" }));
+
+/**
+ * Paused accounts (EPS students waiting for the school sign-in) can still load
+ * /v1/me, which reports paused: true, and log out. Every other student route,
+ * the agent, and MCP answer 423 so no tool or sync runs for them.
+ */
+const PAUSE_OPEN_PATHS = new Set(["/v1/me", "/v1/me/logout"]);
+const PAUSE_GATED_PREFIXES = ["/v1/me/", "/v1/agent/", "/mcp"];
+
+function pauseGated(path) {
+  if (PAUSE_OPEN_PATHS.has(path)) return false;
+  return PAUSE_GATED_PREFIXES.some((p) => path === p.replace(/\/$/, "") || path.startsWith(p));
+}
+
+app.use(async (req, res, next) => {
+  if (!pauseGated(req.path)) return next();
+  try {
+    let student = await studentFromRequest(req);
+    if (!student) {
+      const raw = String(req.get("authorization") || "").trim();
+      const m = /^Bearer\s+(.+)$/i.exec(raw);
+      if (m) student = await studentFromRequest({ headers: { "x-epsynapse-session": m[1].trim() } });
+    }
+    if (student && isPaused(student)) {
+      return res.status(423).json({ error: PAUSED_MESSAGE, paused: true, door: student.door });
+    }
+  } catch {
+    /* fall through; the route does its own auth */
+  }
+  return next();
+});
 
 const pdfUpload = multer({
   storage: multer.memoryStorage(),
@@ -867,6 +893,7 @@ app.get("/health", async (_req, res) => {
     service: "jype-server",
     time: new Date().toISOString(),
     bert: {
+      enabled: bertEnabled(),
       ok: Boolean(bert.ok),
       url: "http://127.0.0.1:3007",
       zeroShotLoaded: Boolean(bert.zeroShotLoaded),
@@ -953,9 +980,9 @@ app.post("/v1/me", async (req, res) => {
       return res.status(401).json({ error: "Sign in with Google first." });
     }
 
+    // School and student id are no longer settings. The EPS door identifies the
+    // student from the school Microsoft sign-in; the other door has neither.
     const patch = {};
-    if (req.body?.school !== undefined) patch.school = req.body.school;
-    if (req.body?.studentId !== undefined) patch.studentId = req.body.studentId;
     if (req.body?.canvasHost) patch.canvasHost = normalizeHost(req.body.canvasHost);
 
     const pasted = String(req.body?.canvasToken || "").trim();
@@ -965,27 +992,7 @@ app.post("/v1/me", async (req, res) => {
       if (self.displayName) patch.displayName = self.displayName;
     }
 
-    let updated = await updateStudentProfile(student, patch);
-    const schoolChanged =
-      req.body?.school !== undefined || req.body?.studentId !== undefined;
-
-    if (updated.school && updated.studentId) {
-      const school = await resolveSchool(updated.school);
-      const rosterName = school
-        ? await lookupRosterName(school.slug, updated.studentId)
-        : "";
-      updated = await updateStudentProfile(updated, {
-        rosterName,
-        rosterMatched: Boolean(rosterName),
-        displayName: rosterName || updated.displayName || updated.googleName,
-      });
-    } else if (schoolChanged) {
-      updated = await updateStudentProfile(updated, {
-        rosterName: "",
-        rosterMatched: false,
-      });
-    }
-
+    const updated = await updateStudentProfile(student, patch);
     return sessionJson(req, res, updated, sessionIdFromRequest(req));
   } catch (err) {
     return fail(res, err, err.status || 400);

@@ -1,6 +1,10 @@
 /**
  * Client for the local EPSynapse notes-classifier BERT sidecar.
  * 127.0.0.1:3007 only. Auto-spawns scripts/bert_serve.py via the JYPE .venv.
+ *
+ * Off unless BERT_ENABLED=1. Notes are classified by the student's own model key
+ * (classify.js orchestrator) with no BERT votes. The sidecar, the training scripts,
+ * and models/ stay in the repo so it can come back with one env var.
  */
 
 import { spawn, execFileSync } from "node:child_process";
@@ -15,6 +19,10 @@ const DEFAULT_READY_TIMEOUT_MS = 180_000;
 
 /** @type {Promise<object>|null} */
 let ensuring = null;
+
+export function bertEnabled() {
+  return /^(1|true|yes)$/i.test(String(process.env.BERT_ENABLED || "").trim());
+}
 
 export function getBertServiceUrl() {
   return (process.env.BERT_SERVICE_URL || DEFAULT_URL).replace(/\/$/, "");
@@ -109,6 +117,9 @@ export async function ensureBertService({
 }
 
 export async function classifyWithBert(rawText, { timeoutMs = 120_000 } = {}) {
+  if (!bertEnabled()) {
+    return { ok: false, status: "off", error: "BERT is off (BERT_ENABLED unset)" };
+  }
   try {
     await ensureBertService({
       readyTimeoutMs: Math.max(timeoutMs, DEFAULT_READY_TIMEOUT_MS),
@@ -159,6 +170,7 @@ export async function classifyWithBert(rawText, { timeoutMs = 120_000 } = {}) {
 }
 
 export async function probeBertService() {
+  if (!bertEnabled()) return { ok: false, enabled: false, error: "off" };
   const base = getBertServiceUrl();
   try {
     const res = await fetch(`${base}/health`, { signal: AbortSignal.timeout(3000) });
