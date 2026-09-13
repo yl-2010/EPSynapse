@@ -88,6 +88,6 @@ First-time tunnel setup: [`deploy/cloudflared/README.md`](../deploy/cloudflared/
 |------|---------|---------|
 | 3000 | SocketHR Express | via `api.sockethr.com` |
 | 3002 | NoteLMs Express | via `api.notelms.com` |
-| 3004 | another local API | leave this port alone |
+| 3004 | yanylevin Express | via `api.yanylevin.com` |
 | 3006 | JYPE Express | via `api.epsynapse.com` |
 | 1234 | LM Studio | **never** (localhost only) |

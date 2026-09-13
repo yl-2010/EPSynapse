@@ -1,0 +1,30 @@
+---
+description: Do not rely on git auto-deploy; production-deploy Vercel when the live website changed
+alwaysApply: true
+---
+
+# Vercel manual deploy
+
+Git push does not update epsynapse.com. Auto-deploy is off on purpose (Hobby 100 deploys/day). Follow [`AGENTS.md`](../../AGENTS.md).
+
+## Do not reconnect Git
+
+Do not run `vercel git connect`. `vercel.json` has `git.deploymentEnabled: false`. Keep it that way.
+
+## When to deploy
+
+After commit + push, run `npm run deploy:web` if Vercel serves the file. Pages, browser JS/CSS, `runtime-config.json`, `vercel.json`, and logos count.
+
+Skip `server/**`, `ios/`, docs, `deploy/`, `.cursor/`, `ideas.md`, `AGENTS.md`, `models/`, `ml/`, `data/`, and `scripts/`.
+
+## Command
+
+From the repo root, on `main`, after `git push origin main`:
+
+```bash
+npm run deploy:web
+```
+
+That is `scripts/deploy-web.sh` → `npx vercel deploy --prod --yes --scope jype1`. It loads `~/.config/jype/vercel.env` when `VERCEL_TOKEN` is unset, because the default CLI login on this Mac cannot see team `jype1`. Then hit https://epsynapse.com and confirm it is 200 with the new content.
+
+Do not invent a second host. If the script still cannot see `jype1`, stop and say so.
