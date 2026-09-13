@@ -87,7 +87,6 @@ Needs: 2 (the Microsoft redirect scheme must be registered on the Entra app firs
 
 ## Independent cleanup, any time
 
-- Rename the local folder `~/github/JYPE` to `~/github/EPSynapse` (LaunchAgent plists already point at the new path; re-run `deploy/launchagents/install.sh` after moving).
 - The Cloudflare tunnel object is still called `jype-api` and the Cloudflare and Vercel accounts are still named JYPE. Those are account-level names; rename from their dashboards if wanted. Nothing depends on them.
 - `data/schools/` on the Mac is dead data from the school picker. Delete after the GCP migration.
 - Decide whether `hanshul.dua99`, `holmesd`, `milevin`, `pranavsankar614` are EPS; pause them if so.
