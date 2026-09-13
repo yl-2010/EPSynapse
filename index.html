@@ -20,7 +20,7 @@
     <link rel="icon" href="/favicon.svg?v=logo5" type="image/svg+xml" />
     <link rel="icon" href="/favicon-32.png?v=logo4" type="image/png" sizes="32x32" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="stylesheet" href="/styles.css?v=userwhite1" />
+    <link rel="stylesheet" href="/styles.css?v=doors1" />
     <link
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css"
@@ -91,20 +91,59 @@
     <div id="stage-loading" class="stage stage-loading" aria-live="polite">…</div>
 
     <div id="stage-out" class="stage stage-out" hidden>
-      <div class="stage-out-card">
-        <p class="stage-out-lead">Student dashboard for Eastside Prep.</p>
-        <button type="button" id="stage-google" class="google-native">
-          <span class="google-native-mark" aria-hidden="true">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path fill="#4285F4" d="M23.52 12.27c0-.86-.07-1.49-.23-2.14H12v3.89h6.55c-.13 1.1-.84 2.76-2.42 3.88l-.02.14 3.51 2.72.24.02c2.24-2.07 3.66-5.12 3.66-8.51z"/>
-              <path fill="#34A853" d="M12 24c3.2 0 5.89-1.05 7.85-2.86l-3.74-2.9c-1 .7-2.35 1.19-4.11 1.19-3.15 0-5.82-2.07-6.77-4.94l-.14.01-3.66 2.83-.05.13C3.35 21.33 7.36 24 12 24z"/>
-              <path fill="#FBBC05" d="M5.23 14.49A7.2 7.2 0 0 1 4.83 12c0-.87.15-1.71.39-2.49l-.01-.17-3.7-2.87-.12.06A11.97 11.97 0 0 0 0 12c0 1.94.47 3.78 1.39 5.47l3.84-2.98z"/>
-              <path fill="#EA4335" d="M12 4.77c2.22 0 3.72.96 4.57 1.76l3.34-3.26C17.88 1.19 15.2 0 12 0 7.36 0 3.35 2.67 1.39 6.53l3.83 2.98C6.17 6.84 8.85 4.77 12 4.77z"/>
-            </svg>
-          </span>
-          Sign in with Google
-        </button>
-        <p class="stage-out-status" id="stage-out-status" hidden></p>
+      <div class="stage-out-card" id="stage-out-card" data-door="">
+        <p class="stage-out-lead">Your classes, notes, and school apps in one place.</p>
+
+        <div class="door-panel" id="door-pick">
+          <button type="button" id="door-eps" class="google-native door-btn">Continue as an Eastside Prep student</button>
+          <button type="button" id="door-other" class="google-native door-btn door-btn--quiet">I'm a student at another school</button>
+        </div>
+
+        <div class="door-panel" id="door-eps-panel" hidden>
+          <h2 class="door-title">EPS sign-in is coming soon</h2>
+          <p class="door-copy">
+            EPS students will sign in with their @eastsideprep.org Microsoft account and get their four11 schedule
+            plus OneDrive, OneNote, Outlook, and Teams connected in that one step. School IT is approving the app now.
+          </p>
+          <button type="button" class="door-back" data-door-back>Back</button>
+        </div>
+
+        <div class="door-panel" id="door-other-panel" hidden>
+          <button type="button" id="stage-google" class="google-native">
+            <span class="google-native-mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path fill="#4285F4" d="M23.52 12.27c0-.86-.07-1.49-.23-2.14H12v3.89h6.55c-.13 1.1-.84 2.76-2.42 3.88l-.02.14 3.51 2.72.24.02c2.24-2.07 3.66-5.12 3.66-8.51z"/>
+                <path fill="#34A853" d="M12 24c3.2 0 5.89-1.05 7.85-2.86l-3.74-2.9c-1 .7-2.35 1.19-4.11 1.19-3.15 0-5.82-2.07-6.77-4.94l-.14.01-3.66 2.83-.05.13C3.35 21.33 7.36 24 12 24z"/>
+                <path fill="#FBBC05" d="M5.23 14.49A7.2 7.2 0 0 1 4.83 12c0-.87.15-1.71.39-2.49l-.01-.17-3.7-2.87-.12.06A11.97 11.97 0 0 0 0 12c0 1.94.47 3.78 1.39 5.47l3.84-2.98z"/>
+                <path fill="#EA4335" d="M12 4.77c2.22 0 3.72.96 4.57 1.76l3.34-3.26C17.88 1.19 15.2 0 12 0 7.36 0 3.35 2.67 1.39 6.53l3.83 2.98C6.17 6.84 8.85 4.77 12 4.77z"/>
+              </svg>
+            </span>
+            Sign in with Google
+          </button>
+          <p class="door-copy">Sign in with Google. You'll upload your schedule and add your own API keys in Settings.</p>
+          <p class="stage-out-status" id="stage-out-status" hidden></p>
+          <button type="button" class="door-back" data-door-back>Back</button>
+        </div>
+
+        <p class="stage-out-links">
+          <a class="stage-out-foot" href="/research">Research</a>
+          <a class="stage-out-foot" href="/privacy.html">Privacy</a>
+        </p>
+      </div>
+    </div>
+
+    <div id="stage-paused" class="stage stage-out" hidden>
+      <div class="stage-out-card stage-paused-card">
+        <div class="edu-google-account stage-paused-who" id="paused-profile" hidden>
+          <img class="edu-google-pic" id="paused-picture" alt="" hidden />
+          <div class="edu-google-who">
+            <p class="edu-google-name" id="paused-name"></p>
+            <p class="edu-google-email" id="paused-email"></p>
+          </div>
+        </div>
+        <h2 class="door-title">Almost ready</h2>
+        <p class="door-copy" id="paused-message"></p>
+        <button type="button" id="paused-signout" class="google-native door-btn door-btn--quiet">Sign out</button>
         <p class="stage-out-links">
           <a class="stage-out-foot" href="/research">Research</a>
           <a class="stage-out-foot" href="/privacy.html">Privacy</a>
@@ -292,10 +331,10 @@
 
         <div id="settings-gated" class="edu-sheet-gated">
         <section class="set-block">
-          <button type="button" class="set-nav" data-pane="school">
+          <button type="button" class="set-nav" data-pane="schedule">
             <span class="set-nav-copy">
-              <span class="set-nav-title">School</span>
-              <span class="set-nav-meta" id="school-summary">Eastside Prep</span>
+              <span class="set-nav-title">Schedule</span>
+              <span class="set-nav-meta" id="schedule-summary">Upload a PDF</span>
             </span>
             <svg class="set-nav-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path d="M9 6.2L15.2 12L9 17.8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -370,44 +409,29 @@
       </div>
 
       <div class="set-side" id="settings-side" aria-hidden="true" inert>
-        <div class="edu-sheet edu-sheet--set" data-pane="school" hidden>
+        <div class="edu-sheet edu-sheet--set" data-pane="schedule" hidden>
           <div class="edu-sheet-head">
-            <h2 class="edu-sheet-title">School</h2>
-            <button type="button" class="edu-sheet-close set-pane-close" aria-label="Close school">
+            <h2 class="edu-sheet-title">Schedule</h2>
+            <button type="button" class="edu-sheet-close set-pane-close" aria-label="Close schedule">
               <svg viewBox="0 0 24 24" fill="currentColor" shape-rendering="geometricPrecision" aria-hidden="true">
                 <path d="M5.448 7.252 16.748 18.552a1.275 1.275 0 0 0 1.804-1.804L7.252 5.448a1.275 1.275 0 0 0-1.804 1.804Zm11.3-1.804L5.448 16.748a1.275 1.275 0 0 0 1.804 1.804L18.552 7.252a1.275 1.275 0 0 0-1.804-1.804Z"/>
               </svg>
             </button>
           </div>
           <div class="edu-sheet-body">
-            <div class="edu-school-search">
-              <label for="school">School</label>
-              <div class="edu-sheet-field">
-                <input id="school" name="school" value="Eastside Prep" maxlength="80" autocomplete="off" />
-              </div>
-              <input type="hidden" id="schoolSlug" name="schoolSlug" value="" />
-              <ul id="school-results" class="edu-school-results" hidden role="listbox" aria-label="Schools"></ul>
-            </div>
-            <label for="studentId">Student ID</label>
-            <div class="edu-sheet-field">
-              <input id="studentId" name="studentId" maxlength="80" placeholder="Optional" />
-            </div>
-            <label id="schedule-pdf-label">four11 schedule</label>
+            <label id="schedule-pdf-label">Schedule PDF</label>
             <p class="set-hint" id="schedule-blurb">
-              Upload this trimester's four11 schedule so your classes and grades can line up.
-              Use the printed term card with periods A-H from after the latest add/drop, the same
-              classes you have in Canvas right now. EPSynapse syncs schedule, classes, and grades
-              with Canvas, so the PDF you add has to match.
+              Upload this term's schedule PDF so your classes and grades can line up. Use the
+              printed term card from after the latest add/drop, the same classes you have in
+              Canvas right now. At Eastside Prep that is the four11 term card with periods A-H.
+              EPSynapse syncs schedule, classes, and grades with Canvas, so the PDF you add has to match.
             </p>
             <div class="edu-sheet-actions">
               <button type="button" id="schedule-pick" class="edu-sheet-btn edu-sheet-btn--gold">
-                Upload four11 schedule
+                Upload schedule PDF
               </button>
             </div>
             <p class="set-hint" id="schedule-status" role="status"></p>
-            <div class="edu-sheet-actions">
-              <button type="submit" id="settings-save" class="edu-sheet-btn edu-sheet-btn--gold">Save</button>
-            </div>
           </div>
         </div>
 
@@ -429,7 +453,7 @@
                 Sign up with Google. No credit card. Create API Key, then copy the value that starts with gsk_. Groq shows it only once.
               </li>
               <li>Paste it in the API key field below. Leave Model on Groq.</li>
-              <li>Tap Save key. Enter also saves. Do not use the School Save button for this.</li>
+              <li>Tap Save key. Enter also saves. Do not use the Canvas Save button for this.</li>
               <li>You can add more than one key. If one hits its free limit, chat switches to the next on its own.</li>
               <li>Chat key on the settings list must say Groq. Then close settings and ask in the chat pill. Do not paste the key in chat.</li>
               <li>
@@ -769,7 +793,7 @@
 
     <script src="/liquid-glass.js?v=glass14"></script>
     <script src="/theme-orb.js?v=moon6"></script>
-    <script src="/app.js?v=msapp1"></script>
+    <script src="/app.js?v=doors1"></script>
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js" crossorigin="anonymous"></script>
     <script src="/markdown.js?v=2"></script>
     <script src="/chatbot.js?v=userwhite1"></script>

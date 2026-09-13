@@ -6,6 +6,7 @@
   const LS_LINKS = "epsynapse.ms.links";
   const LS_MAIL = "epsynapse.ms.mail";
   const LS_EVENTS = "epsynapse.ms.events";
+  const LS_DOOR = "epsynapse.door";
 
   const loading = document.getElementById("stage-loading");
   const stage = document.getElementById("stage-full");
@@ -80,8 +81,9 @@
   let googleClientId = "";
   let gisConfigError = "";
   let gisInitialized = false;
-  let schoolTimer = 0;
-  const DEFAULT_SCHOOL = "Eastside Prep";
+  let pausedRefresh = null;
+  const PAUSED_FALLBACK =
+    "Your account is paused until Eastside Prep sign-in is live. Sign out and check back soon.";
   const NEED_GOOGLE = "Sign in with Google first.";
   const MS_OFF_STATUS =
     "Microsoft sign-in is off. EPSynapse needs its own Microsoft app registration approved by school IT before this can connect.";
@@ -225,6 +227,10 @@
       const err = new Error(body.error || `Request failed (${res.status})`);
       err.status = res.status;
       err.body = body;
+      if (res.status === 423 && body && body.paused === true) {
+        err.paused = true;
+        onPausedResponse(body);
+      }
       throw err;
     }
     return body;
@@ -238,13 +244,23 @@
     return Boolean(me && (me.email || me.googleName));
   }
 
+  function isPaused() {
+    return Boolean(me && me.paused);
+  }
+
   function applyAuthGate() {
     const on = signedInViaGoogle();
+    if (on && isPaused()) {
+      showPausedScreen();
+      return;
+    }
     const next = on ? "in" : "out";
     const authChanged = document.documentElement.dataset.auth !== next;
     document.documentElement.dataset.auth = next;
     if (authChanged) queueMicrotask(() => window.reinitLiquidGlass?.());
     const out = document.getElementById("stage-out");
+    const pausedEl = document.getElementById("stage-paused");
+    if (pausedEl) pausedEl.hidden = true;
     if (on) {
       if (out) out.hidden = true;
       return;
@@ -254,6 +270,106 @@
     if (loading) loading.hidden = true;
     if (stage) stage.hidden = true;
     if (out) out.hidden = false;
+  }
+
+  // Paused accounts: existing EPS students parked until the EPS door is live.
+  // Only GET /v1/me and POST /v1/me/logout work for them.
+  function showPausedScreen() {
+    const el = document.getElementById("stage-paused");
+    if (!el || !me) return;
+    const authChanged = document.documentElement.dataset.auth !== "paused";
+    document.documentElement.dataset.auth = "paused";
+    closeSheet();
+    closeChatOverlay();
+    stopOdPoll();
+    stopOlPoll();
+    stopTeamsPoll();
+    stopOnPoll();
+    if (loading) loading.hidden = true;
+    if (stage) stage.hidden = true;
+    const out = document.getElementById("stage-out");
+    if (out) out.hidden = true;
+
+    const profile = document.getElementById("paused-profile");
+    const pic = document.getElementById("paused-picture");
+    const nameEl = document.getElementById("paused-name");
+    const emailEl = document.getElementById("paused-email");
+    const name = me.googleName || me.displayName || "";
+    const email = me.email || "";
+    if (profile) profile.hidden = !(name || email || me.picture);
+    if (pic) {
+      if (me.picture) {
+        pic.src = me.picture;
+        pic.hidden = false;
+      } else {
+        pic.removeAttribute("src");
+        pic.hidden = true;
+      }
+    }
+    if (nameEl) nameEl.textContent = name;
+    if (emailEl) emailEl.textContent = email;
+    const msg = document.getElementById("paused-message");
+    if (msg) msg.textContent = String(me.pausedMessage || "").trim() || PAUSED_FALLBACK;
+
+    el.hidden = false;
+    if (authChanged) queueMicrotask(() => window.reinitLiquidGlass?.());
+  }
+
+  // A 423 from any route means the server parked this account. Refresh /v1/me
+  // once so the paused card shows the server's own message, then switch screens.
+  function onPausedResponse(body) {
+    if (pausedRefresh) return pausedRefresh;
+    pausedRefresh = (async () => {
+      try {
+        const fresh = await api("/v1/me");
+        if (fresh && (fresh.email || fresh.googleName)) me = fresh;
+      } catch {
+        /* keep what we have */
+      }
+      if (!me) return;
+      me.paused = true;
+      if (body && body.door && !me.door) me.door = body.door;
+      showPausedScreen();
+    })().finally(() => {
+      pausedRefresh = null;
+    });
+    return pausedRefresh;
+  }
+
+  // Logged-out card: "" shows the two doors, "eps" the coming-soon panel,
+  // "other" the Google button.
+  function showDoor(name) {
+    const door = name === "eps" || name === "other" ? name : "";
+    const card = document.getElementById("stage-out-card");
+    const pick = document.getElementById("door-pick");
+    const eps = document.getElementById("door-eps-panel");
+    const other = document.getElementById("door-other-panel");
+    if (card) card.dataset.door = door;
+    if (pick) pick.hidden = door !== "";
+    if (eps) eps.hidden = door !== "eps";
+    if (other) other.hidden = door !== "other";
+    if (door !== "other") setOutStatus("");
+    queueMicrotask(() => window.reinitLiquidGlass?.());
+  }
+
+  function rememberDoor(name) {
+    try {
+      if (name === "eps" || name === "other") localStorage.setItem(LS_DOOR, name);
+      else localStorage.removeItem(LS_DOOR);
+    } catch {
+      /* private mode */
+    }
+  }
+
+  function initDoor() {
+    let saved = "";
+    try {
+      saved = localStorage.getItem(LS_DOOR) || "";
+    } catch {
+      saved = "";
+    }
+    // Never auto-open the EPS coming-soon panel.
+    showDoor(saved === "other" ? "other" : "");
   }
 
   function setOutStatus(text) {
@@ -270,27 +386,14 @@
 
   function accountStatusText() {
     if (!signedInViaGoogle()) {
-      return gisConfigError || "Sign in with Google. Then add school and student ID so the school can match you.";
+      return gisConfigError || "Sign in with Google.";
     }
-    let text = "Signed in with Google.";
-    if (me.rosterMatched && me.rosterName) text += ` Matched · ${me.rosterName}`;
-    else if (me.rosterName) text += ` ${me.rosterName}`;
-    return text;
+    return "Signed in with Google.";
   }
 
   function fillFormFromMe() {
-    form.school.value = (me && me.school) || DEFAULT_SCHOOL;
-    form.studentId.value = (me && me.studentId) || "";
-    form.canvasHost.value = (me && me.canvasHost) || "https://eastsideprep.instructure.com";
-    const slugEl = document.getElementById("schoolSlug");
-    if (slugEl) slugEl.value = (me && me.schoolSlug) || slugEl.value || "";
-  }
-
-  function hideSchoolResults() {
-    const box = document.getElementById("school-results");
-    if (box) {
-      box.hidden = true;
-      box.innerHTML = "";
+    if (form.canvasHost) {
+      form.canvasHost.value = (me && me.canvasHost) || "https://eastsideprep.instructure.com";
     }
   }
 
@@ -428,6 +531,10 @@
         body: JSON.stringify({ idToken }),
       });
       fillFormFromMe();
+      if (isPaused()) {
+        showPausedScreen();
+        return;
+      }
       paintAccount();
       paintOnedrive();
       paintOutlook();
@@ -482,48 +589,6 @@
     gisInitialized = true;
     gisConfigError = "";
     paintAccount();
-  }
-
-  async function searchSchools(q) {
-    const box = document.getElementById("school-results");
-    if (!box) return;
-    try {
-      const data = await api(`/v1/schools?q=${encodeURIComponent(String(q || "").trim())}`);
-      const schools = data.schools || [];
-      if (!schools.length) {
-        hideSchoolResults();
-        return;
-      }
-      box.innerHTML = schools
-        .map((s) => {
-          const name = s.name || s.shortName || s.slug || "";
-          const extra = [s.shortName && s.shortName !== name ? s.shortName : "", s.domain || ""]
-            .filter(Boolean)
-            .join(" · ");
-          return `<li role="option" data-slug="${escapeHtml(s.slug || "")}" data-name="${escapeHtml(name)}" data-host="${escapeHtml(s.canvasHost || "")}">
-        <span class="edu-school-hit-name">${escapeHtml(name)}</span>
-        ${extra ? `<span class="edu-school-hit-meta">${escapeHtml(extra)}</span>` : ""}
-      </li>`;
-        })
-        .join("");
-      box.hidden = false;
-    } catch {
-      hideSchoolResults();
-    }
-  }
-
-  function pickSchool(li) {
-    if (!li) return;
-    const name = li.getAttribute("data-name") || DEFAULT_SCHOOL;
-    const slug = li.getAttribute("data-slug") || "";
-    const host = li.getAttribute("data-host") || "";
-    form.school.value = name;
-    const slugEl = document.getElementById("schoolSlug");
-    if (slugEl) slugEl.value = slug;
-    if (host && form.canvasHost) {
-      form.canvasHost.value = /^https?:\/\//i.test(host) ? host : `https://${host}`;
-    }
-    hideSchoolResults();
   }
 
   async function signOutGoogle() {
@@ -706,11 +771,6 @@
   }
 
   function paintNavSummaries() {
-    const school = document.getElementById("school-summary");
-    if (school) {
-      school.textContent =
-        (form.school && form.school.value.trim()) || (me && me.school) || "Eastside Prep";
-    }
     const chat = document.getElementById("chat-summary");
     if (chat) chat.textContent = chatKeySummary();
     const canvas = document.getElementById("canvas-summary");
@@ -786,7 +846,6 @@
       closePane();
       return;
     }
-    hideSchoolResults();
     sheet.dataset.pane = name;
     sheet.classList.add("is-side");
     showPane(name);
@@ -808,7 +867,6 @@
   }
 
   function closePane(immediate) {
-    hideSchoolResults();
     const keyEntry = document.getElementById("key-entry");
     const canvasEntry = document.getElementById("canvas-entry");
     if (keyEntry) delete keyEntry.dataset.add;
@@ -891,7 +949,6 @@
   }
 
   function closeSheet() {
-    hideSchoolResults();
     closePane(true);
     const finish = () => {
       sheet.hidden = true;
@@ -2294,7 +2351,7 @@
   }
 
   async function routeAndRender() {
-    if (!signedInViaGoogle()) {
+    if (!signedInViaGoogle() || isPaused()) {
       applyAuthGate();
       return;
     }
@@ -2322,7 +2379,7 @@
   }
 
   async function loadDashboard() {
-    if (!signedInViaGoogle()) {
+    if (!signedInViaGoogle() || isPaused()) {
       applyAuthGate();
       return;
     }
@@ -2925,13 +2982,22 @@
       try {
         me = await api("/v1/me");
         fillFormFromMe();
-        await migrateLocalKey();
-        await loadDashboard();
+        if (isPaused()) {
+          showPausedScreen();
+        } else {
+          await migrateLocalKey();
+          await loadDashboard();
+        }
       } catch {
         me = null;
         loading.hidden = true;
         stage.hidden = true;
       }
+    }
+    if (isPaused()) {
+      // Parked account: no dashboard, no Microsoft polls, no Google init.
+      showPausedScreen();
+      return;
     }
     paintAccount();
     paintCanvasToken();
@@ -3029,44 +3095,30 @@
   document.getElementById("stage-google")?.addEventListener("click", () => {
     startGoogleRedirect();
   });
+  document.getElementById("door-eps")?.addEventListener("click", () => {
+    // Coming soon. No sign-in call.
+    rememberDoor("eps");
+    showDoor("eps");
+  });
+  document.getElementById("door-other")?.addEventListener("click", () => {
+    rememberDoor("other");
+    showDoor("other");
+  });
+  document.querySelectorAll("[data-door-back]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      rememberDoor("");
+      showDoor("");
+    });
+  });
+  initDoor();
   document.getElementById("google-redirect")?.addEventListener("click", () => {
     startGoogleRedirect();
   });
   document.getElementById("google-signout")?.addEventListener("click", () => {
     signOutGoogle();
   });
-  const schoolInput = form.school;
-  schoolInput.addEventListener("input", () => {
-    const slugEl = document.getElementById("schoolSlug");
-    if (slugEl) slugEl.value = "";
-    paintNavSummaries();
-    clearTimeout(schoolTimer);
-    schoolTimer = setTimeout(() => searchSchools(schoolInput.value), 220);
-  });
-  schoolInput.addEventListener("focus", () => {
-    searchSchools(schoolInput.value || DEFAULT_SCHOOL);
-  });
-  schoolInput.addEventListener("keydown", (ev) => {
-    if (ev.key === "Escape") {
-      hideSchoolResults();
-      return;
-    }
-    if (ev.key === "Enter") {
-      const first = document.querySelector("#school-results li");
-      const box = document.getElementById("school-results");
-      if (first && box && !box.hidden) {
-        ev.preventDefault();
-        pickSchool(first);
-      }
-    }
-  });
-  document.getElementById("school-results")?.addEventListener("click", (ev) => {
-    const li = ev.target.closest("li");
-    if (li) pickSchool(li);
-  });
-  document.addEventListener("click", (ev) => {
-    const wrap = ev.target.closest(".edu-school-search");
-    if (!wrap) hideSchoolResults();
+  document.getElementById("paused-signout")?.addEventListener("click", () => {
+    signOutGoogle();
   });
   sheet.addEventListener("click", (ev) => {
     if (ev.target !== sheet) return;
@@ -3075,11 +3127,6 @@
   });
   document.addEventListener("keydown", (ev) => {
     if (ev.key === "Escape" && !sheet.hidden) {
-      const box = document.getElementById("school-results");
-      if (box && !box.hidden) {
-        hideSchoolResults();
-        return;
-      }
       if (keysOpen()) {
         closeKeys();
         return;
@@ -3126,23 +3173,18 @@
       setStatus(statusEl, NEED_GOOGLE);
       return;
     }
-    const studentId = form.studentId.value.trim();
     setStatus(statusEl, "Saving…");
     const payload = {
-      school: form.school.value.trim() || DEFAULT_SCHOOL,
-      studentId,
-      canvasHost: form.canvasHost.value.trim(),
+      canvasHost: form.canvasHost ? form.canvasHost.value.trim() : "",
     };
-    const slugEl = document.getElementById("schoolSlug");
-    if (slugEl && slugEl.value.trim()) payload.schoolSlug = slugEl.value.trim();
-    const canvasToken = form.canvasToken.value.trim();
+    const canvasToken = form.canvasToken ? form.canvasToken.value.trim() : "";
     if (canvasToken) payload.canvasToken = canvasToken;
     try {
       me = await api("/v1/me", {
         method: "POST",
         body: JSON.stringify(payload),
       });
-      form.canvasToken.value = "";
+      if (form.canvasToken) form.canvasToken.value = "";
       const canvasEntry = document.getElementById("canvas-entry");
       if (canvasEntry) delete canvasEntry.dataset.replace;
       paintAccount();
