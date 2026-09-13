@@ -4421,3 +4421,145 @@ html[data-resolved-theme="dark"] .door-btn--quiet {
   margin-top: 1.7rem;
 }
 
+/* Delete account (Settings account block and the paused card) */
+.account-danger {
+  display: grid;
+  gap: 0.55rem;
+  justify-items: start;
+  margin: 0.15rem 0 0;
+  text-align: left;
+}
+
+.account-danger[hidden],
+.account-danger-confirm[hidden] {
+  display: none !important;
+}
+
+.stage-paused-card .account-danger {
+  justify-items: center;
+  text-align: center;
+}
+
+.set-textbtn--danger,
+.set-textbtn--danger:hover {
+  color: #b3261e;
+}
+
+html[data-resolved-theme="dark"] .set-textbtn--danger,
+html[data-resolved-theme="dark"] .set-textbtn--danger:hover {
+  color: #ff7b6e;
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-resolved-theme="light"]) .set-textbtn--danger,
+  html:not([data-resolved-theme="light"]) .set-textbtn--danger:hover {
+    color: #ff7b6e;
+  }
+}
+
+.account-danger-confirm {
+  display: grid;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid color-mix(in srgb, #b3261e 35%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, #b3261e 6%, transparent);
+}
+
+.account-danger-confirm .set-hint {
+  color: var(--fg);
+}
+
+.account-danger-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.stage-paused-card .account-danger-actions {
+  justify-content: center;
+}
+
+.account-danger-actions .edu-sheet-btn {
+  flex: 0 1 auto;
+  min-width: 6.4rem;
+}
+
+.account-danger-status:empty {
+  display: none;
+}
+
+.edu-sheet-btn.edu-sheet-btn--danger,
+.edu-sheet-btn.edu-sheet-btn--danger.lg-fallback,
+html[data-resolved-theme="dark"] .edu-sheet-btn.edu-sheet-btn--danger {
+  --lg-tint-rgb: 179, 38, 30;
+  color: #fff;
+  background: #b3261e;
+  background-color: #b3261e;
+  border-color: color-mix(in srgb, #b3261e 80%, #000);
+  box-shadow: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-resolved-theme="light"]) .edu-sheet-btn.edu-sheet-btn--danger,
+  html:not([data-resolved-theme="light"]) .edu-sheet-btn.edu-sheet-btn--danger.lg-fallback {
+    color: #fff;
+    background: #c8362d;
+    background-color: #c8362d;
+    border-color: rgba(255, 255, 255, 0.14);
+  }
+}
+
+/* PDF schedules (other door): printed period labels and clock times */
+.edu-period--label {
+  flex: 0 0 auto;
+  width: auto;
+  max-width: 6.5rem;
+  padding: 0 0.15rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.edu-today-time {
+  flex: 0 0 auto;
+  min-width: 6.2rem;
+  font-size: var(--text-caption);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--card, var(--accent));
+  white-space: nowrap;
+}
+
+.edu-today-row .edu-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.edu-today-period {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.edu-row.edu-today-row.is-current,
+.edu-row.edu-today-row.is-current:hover {
+  background: color-mix(in srgb, var(--card, var(--accent)) 14%, transparent);
+}
+
+.edu-today-row.is-current .edu-name {
+  font-weight: 700;
+}
+
+.edu-meet-row .edu-row-link {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.65rem;
+}
+
+.edu-meet-row .edu-meta {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+

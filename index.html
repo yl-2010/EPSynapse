@@ -20,7 +20,7 @@
     <link rel="icon" href="/favicon.svg?v=logo5" type="image/svg+xml" />
     <link rel="icon" href="/favicon-32.png?v=logo4" type="image/png" sizes="32x32" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="stylesheet" href="/styles.css?v=doors2" />
+    <link rel="stylesheet" href="/styles.css?v=doors3" />
     <link
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css"
@@ -142,6 +142,17 @@
         <h2 class="door-title">Almost ready</h2>
         <p class="door-copy" id="paused-message"></p>
         <button type="button" id="paused-signout" class="google-native door-btn door-btn--quiet">Sign out</button>
+        <div class="account-danger" id="paused-danger">
+          <button type="button" id="paused-delete" class="set-textbtn set-textbtn--danger">Delete account</button>
+          <div class="account-danger-confirm" id="paused-delete-confirm" hidden>
+            <p class="set-hint">This deletes your notes, todos, uploaded files, chats, and connections. It cannot be undone.</p>
+            <div class="account-danger-actions">
+              <button type="button" id="paused-delete-ok" class="edu-sheet-btn edu-sheet-btn--danger">Delete</button>
+              <button type="button" id="paused-delete-cancel" class="edu-sheet-btn edu-sheet-btn--quiet">Cancel</button>
+            </div>
+            <p class="set-hint account-danger-status" id="paused-delete-status" role="status"></p>
+          </div>
+        </div>
         <p class="stage-out-links">
           <a class="stage-out-foot" href="/research">Research</a>
           <a class="stage-out-foot" href="/privacy.html">Privacy</a>
@@ -324,6 +335,17 @@
               <button type="button" id="google-signout" class="set-textbtn">Sign out</button>
             </span>
           </div>
+          <div class="account-danger" id="account-danger" hidden>
+            <button type="button" id="account-delete" class="set-textbtn set-textbtn--danger">Delete account</button>
+            <div class="account-danger-confirm" id="account-delete-confirm" hidden>
+              <p class="set-hint">This deletes your notes, todos, uploaded files, chats, and connections. It cannot be undone.</p>
+              <div class="account-danger-actions">
+                <button type="button" id="account-delete-ok" class="edu-sheet-btn edu-sheet-btn--danger">Delete</button>
+                <button type="button" id="account-delete-cancel" class="edu-sheet-btn edu-sheet-btn--quiet">Cancel</button>
+              </div>
+              <p class="set-hint account-danger-status" id="account-delete-status" role="status"></p>
+            </div>
+          </div>
           <p class="set-hint" id="settings-status">Sign in with Google first.</p>
         </section>
 
@@ -409,11 +431,17 @@
           </div>
           <div class="edu-sheet-body">
             <label id="schedule-pdf-label">Schedule PDF</label>
-            <p class="set-hint" id="schedule-blurb">
+            <p class="set-hint" id="schedule-blurb" data-door="eps">
               Upload this term's schedule PDF so your classes and grades can line up. Use the
               printed term card from after the latest add/drop, the same classes you have in
               Canvas right now. At Eastside Prep that is the four11 term card with periods A-H.
               EPSynapse syncs schedule, classes, and grades with Canvas, so the PDF you add has to match.
+            </p>
+            <p class="set-hint" id="schedule-blurb-other" data-door="other" hidden>
+              Upload the schedule PDF your school gave you. Your own model reads the class names,
+              periods, teachers, rooms, and meeting times off the page. If the PDF has times,
+              today's classes show up in order on the home screen. Use the schedule that matches
+              the classes you have in Canvas right now.
             </p>
             <div class="edu-sheet-actions">
               <button type="button" id="schedule-pick" class="edu-sheet-btn edu-sheet-btn--gold">
@@ -498,7 +526,11 @@
             </button>
           </div>
           <div class="edu-sheet-body">
-            <ol class="set-steps" id="canvas-steps">
+            <label for="canvasHost">Canvas URL</label>
+            <div class="edu-sheet-field">
+              <input id="canvasHost" name="canvasHost" type="url" inputmode="url" autocomplete="url" spellcheck="false" placeholder="https://yourschool.instructure.com" />
+            </div>
+            <ol class="set-steps" id="canvas-steps" data-door="eps">
               <li>Sign in with Google on this page if you have not already.</li>
               <li>
                 Open
@@ -514,10 +546,21 @@
               <li>Leave Canvas URL as https://eastsideprep.instructure.com unless you use another school. Paste the token below. Tap Save.</li>
               <li>Canvas on the settings list must say Connected. Then close settings.</li>
             </ol>
-            <label for="canvasHost">Canvas URL</label>
-            <div class="edu-sheet-field">
-              <input id="canvasHost" name="canvasHost" value="https://eastsideprep.instructure.com" />
-            </div>
+            <ol class="set-steps" id="canvas-steps-other" data-door="other" hidden>
+              <li>Sign in with Google on this page if you have not already.</li>
+              <li>
+                Type your school's Canvas URL above. It is the address in your browser when you open Canvas,
+                usually https://yourschool.instructure.com.
+              </li>
+              <li>
+                In Canvas, click Account (your picture, left side), then Settings. Scroll to Approved Integrations. Click Add New Access Token.
+              </li>
+              <li>
+                Purpose: EPSynapse. Pick an expiration date if Canvas asks for one. Click Generate Token and copy it now. Canvas shows it once.
+              </li>
+              <li>Paste the token below. Tap Save.</li>
+              <li>Canvas on the settings list must say Connected. Then close settings.</li>
+            </ol>
             <div id="canvas-ready" hidden>
               <div class="set-row">
                 <p class="set-ready">Canvas connected</p>
@@ -533,6 +576,7 @@
             <div class="edu-sheet-actions">
               <button type="submit" class="edu-sheet-btn edu-sheet-btn--gold">Save</button>
             </div>
+            <p class="set-hint" id="canvas-status" role="status"></p>
             <a class="set-link" href="/canvas">How to get a Canvas token</a>
           </div>
         </div>
@@ -565,7 +609,6 @@
             <div id="onedrive-pending" hidden>
               <a id="onedrive-open" class="set-link" href="#">Open Microsoft sign-in</a>
             </div>
-            <p class="set-hint" id="onedrive-studio" hidden>On this Mac the agent can already use the school OneDrive folder in Finder for today's demo.</p>
             <p class="set-hint ms-status" id="onedrive-status"></p>
             <div class="ms-approval" id="onedrive-approval" hidden>
               <p class="set-hint">Microsoft needs school IT to approve EPSynapse once. After that every student at EPS can connect.</p>
@@ -609,7 +652,6 @@
             <div id="onenote-pending" hidden>
               <a id="onenote-open" class="set-link" href="#">Open Microsoft sign-in</a>
             </div>
-            <p class="set-hint" id="onenote-studio" hidden>On this Mac the agent can already use the school Microsoft sign-in for today's demo.</p>
             <p class="set-hint ms-status" id="onenote-status"></p>
             <div class="ms-approval" id="onenote-approval" hidden>
               <p class="set-hint">Microsoft needs school IT to approve EPSynapse once. After that every student at EPS can connect.</p>
@@ -653,7 +695,6 @@
             <div id="outlook-pending" hidden>
               <a id="outlook-open" class="set-link" href="#">Open Microsoft sign-in</a>
             </div>
-            <p class="set-hint" id="outlook-studio" hidden>On this Mac the agent can already read and send school Outlook for today's demo.</p>
             <p class="set-hint ms-status" id="outlook-status"></p>
             <div class="ms-approval" id="outlook-approval" hidden>
               <p class="set-hint">Microsoft needs school IT to approve EPSynapse once. After that every student at EPS can connect.</p>
@@ -697,7 +738,6 @@
             <div id="teams-pending" hidden>
               <a id="teams-open" class="set-link" href="#">Open Microsoft sign-in</a>
             </div>
-            <p class="set-hint" id="teams-studio" hidden>On this Mac the agent can already read and send school Teams for today's demo.</p>
             <p class="set-hint ms-status" id="teams-status"></p>
             <div class="ms-approval" id="teams-approval" hidden>
               <p class="set-hint">Microsoft needs school IT to approve EPSynapse once. After that every student at EPS can connect.</p>
@@ -732,7 +772,7 @@
 
     <script src="/liquid-glass.js?v=glass14"></script>
     <script src="/theme-orb.js?v=moon6"></script>
-    <script src="/app.js?v=doors2"></script>
+    <script src="/app.js?v=doors3"></script>
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js" crossorigin="anonymous"></script>
     <script src="/markdown.js?v=2"></script>
     <script src="/chatbot.js?v=userwhite1"></script>

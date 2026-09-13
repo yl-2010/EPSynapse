@@ -55,6 +55,7 @@
     events: [],
     classes: [],
     meetings: [],
+    schedule: {},
     notes: [],
     grades: [],
     classFiles: [],
@@ -89,6 +90,68 @@
     "Microsoft sign-in is off. EPSynapse needs its own Microsoft app registration approved by school IT before this can connect.";
   const OD_WEB = "https://eastsideprep-my.sharepoint.com/";
   const OL_WEB = "https://outlook.office.com/mail/";
+  const EPS_CANVAS = "https://eastsideprep.instructure.com";
+  const DAY_ORDER = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+  // Two doors. `eps` keeps the Eastside Prep wording (four11 term card, A-H
+  // periods, eastsideprep.instructure.com). Everything else is `other`.
+  function accountDoor() {
+    return me && me.door === "eps" ? "eps" : "other";
+  }
+
+  function isEpsDoor() {
+    return accountDoor() === "eps";
+  }
+
+  function defaultCanvasHost() {
+    return isEpsDoor() ? EPS_CANVAS : "";
+  }
+
+  // The schedule route tells us where the classes came from. `llm` means the
+  // student's own PDF parsed by their model: printed period labels and real
+  // clock times, no EPS bells.
+  function scheduleMeta(sched) {
+    return {
+      source: String(sched?.source || ""),
+      noBellTimes: Boolean(sched?.noBellTimes),
+      todayKey: String(sched?.todayKey || ""),
+      school: String(sched?.school || ""),
+      termLabel: String(sched?.termLabel || ""),
+    };
+  }
+
+  function isLlmSchedule() {
+    return String(lastHome.schedule?.source || "") === "llm";
+  }
+
+  function clockMinutes(hhmm) {
+    const m = String(hhmm || "").match(/^(\d{1,2}):(\d{2})/);
+    if (!m) return null;
+    return Number(m[1]) * 60 + Number(m[2]);
+  }
+
+  function formatClock(hhmm) {
+    const mins = clockMinutes(hhmm);
+    if (mins == null) return String(hhmm || "");
+    const h = Math.floor(mins / 60) % 24;
+    const mm = String(mins % 60).padStart(2, "0");
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return `${h12}:${mm}`;
+  }
+
+  function meetingRange(m) {
+    if (!m || !m.start) return "";
+    return m.end ? `${formatClock(m.start)}-${formatClock(m.end)}` : formatClock(m.start);
+  }
+
+  function sortMeetings(rows) {
+    return [...(rows || [])].sort((a, b) => {
+      const da = DAY_ORDER.indexOf(a.day);
+      const db = DAY_ORDER.indexOf(b.day);
+      if (da !== db) return da - db;
+      return (clockMinutes(a.start) ?? 9999) - (clockMinutes(b.start) ?? 9999);
+    });
+  }
 
   function readJson(key, fallback) {
     try {
@@ -310,6 +373,7 @@
     if (emailEl) emailEl.textContent = email;
     const msg = document.getElementById("paused-message");
     if (msg) msg.textContent = String(me.pausedMessage || "").trim() || PAUSED_FALLBACK;
+    hideDeleteConfirm("paused");
 
     el.hidden = false;
     if (authChanged) queueMicrotask(() => window.reinitLiquidGlass?.());
@@ -393,8 +457,31 @@
 
   function fillFormFromMe() {
     if (form.canvasHost) {
-      form.canvasHost.value = (me && me.canvasHost) || "https://eastsideprep.instructure.com";
+      form.canvasHost.value = (me && me.canvasHost) || defaultCanvasHost();
+      // Other-door students have no default host. The server refuses a token
+      // without one, so ask for it up front.
+      form.canvasHost.required = !isEpsDoor();
     }
+    paintDoorCopy();
+  }
+
+  // Swap door-specific copy in the settings panes. Elements carry
+  // data-door="eps" or data-door="other". The Canvas step lists are handled by
+  // paintCanvasToken because they also hide once a token is saved.
+  function paintDoorCopy() {
+    const door = accountDoor();
+    document.querySelectorAll('[data-pane="schedule"] [data-door]').forEach((el) => {
+      el.hidden = el.getAttribute("data-door") !== door;
+    });
+  }
+
+  function scheduleSummaryText() {
+    const classes = (lastHome.classes || []).filter((c) => !c.freePeriod);
+    if (!classes.length) return "Upload a PDF";
+    const count = classes.length === 1 ? "1 class" : `${classes.length} classes`;
+    const school = String(lastHome.schedule?.school || "").trim();
+    if (isLlmSchedule() && school) return `${school} · ${count}`;
+    return count;
   }
 
   function paintAccount() {
@@ -432,6 +519,9 @@
         redirectBtn.style.display = "";
       }
     }
+    const danger = document.getElementById("account-danger");
+    if (danger) danger.hidden = !inGoogle;
+    if (!inGoogle) hideDeleteConfirm("account");
     if (statusEl) {
       statusEl.hidden = inGoogle;
       if (!inGoogle) setStatus(statusEl, accountStatusText());
@@ -590,15 +680,12 @@
     paintAccount();
   }
 
-  async function signOutGoogle() {
-    try {
-      await api("/v1/me/logout", { method: "POST", body: "{}" });
-    } catch {
-      /* still clear local session */
-    }
+  // Forget the session on this device and repaint as logged out. Shared by
+  // sign-out and delete-account.
+  function clearLocalSession() {
     localStorage.removeItem(LS_SID);
     me = null;
-    lastHome = { courses: [], assignments: [], files: [], messages: [] };
+    lastHome = { courses: [], assignments: [], files: [], messages: [], classes: [], meetings: [], schedule: {} };
     if (window.google?.accounts?.id) {
       try {
         window.google.accounts.id.disableAutoSelect();
@@ -612,11 +699,78 @@
     stopOdPoll();
     stopOlPoll();
     stopTeamsPoll();
+    stopOnPoll();
     paintOnedrive();
     paintOutlook();
     paintTeams();
-    lastHome = { courses: [], assignments: [], files: [], messages: [] };
     if (appEl) appEl.innerHTML = "";
+  }
+
+  async function signOutGoogle() {
+    try {
+      await api("/v1/me/logout", { method: "POST", body: "{}" });
+    } catch {
+      /* still clear local session */
+    }
+    clearLocalSession();
+  }
+
+  // Delete account. Two copies of the same control: one under Sign out in
+  // Settings (`account-*`), one on the paused card (`paused-*`) because paused
+  // students cannot open Settings.
+  function hideDeleteConfirm(prefix) {
+    const open = document.getElementById(`${prefix}-delete`);
+    const box = document.getElementById(`${prefix}-delete-confirm`);
+    const status = document.getElementById(`${prefix}-delete-status`);
+    const ok = document.getElementById(`${prefix}-delete-ok`);
+    if (box) box.hidden = true;
+    if (open) open.hidden = false;
+    if (ok) ok.disabled = false;
+    setStatus(status, "");
+  }
+
+  function showDeleteConfirm(prefix) {
+    const open = document.getElementById(`${prefix}-delete`);
+    const box = document.getElementById(`${prefix}-delete-confirm`);
+    const ok = document.getElementById(`${prefix}-delete-ok`);
+    if (!box) return;
+    box.hidden = false;
+    if (open) open.hidden = true;
+    setStatus(document.getElementById(`${prefix}-delete-status`), "");
+    if (ok) ok.focus();
+    glassAfterMove();
+  }
+
+  async function deleteAccount(prefix) {
+    const status = document.getElementById(`${prefix}-delete-status`);
+    const ok = document.getElementById(`${prefix}-delete-ok`);
+    if (!signedInViaGoogle()) {
+      setStatus(status, NEED_GOOGLE);
+      return;
+    }
+    setStatus(status, "Deleting…");
+    if (ok) ok.disabled = true;
+    try {
+      await api("/v1/me/delete", {
+        method: "POST",
+        body: JSON.stringify({ confirm: true }),
+        timeoutMs: 30000,
+      });
+    } catch (err) {
+      if (ok) ok.disabled = false;
+      setStatus(status, err.message || "Could not delete the account.");
+      return;
+    }
+    hideDeleteConfirm(prefix);
+    clearLocalSession();
+    rememberDoor("");
+    showDoor("");
+  }
+
+  function wireDeleteAccount(prefix) {
+    document.getElementById(`${prefix}-delete`)?.addEventListener("click", () => showDeleteConfirm(prefix));
+    document.getElementById(`${prefix}-delete-cancel`)?.addEventListener("click", () => hideDeleteConfirm(prefix));
+    document.getElementById(`${prefix}-delete-ok`)?.addEventListener("click", () => deleteAccount(prefix));
   }
 
   function glassAfterMove() {
@@ -636,11 +790,11 @@
   }
 
   function accountHasKey() {
-    return Boolean(me && (me.modelKeySet || me.cursorAgent));
+    return Boolean(me && me.modelKeySet);
   }
 
   function accountUsesCursor() {
-    return Boolean(me && (me.cursorAgent || me.modelProvider === "cursor"));
+    return Boolean(me && me.modelProvider === "cursor");
   }
 
   function accountKeyCount() {
@@ -762,13 +916,16 @@
     return Boolean(me && me.msNeedsAdminApproval) || /approv|consent|admin/i.test(msDeniedFor(prefix));
   }
 
-  function msNavLabel(connected, studio, email, fallback, denied, needsApproval) {
-    if (connected || studio) return email || "Connected";
+  function msNavLabel(connected, email, fallback, denied, needsApproval) {
+    if (connected) return email || "Connected";
     if (denied) return needsApproval ? "Needs IT approval" : "Not connected";
     return fallback;
   }
 
   function paintNavSummaries() {
+    paintDoorCopy();
+    const sched = document.getElementById("schedule-summary");
+    if (sched) sched.textContent = scheduleSummaryText();
     const chat = document.getElementById("chat-summary");
     if (chat) chat.textContent = chatKeySummary();
     const canvas = document.getElementById("canvas-summary");
@@ -777,7 +934,6 @@
     if (odSum) {
       odSum.textContent = msNavLabel(
         me && me.onedriveConnected,
-        me && me.studioOnedrive,
         me && me.onedriveEmail,
         "School files",
         msDeniedFor("onedrive"),
@@ -788,7 +944,6 @@
     if (onSum) {
       onSum.textContent = msNavLabel(
         me && me.onenoteConnected,
-        me && me.studioOnenote,
         me && (me.onenoteEmail || me.msSignedInEmail),
         "School notebooks",
         msDeniedFor("onenote"),
@@ -799,7 +954,6 @@
     if (olSum) {
       olSum.textContent = msNavLabel(
         me && me.outlookConnected,
-        me && me.studioOutlook,
         me && me.outlookEmail,
         "School mail",
         msDeniedFor("outlook"),
@@ -810,7 +964,6 @@
     if (tmSum) {
       tmSum.textContent = msNavLabel(
         me && me.teamsConnected,
-        me && me.studioTeams,
         me && me.teamsEmail,
         "School chat",
         msDeniedFor("teams"),
@@ -849,6 +1002,7 @@
       sideEl.setAttribute("aria-hidden", "false");
       sideEl.removeAttribute("inert");
     }
+    if (name === "canvas") setStatus(document.getElementById("canvas-status"), "");
     refreshKeyStatus();
     paintCanvasToken();
     paintOnedrive();
@@ -929,6 +1083,7 @@
     const canvasEntry = document.getElementById("canvas-entry");
     if (keyEntry) delete keyEntry.dataset.add;
     if (canvasEntry) delete canvasEntry.dataset.replace;
+    hideDeleteConfirm("account");
     fillFormFromMe();
     paintAccount();
     refreshKeyStatus();
@@ -1604,7 +1759,8 @@
     const href = String(link || "").trim();
     if (!href || href === "#") return "#";
     if (/^https?:\/\//i.test(href)) return href;
-    const host = String(me?.canvasHost || "https://eastsideprep.instructure.com").replace(/\/$/, "");
+    const host = String(me?.canvasHost || defaultCanvasHost()).replace(/\/$/, "");
+    if (!host) return href;
     return href.startsWith("/") ? `${host}${href}` : `${host}/${href}`;
   }
 
@@ -1725,6 +1881,10 @@
   }
 
   function isCurrentClass(c) {
+    if (isLlmSchedule()) {
+      // PDF schedules: only the server's `current` flag counts. No EPS bells.
+      return Boolean(c?.id) && (lastHome.meetings || []).some((m) => m.current && m.classId === c.id);
+    }
     const period = String(c?.period || "").toUpperCase();
     const meeting = (lastHome.meetings || []).find((m) => m.current && String(m.period || "").toUpperCase() === period);
     if (meeting) {
@@ -1736,16 +1896,82 @@
     return Boolean(cur && p && (p === cur[2] || p === cur[3]));
   }
 
+  // Period chip for a class row. EPS: the A-H letter only. PDF schedules: the
+  // printed label as-is ("1", "P3", "Block B").
+  function classPeriodTagHtml(c, hero) {
+    if (!isLlmSchedule()) return periodTagHtml(c?.period);
+    const label = String(c?.period || "").trim();
+    if (!label) return "";
+    return `<span class="edu-tag edu-period edu-period--label${hero ? " edu-period--hero" : ""}">${escapeHtml(label)}</span>`;
+  }
+
+  function classMetaText(c) {
+    if (isLlmSchedule()) return [c?.teacher, c?.room].map((v) => String(v || "").trim()).filter(Boolean).join(" · ");
+    return c?.courseCode || "";
+  }
+
   function classRow(c) {
     const highlight = isCurrentClass(c);
     const href = classHref(c);
-    const meta = c.courseCode || "";
+    const meta = classMetaText(c);
     return `<li class="edu-row edu-class-row${highlight ? " is-current" : ""} ${toneClass(classTone(c))}">
       <a class="edu-row-link" data-route href="${escapeHtml(href)}">
-        <span class="edu-name">${periodTagHtml(c.period)}<span class="edu-hero-class-name">${escapeHtml(fullerClassName(c.name, gradeForClass(c)?.name))}</span></span>
+        <span class="edu-name">${classPeriodTagHtml(c)}<span class="edu-hero-class-name">${escapeHtml(fullerClassName(c.name, gradeForClass(c)?.name))}</span></span>
         <span class="edu-meta">${escapeHtml(meta)}</span>
       </a>
     </li>`;
+  }
+
+  // Today panel for PDF schedules: the server's `meetings` for today, in clock
+  // order. With no bell times we list the classes and say why there is no order.
+  function todayRow(m) {
+    const klass = m.classId ? findClass(m.classId) : null;
+    const name = String(m.name || klass?.name || "Class");
+    const href = klass ? classHref(klass) : "";
+    const tone = klass ? classTone(klass) : hashTone(m.classId || name);
+    const time = lastHome.schedule?.noBellTimes ? "" : meetingRange(m);
+    const period = String(m.period || klass?.period || "").trim();
+    const inner = `${time ? `<span class="edu-today-time">${escapeHtml(time)}</span>` : ""}<span class="edu-name"><span class="edu-hero-class-name">${escapeHtml(name)}</span></span>${
+      period ? `<span class="edu-meta edu-today-period">${escapeHtml(period)}</span>` : ""
+    }`;
+    const cls = `edu-row edu-class-row edu-today-row${m.current ? " is-current" : ""} ${toneClass(tone)}`;
+    if (href) {
+      return `<li class="${cls}"><a class="edu-row-link" data-route href="${escapeHtml(href)}">${inner}</a></li>`;
+    }
+    return `<li class="${cls}"><span class="edu-row-link">${inner}</span></li>`;
+  }
+
+  function todayPanelBody() {
+    const meta = lastHome.schedule || {};
+    const meetings = (lastHome.meetings || []).filter((m) => m && !m.freePeriod);
+    const hasClasses = (lastHome.classes || []).some((c) => !c.freePeriod);
+    if (!hasClasses) return `<p class="edu-empty">Upload your schedule PDF in settings</p>`;
+    if (meta.noBellTimes) {
+      const rows = meetings.length
+        ? meetings
+        : homeClasses().map((c) => ({ name: c.name, classId: c.id, period: c.period }));
+      const list = rows.length ? `<ul class="edu-list">${rows.map(todayRow).join("")}</ul>` : "";
+      return `${list}<p class="edu-empty">Your PDF had no class times. Upload one with times to see today's order.</p>`;
+    }
+    if (!meetings.length) return `<p class="edu-empty">No classes today</p>`;
+    return `<ul class="edu-list">${sortMeetings(meetings).map(todayRow).join("")}</ul>`;
+  }
+
+  // Class page, PDF schedules only: every meeting of this class across the week.
+  function meetsPanelHtml(klass) {
+    const rows = Array.isArray(klass?.meetings) ? klass.meetings.filter((m) => m && m.day) : [];
+    if (!rows.length) return "";
+    const items = sortMeetings(rows)
+      .map(
+        (m) => `<li class="edu-row edu-meet-row">
+          <span class="edu-row-link">
+            <span class="edu-name">${escapeHtml(m.day)}</span>
+            <span class="edu-meta">${escapeHtml(meetingRange(m) || "No time on the PDF")}</span>
+          </span>
+        </li>`
+      )
+      .join("");
+    return panelHtml("Meets", `<ul class="edu-list">${items}</ul>`, "lg-edu-class-meets");
   }
 
   function fileHref(f) {
@@ -1969,6 +2195,7 @@
       events: next.events ?? lastHome.events ?? [],
       classes: next.classes ?? lastHome.classes ?? [],
       meetings: next.meetings ?? lastHome.meetings ?? [],
+      schedule: next.schedule ?? lastHome.schedule ?? {},
       notes: next.notes ?? lastHome.notes ?? [],
       grades: next.grades ?? lastHome.grades ?? [],
     };
@@ -1976,13 +2203,17 @@
     const done = (lastHome.assignments || []).filter((t) => t.done);
     const todoRows = todoListItemsHtml(open);
     const classItems = homeClasses();
+    const llm = isLlmSchedule();
 
     const todoEmpty = me?.canvasConnected
       ? "No open work"
       : "Connect Canvas in settings";
     const classEmpty = classItems.length
       ? "No classes"
-      : "Upload a term schedule PDF in settings";
+      : isEpsDoor()
+        ? "Upload a term schedule PDF in settings"
+        : "Upload your schedule PDF in settings";
+    const todayPanel = llm ? panelHtml("Today", todayPanelBody(), "lg-edu-today", "edu-panel--today") : "";
     const gradeItems = homeGradeItems();
     const gradeEmpty = me?.canvasConnected
       ? "No course grades yet"
@@ -1996,6 +2227,7 @@
           ${panelHtml("Completed", listOrEmpty(todoListItemsHtml(done), "Nothing completed yet"), "lg-edu-completed", "edu-panel--completed")}
         </div>
         <div class="edu-col edu-col--side">
+          ${todayPanel}
           ${panelHtml("Classes", listOrEmpty(classItems.map(classRow).join(""), classEmpty), "lg-edu-classes")}
           ${panelHtml("Grades", listOrEmpty(gradeItems.map(gradeRow).join(""), gradeEmpty), "lg-edu-grades")}
           ${panelHtml("Notes", notesPanelHtml(), "lg-edu-notes", "edu-panel--notes")}
@@ -2030,9 +2262,9 @@
       return period && String(m.period || "").toUpperCase() === period;
     });
     const current = mine.find((m) => m.current);
-    if (current) return `In session now · ${current.start}–${current.end}`;
-    const next = mine[0];
-    if (next?.start) return `Next · ${next.start}–${next.end}`;
+    if (current) return `In session now · ${meetingRange(current)}`;
+    const next = sortMeetings(mine)[0];
+    if (next?.start) return `Next · ${meetingRange(next)}`;
     return "";
   }
 
@@ -2068,15 +2300,27 @@
       })
       .join("");
 
-    const period = periodLetter(klass.period)
-      ? `<span class="edu-tag edu-period edu-period--hero">${escapeHtml(periodLetter(klass.period))}</span>`
-      : "";
+    const llm = isLlmSchedule();
+    const period = llm
+      ? classPeriodTagHtml(klass, true)
+      : periodLetter(klass.period)
+        ? `<span class="edu-tag edu-period edu-period--hero">${escapeHtml(periodLetter(klass.period))}</span>`
+        : "";
     const next = nextMeetingLine(klass);
     const courseGrade = gradeForClass(klass);
     const gradeText = courseGrade ? formatCourseGrade(courseGrade) : "";
-    const sub = [klass.subject, klass.courseCode, gradeText && gradeText !== "—" ? gradeText : "", next]
+    const sub = [
+      llm ? klass.teacher : "",
+      llm ? klass.room : "",
+      klass.subject,
+      klass.courseCode,
+      gradeText && gradeText !== "—" ? gradeText : "",
+      next,
+    ]
+      .map((v) => String(v || "").trim())
       .filter(Boolean)
       .join(" · ");
+    const meets = llm ? meetsPanelHtml(klass) : "";
     appEl.classList.add("is-settled");
     appEl.innerHTML = `
       <p class="edu-home-mark"><a class="edu-home-research" data-route href="/">Back</a></p>
@@ -2092,6 +2336,7 @@
           ${panelHtml("Completed", listOrEmpty(todoListItemsHtml(done), "Nothing completed yet"), "lg-edu-completed", "edu-panel--completed")}
         </div>
         <div class="edu-col edu-col--side">
+          ${meets}
           ${panelHtml("Notes", listOrEmpty(noteRows, "No notes for this class yet"), "lg-edu-class-notes")}
           ${panelHtml(
             "Files",
@@ -2423,6 +2668,7 @@
       events: [],
       classes: sched.classes || [],
       meetings: sched.meetings || [],
+      schedule: scheduleMeta(sched),
       notes: await notes,
       grades: (gradeRows.length ? gradeRows : mergedCourses).map((c) => ({ ...c, work: undefined })),
       classFiles: lastHome.classFiles || [],
@@ -2500,12 +2746,11 @@
   }
 
   function paintMsService(opts) {
-    const { prefix, statusEl, connected, studio, email, pending, lastError, denied, needsAdminApproval } = opts;
+    const { prefix, statusEl, connected, email, pending, lastError, denied, needsAdminApproval } = opts;
     const entry = document.getElementById(`${prefix}-entry`);
     const ready = document.getElementById(`${prefix}-ready`);
     const pendingEl = document.getElementById(`${prefix}-pending`);
     const openEl = document.getElementById(`${prefix}-open`);
-    const studioEl = document.getElementById(`${prefix}-studio`);
     const emailEl = document.getElementById(`${prefix}-email`);
     const steps = document.getElementById(`${prefix}-steps`);
     const approvalEl = document.getElementById(`${prefix}-approval`);
@@ -2514,7 +2759,7 @@
     const bodyEl = document.getElementById(`${prefix}-request-body`);
 
     const off = msSignInOff();
-    const isConnected = Boolean(connected || studio);
+    const isConnected = Boolean(connected);
     const hasPending = !off && msPendingLive(pending);
     const deniedText = !off && !isConnected && !hasPending ? String(denied || "") : "";
     const showApproval = !off && !isConnected && !hasPending && Boolean(deniedText || needsAdminApproval);
@@ -2523,10 +2768,9 @@
     if (ready) ready.hidden = !isConnected;
     if (pendingEl) pendingEl.hidden = !hasPending;
     if (steps) steps.hidden = off || isConnected || Boolean(hasPending) || showApproval;
-    if (studioEl) studioEl.hidden = !studio;
     if (approvalEl) approvalEl.hidden = !showApproval;
     if (bodyEl && !showApproval) bodyEl.hidden = true;
-    if (disconnectBtn) disconnectBtn.hidden = !connected || Boolean(studio);
+    if (disconnectBtn) disconnectBtn.hidden = !connected;
 
     if (connectBtn) {
       if (!connectBtn.dataset.label) connectBtn.dataset.label = connectBtn.textContent.trim();
@@ -2555,9 +2799,7 @@
       setStatus(statusEl, lastError);
       return;
     }
-    if (studio) {
-      setStatus(statusEl, "Connected on this Mac. The agent can use it today.");
-    } else if (connected) {
+    if (connected) {
       setStatus(statusEl, email || "Connected");
     } else if (hasPending) {
       setStatus(statusEl, "Finish the Microsoft sign-in. School IT may need to Accept once.");
@@ -2577,7 +2819,6 @@
       prefix: "onenote",
       statusEl: onStatus,
       connected: Boolean(me && me.onenoteConnected),
-      studio: Boolean(me && me.studioOnenote),
       email: (me && (me.onenoteEmail || me.msSignedInEmail)) || "",
       pending: me && (me.onenotePending || me.onedrivePending),
       lastError: lastOnError,
@@ -2591,7 +2832,6 @@
       prefix: "onedrive",
       statusEl: odStatus,
       connected: Boolean(me && me.onedriveConnected),
-      studio: Boolean(me && me.studioOnedrive),
       email: (me && me.onedriveEmail) || "",
       pending: me && me.onedrivePending,
       lastError: lastOdError,
@@ -2607,7 +2847,6 @@
       prefix: "outlook",
       statusEl: olStatus,
       connected: Boolean(me && me.outlookConnected),
-      studio: Boolean(me && me.studioOutlook),
       email: (me && me.outlookEmail) || "",
       pending: me && me.outlookPending,
       lastError: lastOlError,
@@ -2622,7 +2861,6 @@
       prefix: "teams",
       statusEl: tmStatus,
       connected: Boolean(me && me.teamsConnected),
-      studio: Boolean(me && me.studioTeams),
       email: (me && me.teamsEmail) || "",
       pending: me && me.teamsPending,
       lastError: lastTmError,
@@ -2646,8 +2884,12 @@
     const replacing = entry && entry.dataset.replace === "1";
     if (entry) entry.hidden = connected && !replacing;
     if (ready) ready.hidden = !connected;
+    const eps = isEpsDoor();
     const steps = document.getElementById("canvas-steps");
-    if (steps) steps.hidden = connected && !replacing;
+    const stepsOther = document.getElementById("canvas-steps-other");
+    if (steps) steps.hidden = !eps || (connected && !replacing);
+    if (stepsOther) stepsOther.hidden = eps || (connected && !replacing);
+    if (form.canvasHost) form.canvasHost.required = !eps;
     paintKeysSummary();
   }
 
@@ -2867,6 +3109,7 @@
       if (!res.ok) throw new Error(payload.error || "Upload failed.");
       lastHome.classes = payload.classes || [];
       lastHome.meetings = payload.meetings || [];
+      if (payload.source) lastHome.schedule = scheduleMeta(payload);
       const count = (payload.classes || []).filter((c) => !c.freePeriod).length;
       setScheduleStatus(count === 1 ? "Saved 1 class." : `Saved ${count} classes.`);
       if (input) input.value = "";
@@ -2925,6 +3168,8 @@
   document.getElementById("paused-signout")?.addEventListener("click", () => {
     signOutGoogle();
   });
+  wireDeleteAccount("account");
+  wireDeleteAccount("paused");
   sheet.addEventListener("click", (ev) => {
     if (ev.target !== sheet) return;
     if (keysOpen()) closeKeys();
@@ -2974,15 +3219,20 @@
       await saveChatKey();
       return;
     }
+    const canvasStatus = document.getElementById("canvas-status");
     if (!signedInViaGoogle()) {
-      setStatus(statusEl, NEED_GOOGLE);
+      setStatus(canvasStatus, NEED_GOOGLE);
       return;
     }
-    setStatus(statusEl, "Saving…");
-    const payload = {
-      canvasHost: form.canvasHost ? form.canvasHost.value.trim() : "",
-    };
+    const canvasHost = form.canvasHost ? form.canvasHost.value.trim() : "";
     const canvasToken = form.canvasToken ? form.canvasToken.value.trim() : "";
+    if (!canvasHost && !isEpsDoor()) {
+      setStatus(canvasStatus, "Enter your school's Canvas URL first, like https://yourschool.instructure.com.");
+      form.canvasHost?.focus();
+      return;
+    }
+    setStatus(canvasStatus, "Saving…");
+    const payload = { canvasHost };
     if (canvasToken) payload.canvasToken = canvasToken;
     try {
       me = await api("/v1/me", {
@@ -2992,19 +3242,21 @@
       if (form.canvasToken) form.canvasToken.value = "";
       const canvasEntry = document.getElementById("canvas-entry");
       if (canvasEntry) delete canvasEntry.dataset.replace;
+      fillFormFromMe();
       paintAccount();
       paintCanvasToken();
       paintOnedrive();
       paintOutlook();
       paintTeams();
       applyAgentFromMe();
+      setStatus(canvasStatus, me && me.canvasConnected ? "Canvas connected." : "Saved.");
       await loadDashboard();
     } catch (err) {
       if (err.status === 401) {
-        setStatus(statusEl, NEED_GOOGLE);
+        setStatus(canvasStatus, NEED_GOOGLE);
         return;
       }
-      setStatus(statusEl, err.message || "Could not save.");
+      setStatus(canvasStatus, err.message || "Could not save.");
     }
   });
 
@@ -3090,11 +3342,10 @@
       setMsAdminLink("onenote", st.adminConsentUrl || "");
       absorbMsStatus("onenote", st);
       if (haltIfMsOff("onenote", stopOnPoll)) return;
-      if (st.connected || st.studio) {
+      if (st.connected) {
         stopOnPoll();
         me = Object.assign({}, me, {
-          onenoteConnected: Boolean(st.connected),
-          studioOnenote: Boolean(st.studio),
+          onenoteConnected: true,
           onenoteEmail: st.email || "",
           onenotePending: null,
         });
@@ -3131,11 +3382,10 @@
       setMsAdminLink("onedrive", st.adminConsentUrl || "");
       absorbMsStatus("onedrive", st);
       if (haltIfMsOff("onedrive", stopOdPoll)) return;
-      if (st.connected || st.studio) {
+      if (st.connected) {
         stopOdPoll();
         me = Object.assign({}, me, {
-          onedriveConnected: Boolean(st.connected),
-          studioOnedrive: Boolean(st.studio),
+          onedriveConnected: true,
           onedriveEmail: st.email || "",
           onedrivePending: null,
         });
@@ -3178,11 +3428,10 @@
       setMsAdminLink("outlook", st.adminConsentUrl || "");
       absorbMsStatus("outlook", st);
       if (haltIfMsOff("outlook", stopOlPoll)) return;
-      if (st.connected || st.studio) {
+      if (st.connected) {
         stopOlPoll();
         me = Object.assign({}, me, {
-          outlookConnected: Boolean(st.connected),
-          studioOutlook: Boolean(st.studio),
+          outlookConnected: true,
           outlookEmail: st.email || "",
           outlookPending: null,
         });
@@ -3225,11 +3474,10 @@
       setMsAdminLink("teams", st.adminConsentUrl || "");
       absorbMsStatus("teams", st);
       if (haltIfMsOff("teams", stopTeamsPoll)) return;
-      if (st.connected || st.studio) {
+      if (st.connected) {
         stopTeamsPoll();
         me = Object.assign({}, me, {
-          teamsConnected: Boolean(st.connected),
-          studioTeams: Boolean(st.studio),
+          teamsConnected: true,
           teamsEmail: st.email || "",
           teamsPending: null,
         });
@@ -3284,7 +3532,6 @@
       label: "OneDrive",
       pendingKey: "onedrivePending",
       connectedKey: "onedriveConnected",
-      studioKey: "studioOnedrive",
       legacyStart: "/v1/me/onedrive/start",
       statusEl: () => odStatus,
       paint: () => paintOnedrive(),
@@ -3299,7 +3546,6 @@
       label: "OneNote",
       pendingKey: "onenotePending",
       connectedKey: "onenoteConnected",
-      studioKey: "studioOnenote",
       legacyStart: "/v1/me/onedrive/start",
       statusEl: () => onStatus,
       paint: () => {
@@ -3317,7 +3563,6 @@
       label: "Outlook",
       pendingKey: "outlookPending",
       connectedKey: "outlookConnected",
-      studioKey: "studioOutlook",
       legacyStart: "/v1/me/outlook/start",
       statusEl: () => olStatus,
       paint: () => paintOutlook(),
@@ -3332,7 +3577,6 @@
       label: "Teams",
       pendingKey: "teamsPending",
       connectedKey: "teamsConnected",
-      studioKey: "studioTeams",
       legacyStart: "/v1/me/teams/start",
       statusEl: () => tmStatus,
       paint: () => paintTeams(),
@@ -3351,7 +3595,7 @@
 
   function msServiceConnected(prefix) {
     const svc = msService(prefix);
-    return Boolean(svc && me && (me[svc.connectedKey] || me[svc.studioKey]));
+    return Boolean(svc && me && me[svc.connectedKey]);
   }
 
   async function refreshMe() {

@@ -23,7 +23,7 @@
     <link rel="icon" href="/favicon.svg?v=logo5" type="image/svg+xml" />
     <link rel="icon" href="/favicon-32.png?v=logo4" type="image/png" sizes="32x32" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="stylesheet" href="/styles.css?v=logo2" />
+    <link rel="stylesheet" href="/styles.css?v=doors3" />
     <style>
       a.corner {
         text-decoration: none;
@@ -92,33 +92,75 @@
         </div>
         <div class="edu-sheet-body">
           <p>
-            EPSynapse is a student app. Home is
-            <a href="/">epsynapse.com</a>.
+            EPSynapse is a student home page. Home is
+            <a href="/">epsynapse.com</a>. This page lists what the app stores about you, where it
+            lives, and how to remove it.
           </p>
 
-          <h2>Google sign-in</h2>
+          <h2>Your account</h2>
           <p>
-            When you sign in with Google we keep your name, email, and profile photo so you stay
-            logged in. That is all we take from Google.
+            When you sign in with Google we keep the Google account id, your name, email, and
+            profile picture. That is what keeps you signed in and puts your name in Settings.
+          </p>
+          <p>
+            Eastside Prep students will later sign in with the school Microsoft account instead.
+            For those accounts we will keep the school Microsoft identity and the Microsoft Graph
+            tokens that let the app read OneDrive, OneNote, Outlook, and Teams. That sign-in is not
+            live yet.
           </p>
 
-          <h2>School and student ID</h2>
+          <h2>Connections and keys</h2>
           <p>
-            Settings let you type a school and a student ID. Both are optional. They stay on your
-            account so a school admin can match you to a roster later.
+            For Canvas we keep the access token you paste in Settings, or for EPS students the
+            OAuth tokens from the school's Canvas. The app uses it to read your courses,
+            assignments, and grades and to mark todos done.
+          </p>
+          <p>
+            For chat we keep the model API keys you paste for Groq, Gemini, or OpenRouter. Chat and
+            note classification run on the provider you picked, using your own key. Each request
+            goes straight from the EPSynapse server to that provider. EPSynapse has no key of its
+            own in the loop.
+          </p>
+          <p>
+            All of these secrets are encrypted at rest with a server-side key. The browser never
+            keeps them.
           </p>
 
-          <h2>Canvas, OneDrive, Outlook, Teams</h2>
+          <h2>Your school work</h2>
           <p>
-            Tokens you connect stay on the Mac API behind api.epsynapse.com. The browser does not
-            keep those keys. Teams tokens stay on the Mac API too. School Microsoft sign-in may ask
-            IT to approve the app once.
+            Uploaded schedule PDFs and the classes parsed from them, including period labels,
+            teachers, rooms, and meeting times. Notes you paste and the class the model assigned
+            them to. Todos and their done state. Files you attach to a class or a todo. Chat
+            history with the assistant.
           </p>
 
-          <h2>We do not sell this</h2>
+          <h2>Where it lives</h2>
           <p>
-            No ads, no resale, no handing your roster to a third party. Questions go to the team
-            that runs epsynapse.com.
+            Everything sits on the EPSynapse server behind api.epsynapse.com. Today that is a Mac
+            in Washington state. It is moving to a Google Cloud project owned by the school so the
+            data outlives the students who built this.
+          </p>
+
+          <h2>What we do not do</h2>
+          <p>
+            Nothing is shared between students. Your notes, files, and chats are visible to your
+            account only. Nothing is sold, and there are no ads. Model requests go only to the
+            provider you chose, with your key.
+          </p>
+
+          <h2>Delete everything</h2>
+          <p>
+            Settings has a Delete account control under Sign out. Paused accounts have the same
+            control on their sign-in card. It removes your account, connections, keys, PDFs,
+            classes, notes, todos, files, and chats right away. There is no waiting period and
+            nothing is kept.
+          </p>
+
+          <h2>Questions</h2>
+          <!-- TODO: no contact address exists in the repo yet. Add one here when there is a real mailbox. -->
+          <p>
+            Ask the team that runs epsynapse.com. A contact address will appear here once one is
+            set up.
           </p>
 
           <p><a href="/">Back to EPSynapse</a></p>
