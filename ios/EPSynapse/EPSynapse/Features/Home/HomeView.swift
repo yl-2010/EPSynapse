@@ -94,8 +94,13 @@ struct HomeView: View {
             }
         }
         .task {
+            // Profile is nil at launch, so boot() normally flips isSignedIn
+            // from false to true and onChange(isSignedIn) loads the dashboard.
+            // Only load here when the state did not flip, otherwise every
+            // launch fires two full dashboard fetches in parallel.
+            let wasSignedIn = session.isSignedIn
             await session.boot()
-            if session.isSignedIn {
+            if session.isSignedIn, wasSignedIn {
                 await dashboard.load(from: session)
             }
         }
