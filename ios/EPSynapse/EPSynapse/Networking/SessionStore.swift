@@ -10,8 +10,6 @@ enum MSPaneState: Equatable {
   case idle
   /// The server can read this service with the student's own token.
   case connected(email: String)
-  /// The judges' demo account. Uses this Mac's school sign-in. No Disconnect.
-  case studio(email: String)
   /// Microsoft or the school tenant refused. `needsAdminApproval` means IT has to consent once.
   case denied(reason: String, needsAdminApproval: Bool)
   /// Browser OAuth flow. The web sign-in sheet is open or the callback is on its way.
@@ -23,7 +21,7 @@ enum MSPaneState: Equatable {
 
   var isConnected: Bool {
     switch self {
-    case .connected, .studio: true
+    case .connected: true
     default: false
     }
   }
@@ -44,6 +42,10 @@ final class SessionStore: ObservableObject {
   static let keyIdle = "Paste the gsk_ key here, tap Save key, wait until Chat key says Groq, then ask in chat. Do not paste the key in the chat box."
   static let googleFirst = "Sign in with Google first."
   static let signedInHint = "Signed in with Google."
+  static let deleteWarning =
+    "This deletes your notes, todos, uploaded files, chats, and connections. It cannot be undone."
+  static let canvasHostRequired =
+    "Enter your school's Canvas URL first (for example https://yourschool.instructure.com)."
 
   /// Front doors on the logged-out screen. Raw values match the server's `door` field.
   enum Door: String {
@@ -84,6 +86,8 @@ final class SessionStore: ObservableObject {
 
   @Published var providers: [AgentProvider] = []
   @Published var settingsStatus = ""
+  /// Progress or error line for the account delete flow. Empty when idle.
+  @Published var deleteStatus = ""
   @Published var keyStatus = SessionStore.keyIdle
   @Published var isBooting = true
 
@@ -229,11 +233,16 @@ final class SessionStore: ObservableObject {
       settingsStatus = Self.googleFirst
       return
     }
+    let host = canvasHost.trimmingCharacters(in: .whitespacesAndNewlines)
+    let token = canvasToken.trimmingCharacters(in: .whitespacesAndNewlines)
+    // Other-door students have no default Canvas host. The server returns the
+    // same 400 line; checking here saves a round trip.
+    if host.isEmpty, profile?.isOtherDoor == true, !token.isEmpty {
+      settingsStatus = Self.canvasHostRequired
+      return
+    }
     settingsStatus = "Saving…"
-    let body = SaveMeBody(
-      canvasHost: canvasHost.trimmingCharacters(in: .whitespacesAndNewlines),
-      canvasToken: canvasToken.trimmingCharacters(in: .whitespacesAndNewlines)
-    )
+    let body = SaveMeBody(canvasHost: host, canvasToken: token)
     do {
       let me: Profile = try await api.request("/v1/me", method: "POST", body: body, sessionId: sessionId)
       profile = me
@@ -513,6 +522,48 @@ final class SessionStore: ObservableObject {
         sessionId: sessionId
       )
     }
+    resetLocalSession()
+  }
+
+  /// POST /v1/me/delete. Wipes the account on the server, then clears this
+  /// device the same way logout does and forgets the door so the two-door
+  /// screen comes back. Works while paused. Returns false and leaves the
+  /// session alone if the server said no.
+  @discardableResult
+  func deleteAccount() async -> Bool {
+    guard !sessionId.isEmpty else {
+      resetLocalSession()
+      door = nil
+      return true
+    }
+    deleteStatus = "Deleting…"
+    do {
+      let reply: LogoutResponse = try await api.request(
+        "/v1/me/delete",
+        method: "POST",
+        body: DeleteAccountBody(),
+        sessionId: sessionId,
+        timeout: 30
+      )
+      guard reply.ok else {
+        deleteStatus = "The server did not confirm the delete. Try again."
+        return false
+      }
+    } catch let error as APIError where error.status == 401 {
+      // Session already gone. Nothing left to delete for this device.
+    } catch {
+      deleteStatus = (error as? APIError)?.message ?? "Could not delete the account."
+      return false
+    }
+    deleteStatus = ""
+    resetLocalSession()
+    door = nil
+    return true
+  }
+
+  /// Drops the Google session, the API session, and the profile. Shared by
+  /// logout and account delete so both leave the device in the same state.
+  private func resetLocalSession() {
     GIDSignIn.sharedInstance.signOut()
     sessionId = ""
     profile = nil
@@ -662,9 +713,6 @@ final class SessionStore: ObservableObject {
   }
 
   private func paneState(_ service: MSService, me: Profile) -> MSPaneState {
-    if me.msStudio(service) {
-      return .studio(email: me.msEmail(service))
-    }
     if me.msConnected(service) {
       return .connected(email: me.msEmail(service))
     }

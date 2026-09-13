@@ -30,6 +30,7 @@ struct Profile: Codable, Equatable {
   /// Which front door this account came through. "eps" (school Microsoft sign-in,
   /// not live yet) or "other" (Google). Defaults to "other" when the server omits it.
   var door: String
+  var isOtherDoor: Bool { door == "other" }
   /// True while the server holds this account back from the dashboard. Every
   /// authenticated route except GET /v1/me and POST /v1/me/logout returns 423.
   var paused: Bool
@@ -65,10 +66,6 @@ struct Profile: Codable, Equatable {
   // Microsoft per-service state. All optional on the wire; defaults are "not connected".
   var onenoteConnected: Bool = false
   var onenoteEmail: String = ""
-  var studioOnedrive: Bool = false
-  var studioOnenote: Bool = false
-  var studioOutlook: Bool = false
-  var studioTeams: Bool = false
   var msClientMode: String = ""
   var msConfigured: Bool?
   var msSignedInEmail: String = ""
@@ -184,10 +181,6 @@ struct Profile: Codable, Equatable {
 
     onenoteConnected = c.bool(.onenoteConnected)
     onenoteEmail = c.string(.onenoteEmail)
-    studioOnedrive = c.bool(.studioOnedrive)
-    studioOnenote = c.bool(.studioOnenote)
-    studioOutlook = c.bool(.studioOutlook)
-    studioTeams = c.bool(.studioTeams)
     msClientMode = c.string(.msClientMode)
     msConfigured = try? c.decodeIfPresent(Bool.self, forKey: .msConfigured)
     msSignedInEmail = c.string(.msSignedInEmail)
@@ -221,15 +214,6 @@ struct Profile: Codable, Equatable {
     case .teams: teamsEmail
     }
     return own.isEmpty ? msSignedInEmail : own
-  }
-
-  func msStudio(_ service: MSService) -> Bool {
-    switch service {
-    case .onedrive: studioOnedrive
-    case .onenote: studioOnenote
-    case .outlook: studioOutlook
-    case .teams: studioTeams
-    }
   }
 
   func msPending(_ service: MSService) -> DevicePending? {
@@ -1105,7 +1089,6 @@ struct ConnectionStatusResponse: Codable {
   var mode: String
   var configured: Bool?
   var msSignedInEmail: String
-  var studio: Bool
   var adminConsentUrl: String
 
   var isOff: Bool {
@@ -1129,7 +1112,6 @@ struct ConnectionStatusResponse: Codable {
     mode: String = "",
     configured: Bool? = nil,
     msSignedInEmail: String = "",
-    studio: Bool = false,
     adminConsentUrl: String = ""
   ) {
     self.connected = connected
@@ -1147,7 +1129,6 @@ struct ConnectionStatusResponse: Codable {
     self.mode = mode
     self.configured = configured
     self.msSignedInEmail = msSignedInEmail
-    self.studio = studio
     self.adminConsentUrl = adminConsentUrl
   }
 
@@ -1176,7 +1157,6 @@ struct ConnectionStatusResponse: Codable {
     mode = c.string(.mode)
     configured = try? c.decodeIfPresent(Bool.self, forKey: .configured)
     msSignedInEmail = c.string(.msSignedInEmail)
-    studio = c.bool(.studio)
     adminConsentUrl = c.string(.adminConsentUrl)
   }
 }
@@ -1307,6 +1287,32 @@ enum EPSLinks {
   static let outlookWeb = URL(string: "https://outlook.office.com/mail/")!
 }
 
+/// One weekly meeting on a class row from an uploaded (model-parsed) schedule.
+/// `day` is "Mon".."Fri", times are "HH:MM".
+struct ClassMeeting: Codable, Hashable, Equatable {
+  var day: String
+  var start: String
+  var end: String
+
+  init(day: String = "", start: String = "", end: String = "") {
+    self.day = day
+    self.start = start
+    self.end = end
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    day = c.string(.day)
+    start = c.string(.start)
+    end = c.string(.end)
+  }
+
+  var label: String {
+    let span = [start, end].filter { !$0.isEmpty }.joined(separator: "-")
+    return [day, span].filter { !$0.isEmpty }.joined(separator: " ")
+  }
+}
+
 struct SchoolClass: Codable, Identifiable, Hashable, Equatable {
   var id: String
   var name: String
@@ -1316,6 +1322,10 @@ struct SchoolClass: Codable, Identifiable, Hashable, Equatable {
   var canvasLink: String
   var courseCode: String
   var subject: String
+  /// Only set on model-parsed schedules. Empty for EPS rows.
+  var teacher: String
+  var room: String
+  var meetings: [ClassMeeting]
 
   init(
     id: String = "",
@@ -1325,7 +1335,10 @@ struct SchoolClass: Codable, Identifiable, Hashable, Equatable {
     freePeriod: Bool = false,
     canvasLink: String = "",
     courseCode: String = "",
-    subject: String = ""
+    subject: String = "",
+    teacher: String = "",
+    room: String = "",
+    meetings: [ClassMeeting] = []
   ) {
     self.id = id
     self.name = name
@@ -1335,6 +1348,9 @@ struct SchoolClass: Codable, Identifiable, Hashable, Equatable {
     self.canvasLink = canvasLink
     self.courseCode = courseCode
     self.subject = subject
+    self.teacher = teacher
+    self.room = room
+    self.meetings = meetings
   }
 
   init(course: Course) {
@@ -1361,6 +1377,9 @@ struct SchoolClass: Codable, Identifiable, Hashable, Equatable {
     canvasLink = c.string(.canvasLink)
     courseCode = c.string(.courseCode)
     subject = c.string(.subject)
+    teacher = c.string(.teacher)
+    room = c.string(.room)
+    meetings = (try? c.decodeIfPresent([ClassMeeting].self, forKey: .meetings)) ?? []
     id = rawId.isEmpty ? name : rawId
   }
 
@@ -1374,13 +1393,19 @@ struct SchoolClass: Codable, Identifiable, Hashable, Equatable {
     try c.encode(canvasLink, forKey: .canvasLink)
     try c.encode(courseCode, forKey: .courseCode)
     try c.encode(subject, forKey: .subject)
+    try c.encode(teacher, forKey: .teacher)
+    try c.encode(room, forKey: .room)
+    try c.encode(meetings, forKey: .meetings)
   }
 
   private enum CodingKeys: String, CodingKey {
     case id, name, period, trimester, term, freePeriod, canvasLink, courseCode, subject
+    case teacher, room, meetings
   }
 }
 
+/// One of today's rows from GET /v1/me/schedule `meetings`. Same shape for EPS
+/// bells and model-parsed schedules; `current` is computed by the server.
 struct ScheduleMeeting: Codable, Identifiable, Equatable {
   var id: String
   var title: String
@@ -1389,6 +1414,9 @@ struct ScheduleMeeting: Codable, Identifiable, Equatable {
   var end: String
   var period: String
   var classId: String
+  var freePeriod: Bool
+  var current: Bool
+  var term: String
 
   init(
     id: String = "",
@@ -1397,7 +1425,10 @@ struct ScheduleMeeting: Codable, Identifiable, Equatable {
     start: String = "",
     end: String = "",
     period: String = "",
-    classId: String = ""
+    classId: String = "",
+    freePeriod: Bool = false,
+    current: Bool = false,
+    term: String = ""
   ) {
     self.id = id
     self.title = title
@@ -1406,6 +1437,9 @@ struct ScheduleMeeting: Codable, Identifiable, Equatable {
     self.end = end
     self.period = period
     self.classId = classId
+    self.freePeriod = freePeriod
+    self.current = current
+    self.term = term
   }
 
   init(from decoder: Decoder) throws {
@@ -1420,7 +1454,10 @@ struct ScheduleMeeting: Codable, Identifiable, Equatable {
     end = c.string(.end)
     period = c.string(.period)
     classId = c.string(.classId)
-    id = rawId.isEmpty ? "\(title)-\(day)-\(start)" : rawId
+    freePeriod = c.bool(.freePeriod)
+    current = c.bool(.current)
+    term = c.string(.term)
+    id = rawId.isEmpty ? "\(title)-\(day)-\(start)-\(period)" : rawId
   }
 
   func encode(to encoder: Encoder) throws {
@@ -1432,42 +1469,154 @@ struct ScheduleMeeting: Codable, Identifiable, Equatable {
     try c.encode(end, forKey: .end)
     try c.encode(period, forKey: .period)
     try c.encode(classId, forKey: .classId)
+    try c.encode(freePeriod, forKey: .freePeriod)
+    try c.encode(current, forKey: .current)
+    try c.encode(term, forKey: .term)
+  }
+
+  /// "08:30-09:40", or just the start when the end is missing.
+  var timeLabel: String {
+    [start, end].filter { !$0.isEmpty }.joined(separator: "-")
+  }
+
+  /// Minutes past midnight from "HH:MM". Used to sort today's rows.
+  var startMinutes: Int {
+    let parts = start.split(separator: ":")
+    guard parts.count >= 2, let h = Int(parts[0]), let m = Int(parts[1]) else { return Int.max }
+    return h * 60 + m
   }
 
   private enum CodingKeys: String, CodingKey {
-    case id, title, name, day, start, end, period, classId
+    case id, title, name, day, start, end, period, classId, freePeriod, current, term
+  }
+}
+
+/// The EPS bell table that rides along with an EPS schedule. `null` on the wire
+/// for model-parsed schedules, so callers must treat it as optional.
+struct ScheduleBells: Codable, Equatable {
+  struct Slot: Codable, Equatable {
+    var start: String
+    var end: String
+
+    init(start: String = "", end: String = "") {
+      self.start = start
+      self.end = end
+    }
+
+    init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      start = c.string(.start)
+      end = c.string(.end)
+    }
+  }
+
+  var timezone: String
+  var slots: [Slot]
+  /// Weekday number ("1" = Monday) to the period letters taught that day.
+  var weekdayPeriods: [String: [String]]
+
+  init(timezone: String = "", slots: [Slot] = [], weekdayPeriods: [String: [String]] = [:]) {
+    self.timezone = timezone
+    self.slots = slots
+    self.weekdayPeriods = weekdayPeriods
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    timezone = c.string(.timezone)
+    slots = (try? c.decodeIfPresent([Slot].self, forKey: .bells)) ?? []
+    weekdayPeriods = (try? c.decodeIfPresent([String: [String]].self, forKey: .weekdayPeriods)) ?? [:]
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    try c.encode(timezone, forKey: .timezone)
+    try c.encode(slots, forKey: .bells)
+    try c.encode(weekdayPeriods, forKey: .weekdayPeriods)
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case timezone, bells, weekdayPeriods
   }
 }
 
 struct ScheduleResponse: Codable {
   var classes: [SchoolClass]
+  /// Today's rows, already ordered by the server.
   var meetings: [ScheduleMeeting]
+  /// "eps-card" or "four11" for EPS, "llm" for a schedule the student's model parsed.
+  var source: String
+  var school: String
+  var termLabel: String
+  /// EPS only. nil for llm schedules.
+  var bells: ScheduleBells?
+  /// True when a model-parsed PDF listed classes but no meeting times.
+  var noBellTimes: Bool
+  var todayKey: String
+  var term: String
 
-  init(classes: [SchoolClass] = [], meetings: [ScheduleMeeting] = []) {
+  var isLLM: Bool { source == "llm" }
+
+  init(
+    classes: [SchoolClass] = [],
+    meetings: [ScheduleMeeting] = [],
+    source: String = "",
+    school: String = "",
+    termLabel: String = "",
+    bells: ScheduleBells? = nil,
+    noBellTimes: Bool = false,
+    todayKey: String = "",
+    term: String = ""
+  ) {
     self.classes = classes
     self.meetings = meetings
+    self.source = source
+    self.school = school
+    self.termLabel = termLabel
+    self.bells = bells
+    self.noBellTimes = noBellTimes
+    self.todayKey = todayKey
+    self.term = term
   }
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     if let nested = try? c.decodeIfPresent(ScheduleResponse.self, forKey: .schedule) {
-      classes = nested.classes
-      meetings = nested.meetings
+      self = nested
       return
     }
     classes = (try? c.decodeIfPresent([SchoolClass].self, forKey: .classes)) ?? []
     meetings = (try? c.decodeIfPresent([ScheduleMeeting].self, forKey: .meetings)) ?? []
+    source = c.string(.source).lowercased()
+    school = c.string(.school)
+    termLabel = c.string(.termLabel)
+    bells = try? c.decodeIfPresent(ScheduleBells.self, forKey: .bells)
+    noBellTimes = c.bool(.noBellTimes)
+    todayKey = c.string(.todayKey)
+    term = c.string(.term)
   }
 
   func encode(to encoder: Encoder) throws {
     var c = encoder.container(keyedBy: CodingKeys.self)
     try c.encode(classes, forKey: .classes)
     try c.encode(meetings, forKey: .meetings)
+    try c.encode(source, forKey: .source)
+    try c.encode(school, forKey: .school)
+    try c.encode(termLabel, forKey: .termLabel)
+    try c.encodeIfPresent(bells, forKey: .bells)
+    try c.encode(noBellTimes, forKey: .noBellTimes)
+    try c.encode(todayKey, forKey: .todayKey)
+    try c.encode(term, forKey: .term)
   }
 
   private enum CodingKeys: String, CodingKey {
-    case classes, meetings, schedule
+    case classes, meetings, schedule, source, school, termLabel, bells, noBellTimes, todayKey, term
   }
+}
+
+/// POST /v1/me/delete. The server refuses the call unless `confirm` is true.
+struct DeleteAccountBody: Encodable {
+  var confirm: Bool = true
 }
 
 struct NoteVote: Equatable {

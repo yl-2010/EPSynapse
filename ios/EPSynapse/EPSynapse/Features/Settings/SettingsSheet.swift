@@ -41,16 +41,23 @@ struct SettingsSheet: View {
     @Environment(\.openURL) private var openURL
 
     @State private var path: [SettingsPane] = []
-    @State private var canvasHost = "https://eastsideprep.instructure.com"
+    @State private var canvasHost = ""
     @State private var canvasToken = ""
     @State private var draftKey = ""
     @State private var pickingPDF = false
     @State private var pickedPDF: URL?
     @State private var replacingKey = false
     @State private var replacingCanvas = false
+    @State private var confirmDelete = false
 
     private static let groqHelp = URL(string: "https://epsynapse.com/groq")!
     private static let canvasHelp = URL(string: "https://epsynapse.com/canvas")!
+    private static let epsCanvasHost = "https://eastsideprep.instructure.com"
+
+    /// Google door, any school. Copy must not assume EPS, four11, or a fixed Canvas host.
+    private var isOtherDoor: Bool {
+        session.profile?.isOtherDoor ?? (session.door == .other)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -223,42 +230,65 @@ struct SettingsSheet: View {
 
     private var schedulePane: some View {
         VStack(alignment: .leading, spacing: 12) {
-            fieldLabel("four11 schedule")
-            Text("Upload this trimester's four11 schedule so your classes and grades can line up. Use the printed term card with periods A-H from after the latest add/drop, the same classes you have in Canvas right now. EPSynapse syncs schedule, classes, and grades with Canvas, so the PDF you add has to match.")
-                .font(.footnote)
-                .foregroundStyle(EPSTheme.muted)
-                .fixedSize(horizontal: false, vertical: true)
+            if isOtherDoor {
+                fieldLabel("Schedule PDF")
+                Text("Upload the schedule your school gave you as a PDF. Your chat model reads the class names, teachers, rooms, and meeting times if they are printed. Add a chat key first. Uploading again replaces the old schedule.")
+                    .font(.footnote)
+                    .foregroundStyle(EPSTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                if !dashboard.scheduleClasses.isEmpty {
+                    Text(uploadedScheduleSummary)
+                        .font(.footnote)
+                        .foregroundStyle(EPSTheme.fg)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } else {
+                fieldLabel("four11 schedule")
+                Text("Upload this trimester's four11 schedule so your classes and grades can line up. Use the printed term card with periods A-H from after the latest add/drop, the same classes you have in Canvas right now. EPSynapse syncs schedule, classes, and grades with Canvas, so the PDF you add has to match.")
+                    .font(.footnote)
+                    .foregroundStyle(EPSTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             if let name = pickedPDF?.lastPathComponent, !name.isEmpty {
                 Text(name)
                     .font(.footnote)
                     .foregroundStyle(EPSTheme.fg)
             }
-            goldButton(dashboard.scheduleBusy ? "Uploading…" : "Upload four11 schedule") {
+            goldButton(scheduleButtonTitle) {
                 pickingPDF = true
             }
             if !dashboard.scheduleStatus.isEmpty {
                 Text(dashboard.scheduleStatus)
                     .font(.footnote)
                     .foregroundStyle(EPSTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
 
+    private var scheduleButtonTitle: String {
+        if dashboard.scheduleBusy { return "Uploading…" }
+        return isOtherDoor ? "Upload schedule PDF" : "Upload four11 schedule"
+    }
+
+    /// "8 classes · Lincoln High · Fall 2026", dropping whatever the PDF did not print.
+    private var uploadedScheduleSummary: String {
+        let count = dashboard.scheduleClasses.filter { !$0.freePeriod }.count
+        var parts = [count == 1 ? "1 class" : "\(count) classes"]
+        if !dashboard.scheduleSchool.isEmpty { parts.append(dashboard.scheduleSchool) }
+        if !dashboard.scheduleTermLabel.isEmpty { parts.append(dashboard.scheduleTermLabel) }
+        if dashboard.scheduleNoBellTimes { parts.append("no class times") }
+        return parts.joined(separator: " · ")
+    }
+
     private var chatPane: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if isCursorAgent {
-                Text("Cursor")
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(EPSTheme.fg)
-                Text("This account uses Cursor on the Mac. No Groq key.")
-                    .font(.footnote)
-                    .foregroundStyle(EPSTheme.muted)
-            } else if !hasChatKey || replacingKey {
+            if !hasChatKey || replacingKey {
                 stepList(Self.chatSteps)
             }
 
-            if hasChatKey && !isCursorAgent {
+            if hasChatKey {
                 HStack(alignment: .center, spacing: 12) {
                     Text(chatKeyTitle)
                         .font(.body.weight(.semibold))
@@ -286,7 +316,7 @@ struct SettingsSheet: View {
                 }
             }
 
-            if !isCursorAgent && (!hasChatKey || replacingKey) {
+            if !hasChatKey || replacingKey {
                 fieldLabel("Model")
                 glassField {
                     Picker("Model", selection: $session.provider) {
@@ -320,21 +350,40 @@ struct SettingsSheet: View {
                     .font(.footnote)
                     .foregroundStyle(EPSTheme.muted)
             }
-            if !isCursorAgent {
-                helpLink("How to get a Groq key", Self.groqHelp)
-            }
+            helpLink("How to get a Groq key", Self.groqHelp)
         }
     }
 
     private var canvasPane: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if session.profile?.canvasConnected != true || replacingCanvas {
-                stepList(Self.canvasSteps)
+            if isOtherDoor {
+                // URL comes first. There is no default host for other schools, so
+                // the token cannot be saved until this field has a value.
+                fieldLabel("Canvas URL")
+                glassField {
+                    TextField("https://yourschool.instructure.com", text: $canvasHost)
+                        .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                }
+                Text("Required. The address you open to see Canvas, for example https://yourschool.instructure.com.")
+                    .font(.footnote)
+                    .foregroundStyle(EPSTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            fieldLabel("Canvas URL")
-            glassField {
-                TextField("https://eastsideprep.instructure.com", text: $canvasHost)
+            if session.profile?.canvasConnected != true || replacingCanvas {
+                stepList(isOtherDoor ? Self.otherCanvasSteps : Self.canvasSteps)
+            }
+
+            if !isOtherDoor {
+                fieldLabel("Canvas URL")
+                glassField {
+                    TextField(Self.epsCanvasHost, text: $canvasHost)
+                        .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                }
             }
 
             if session.profile?.canvasConnected == true {
@@ -361,6 +410,7 @@ struct SettingsSheet: View {
                 Text(session.settingsStatus)
                     .font(.footnote)
                     .foregroundStyle(EPSTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             helpLink("How to get a Canvas token", Self.canvasHelp)
         }
@@ -400,14 +450,6 @@ struct SettingsSheet: View {
                         .font(.footnote)
                         .foregroundStyle(EPSTheme.muted)
                 }
-
-            case .studio(let email):
-                Text("\(service.title) connected")
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(EPSTheme.fg)
-                Text(email.isEmpty ? "\(service.title) connected" : "\(service.title) · \(email)")
-                    .font(.footnote)
-                    .foregroundStyle(EPSTheme.muted)
 
             case .denied(let reason, let needsAdminApproval):
                 Text(needsAdminApproval ? "Approval required" : "Microsoft said no")
@@ -512,9 +554,44 @@ struct SettingsSheet: View {
                     Task { await session.logout() }
                 }
             }
+            deleteAccountRow
         } else {
             goldButton("Sign in with Google") {
                 Task { await session.signInWithGoogle() }
+            }
+        }
+    }
+
+    /// Quiet destructive row under the account. The alert carries the real warning.
+    private var deleteAccountRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                confirmDelete = true
+            } label: {
+                Text("Delete account")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.red.opacity(0.85))
+            }
+            .buttonStyle(.plain)
+            .epsHapticOnTap()
+            .accessibilityHint("Deletes this account and everything stored with it")
+            .alert("Delete your account?", isPresented: $confirmDelete) {
+                Button("Delete", role: .destructive) {
+                    Task {
+                        if await session.deleteAccount() {
+                            isPresented = false
+                        }
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text(SessionStore.deleteWarning)
+            }
+            if !session.deleteStatus.isEmpty {
+                Text(session.deleteStatus)
+                    .font(.footnote)
+                    .foregroundStyle(EPSTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -610,22 +687,19 @@ struct SettingsSheet: View {
 
     private var scheduleMeta: String {
         if dashboard.scheduleBusy { return "Uploading" }
-        return dashboard.scheduleClasses.isEmpty ? "Upload your four11 PDF" : "Uploaded"
-    }
-
-    private var isCursorAgent: Bool {
-        session.profile?.modelProvider == "cursor"
+        if !dashboard.scheduleClasses.isEmpty { return "Uploaded" }
+        return isOtherDoor ? "Upload your schedule PDF" : "Upload your four11 PDF"
     }
 
     private var chatMeta: String {
-        if isCursorAgent { return "Cursor" }
         guard hasChatKey else { return "Add a Groq key" }
         if chatKeyCount > 1 { return "\(providerLabel) · \(chatKeyCount) keys" }
         return providerLabel
     }
 
     private var canvasMeta: String {
-        session.profile?.canvasConnected == true ? "Connected" : "URL and token"
+        if session.profile?.canvasConnected == true { return "Connected" }
+        return isOtherDoor ? "School URL and token" : "URL and token"
     }
 
     private var onedriveMeta: String { msMeta(.onedrive) }
@@ -635,7 +709,7 @@ struct SettingsSheet: View {
 
     private func msMeta(_ service: MSService) -> String {
         switch session.msState(service) {
-        case .connected(let email), .studio(let email):
+        case .connected(let email):
             let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmed.isEmpty ? "Connected" : trimmed
         case .denied(_, let needsAdminApproval):
@@ -657,12 +731,10 @@ struct SettingsSheet: View {
         if let label = session.providers.first(where: { $0.id == session.provider })?.label, !label.isEmpty {
             return label
         }
-        if isCursorAgent { return "Cursor" }
         switch session.provider {
         case "groq": return "Groq"
         case "gemini": return "Gemini"
         case "openrouter": return "OpenRouter"
-        case "cursor": return "Cursor"
         default: return session.provider.isEmpty ? "Groq" : session.provider
         }
     }
@@ -691,7 +763,12 @@ struct SettingsSheet: View {
     }
 
     private func saveCanvas() async {
-        await session.saveCanvas(canvasHost: canvasHost, canvasToken: canvasToken)
+        let host = canvasHost.trimmingCharacters(in: .whitespacesAndNewlines)
+        if isOtherDoor, host.isEmpty {
+            session.settingsStatus = SessionStore.canvasHostRequired
+            return
+        }
+        await session.saveCanvas(canvasHost: host, canvasToken: canvasToken)
         if session.settingsStatus.hasPrefix("Saved") {
             canvasToken = ""
             replacingCanvas = false
@@ -702,6 +779,9 @@ struct SettingsSheet: View {
     private func hydrate() {
         if let profile = session.profile, !profile.canvasHost.isEmpty {
             canvasHost = profile.canvasHost
+        } else if canvasHost.isEmpty, !isOtherDoor {
+            // EPS students share one Canvas host. Other schools start blank.
+            canvasHost = Self.epsCanvasHost
         }
         draftKey = ""
     }
@@ -721,6 +801,16 @@ struct SettingsSheet: View {
         "In Canvas, click Account (your picture, left side), then Settings. Scroll to Approved Integrations. Click Add New Access Token.",
         "Purpose: EPSynapse. Students must pick an expiration date. There is no permissions list. Click Generate Token and copy it now. Canvas shows it once.",
         "Leave Canvas URL as https://eastsideprep.instructure.com unless you use another school. Paste the token below. Tap Save.",
+        "Canvas on the settings list must say Connected. Then close settings.",
+    ]
+
+    /// Other-door Canvas steps. No school name, no fixed host.
+    private static let otherCanvasSteps = [
+        "Sign in with Google on this page if you have not already.",
+        "Type your school's Canvas address above. It is the URL you open to see Canvas, usually ending in instructure.com.",
+        "Open that Canvas site and sign in. Click Account (your picture, left side), then Settings. Scroll to Approved Integrations. Click Add New Access Token.",
+        "Purpose: EPSynapse. Pick an expiration date if Canvas asks. Click Generate Token and copy it now. Canvas shows it once.",
+        "Paste the token below. Tap Save.",
         "Canvas on the settings list must say Connected. Then close settings.",
     ]
 

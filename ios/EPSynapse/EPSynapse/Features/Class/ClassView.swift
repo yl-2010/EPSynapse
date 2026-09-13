@@ -141,14 +141,48 @@ struct ClassView: View {
                     if !schoolClass.courseCode.isEmpty {
                         Text(schoolClass.courseCode)
                     }
+                    // Teacher and room only come from uploaded (model-parsed) schedules.
+                    if !schoolClass.teacher.isEmpty {
+                        Text(schoolClass.teacher)
+                    }
+                    if !schoolClass.room.isEmpty {
+                        Text(roomLabel(schoolClass.room))
+                    }
                 }
                 .font(.subheadline)
                 .foregroundStyle(EPSTheme.muted)
+                if !schoolClass.meetings.isEmpty {
+                    Text(meetingsLine(schoolClass.meetings))
+                        .font(.footnote.monospacedDigit())
+                        .foregroundStyle(EPSTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .epsGlassRounded(cornerRadius: 22, interactive: false)
+    }
+
+    /// "Room 204" unless the PDF already printed the word.
+    private func roomLabel(_ room: String) -> String {
+        let trimmed = room.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.lowercased().hasPrefix("room") || trimmed.lowercased().hasPrefix("rm") {
+            return trimmed
+        }
+        return "Room \(trimmed)"
+    }
+
+    /// Weekly meetings as one line, e.g. "Mon 09:00-09:50 · Wed 09:00-09:50".
+    private func meetingsLine(_ meetings: [ClassMeeting]) -> String {
+        let order = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        let sorted = meetings.sorted { a, b in
+            let da = order.firstIndex(of: a.day) ?? order.count
+            let db = order.firstIndex(of: b.day) ?? order.count
+            if da != db { return da < db }
+            return a.start < b.start
+        }
+        return sorted.map(\.label).filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
     private func canvasButton(_ raw: String) -> some View {

@@ -9,6 +9,12 @@ final class DashboardStore: ObservableObject {
   @Published var courses: [Course] = []
   @Published var scheduleClasses: [SchoolClass] = []
   @Published var meetings: [ScheduleMeeting] = []
+  /// "eps-card" / "four11" for EPS, "llm" for a model-parsed upload, "" before load.
+  @Published var scheduleSource = ""
+  @Published var scheduleSchool = ""
+  @Published var scheduleTermLabel = ""
+  /// llm schedule whose PDF listed classes but no meeting times.
+  @Published var scheduleNoBellTimes = false
   @Published var assignments: [Assignment] = []
   @Published var files: [DriveFile] = []
   @Published var classFiles: [DriveFile] = []
@@ -33,6 +39,35 @@ final class DashboardStore: ObservableObject {
   var displayedClasses: [SchoolClass] {
     if !scheduleClasses.isEmpty { return scheduleClasses }
     return courses.map(SchoolClass.init(course:))
+  }
+
+  /// True when the schedule came from the student's own PDF through their model.
+  /// EPS bells, A-H letters, and trimester names do not apply to these rows.
+  var isLLMSchedule: Bool {
+    scheduleSource == "llm" && !scheduleClasses.isEmpty
+  }
+
+  /// Today's rows in start-time order. The server already sorts llm rows; EPS
+  /// rows come in bell order, which is the same thing.
+  var todayMeetings: [ScheduleMeeting] {
+    meetings.sorted { $0.startMinutes < $1.startMinutes }
+  }
+
+  /// Whether this class is meeting right now. llm schedules trust the server's
+  /// `current` flag on today's rows; EPS rows fall back to the built-in bells.
+  func isCurrent(_ schoolClass: SchoolClass) -> Bool {
+    if isLLMSchedule {
+      return meetings.contains { $0.current && Self.meeting($0, matches: schoolClass) }
+    }
+    guard let now = Self.currentPeriod() else { return false }
+    let p = schoolClass.period.uppercased()
+    return p == now.num || p == now.letter
+  }
+
+  private static func meeting(_ meeting: ScheduleMeeting, matches schoolClass: SchoolClass) -> Bool {
+    if !meeting.classId.isEmpty, meeting.classId == schoolClass.id { return true }
+    if meeting.classId.isEmpty, !meeting.period.isEmpty, meeting.period == schoolClass.period { return true }
+    return false
   }
 
   var noteClassLabels: [String] {
@@ -63,6 +98,10 @@ final class DashboardStore: ObservableObject {
     courses = []
     scheduleClasses = []
     meetings = []
+    scheduleSource = ""
+    scheduleSchool = ""
+    scheduleTermLabel = ""
+    scheduleNoBellTimes = false
     assignments = []
     files = []
     classFiles = []
@@ -96,9 +135,7 @@ final class DashboardStore: ObservableObject {
     async let fetchedAssignments: [Assignment] = self.loadAssignments(sessionId: sid)
     async let fetchedClassFiles: [DriveFile] = self.loadClassFiles(sessionId: sid)
     async let fetchedTodoFiles: [DriveFile] = self.loadTodoFiles(sessionId: sid)
-    async let fetchedSchedule: (classes: [SchoolClass], meetings: [ScheduleMeeting]) = self.loadSchedule(
-      sessionId: sid
-    )
+    async let fetchedSchedule: ScheduleResponse = self.loadSchedule(sessionId: sid)
     async let fetchedNotes: [ClassifiedNote] = self.loadNotes(sessionId: sid)
 
     courses = await fetchedCourses
@@ -109,10 +146,17 @@ final class DashboardStore: ObservableObject {
     messages = []
     filesError = ""
     mailError = ""
-    let schedule = await fetchedSchedule
+    applySchedule(await fetchedSchedule)
+    notes = await fetchedNotes
+  }
+
+  private func applySchedule(_ schedule: ScheduleResponse) {
     scheduleClasses = schedule.classes
     meetings = schedule.meetings
-    notes = await fetchedNotes
+    scheduleSource = schedule.source
+    scheduleSchool = schedule.school
+    scheduleTermLabel = schedule.termLabel
+    scheduleNoBellTimes = schedule.isLLM && schedule.noBellTimes
   }
 
   func schoolClass(id: String) -> SchoolClass? {
@@ -219,8 +263,7 @@ final class DashboardStore: ObservableObject {
     defer { scheduleBusy = false }
     do {
       let wrapped = try await api.uploadSchedulePDF(fileURL: fileURL, sessionId: session.sessionId)
-      scheduleClasses = wrapped.classes
-      meetings = wrapped.meetings
+      applySchedule(wrapped)
       let count = wrapped.classes.count
       scheduleStatus = count == 1 ? "Schedule uploaded · 1 class" : "Schedule uploaded · \(count) classes"
       await load(from: session)
@@ -437,12 +480,11 @@ final class DashboardStore: ObservableObject {
     return (hit.2, hit.3)
   }
 
-  private func loadSchedule(sessionId: String) async -> (classes: [SchoolClass], meetings: [ScheduleMeeting]) {
+  private func loadSchedule(sessionId: String) async -> ScheduleResponse {
     do {
-      let wrapped = try await api.fetchSchedule(sessionId: sessionId)
-      return (wrapped.classes, wrapped.meetings)
+      return try await api.fetchSchedule(sessionId: sessionId)
     } catch {
-      return ([], [])
+      return ScheduleResponse()
     }
   }
 

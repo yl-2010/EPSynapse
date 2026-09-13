@@ -353,17 +353,134 @@ struct ClassesPanel: View {
     private var emptyCopy: String {
         if !dashboard.scheduleClasses.isEmpty { return "No classes" }
         if session.profile?.canvasConnected == true { return "No classes" }
+        if session.profile?.isOtherDoor == true { return "Upload your schedule PDF in settings" }
         return "Upload an EPS schedule PDF in settings"
+    }
+}
+
+/// Today's classes for a model-parsed schedule. Rows come from the server's
+/// `meetings` list in start-time order with the `current` flag already set.
+/// EPS schedules do not use this panel; their bells drive `ClassRow` instead.
+struct TodayPanel: View {
+    @EnvironmentObject private var dashboard: DashboardStore
+
+    private var rows: [ScheduleMeeting] { dashboard.todayMeetings }
+
+    private var classesWithoutTimes: [SchoolClass] {
+        dashboard.displayedClasses.filter { !$0.freePeriod }
+    }
+
+    var body: some View {
+        EPSPanel(title: "Today") {
+            if dashboard.scheduleNoBellTimes {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(classesWithoutTimes) { course in
+                        NavigationLink(value: HomeDestination.schoolClass(course.id)) {
+                            TodayRow(
+                                time: "",
+                                name: course.name,
+                                period: course.period,
+                                tone: dashboard.tone(for: course),
+                                isCurrent: false
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .epsHapticNavigation()
+                    }
+                    EmptyLine("Your PDF had no class times. Upload one with times to see today's order.")
+                }
+            } else if rows.isEmpty {
+                EmptyLine("No classes today")
+            } else {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(rows) { meeting in
+                        todayLink(meeting)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func todayLink(_ meeting: ScheduleMeeting) -> some View {
+        let klass = dashboard.schoolClass(id: meeting.classId)
+        let row = TodayRow(
+            time: meeting.timeLabel,
+            name: meeting.title,
+            period: meeting.period,
+            tone: klass.map { dashboard.tone(for: $0) } ?? EPSTheme.accent,
+            isCurrent: meeting.current
+        )
+        if let klass, !meeting.freePeriod {
+            NavigationLink(value: HomeDestination.schoolClass(klass.id)) { row }
+                .buttonStyle(.plain)
+                .epsHapticNavigation()
+        } else {
+            row
+        }
+    }
+}
+
+struct TodayRow: View {
+    var time: String
+    var name: String
+    var period: String
+    var tone: Color
+    var isCurrent: Bool
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 10) {
+            if !time.isEmpty {
+                Text(time)
+                    .font(.caption.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(isCurrent ? tone : EPSTheme.muted)
+                    .fixedSize()
+            }
+            Text(CourseTitle.pretty(name))
+                .font(.body.weight(isCurrent ? .bold : .semibold))
+                .foregroundStyle(EPSTheme.fg)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if !period.isEmpty {
+                Text(period)
+                    .font(.caption)
+                    .foregroundStyle(EPSTheme.muted)
+                    .fixedSize()
+            }
+            if isCurrent {
+                Text("Now")
+                    .font(.system(size: 11, weight: .bold))
+                    .tracking(0.4)
+                    .foregroundStyle(tone)
+            }
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 8)
+        .background {
+            if isCurrent {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(tone.opacity(0.12))
+            }
+        }
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityText)
+    }
+
+    private var accessibilityText: String {
+        var parts: [String] = []
+        if !time.isEmpty { parts.append(time) }
+        parts.append(CourseTitle.pretty(name))
+        if isCurrent { parts.append("now") }
+        return parts.joined(separator: ", ")
     }
 }
 
 struct ClassRow: View {
     var course: SchoolClass
+    @EnvironmentObject private var dashboard: DashboardStore
 
     private var isCurrent: Bool {
-        guard let now = DashboardStore.currentPeriod() else { return false }
-        let p = course.period.uppercased()
-        return p == now.num || p == now.letter
+        dashboard.isCurrent(course)
     }
 
     private var trailing: String {
@@ -373,10 +490,13 @@ struct ClassRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
             if !course.period.isEmpty {
+                // EPS letters sit in a fixed column. Printed labels from an uploaded
+                // schedule ("P1", "3rd", "Block B") get whatever width they need.
                 Text(course.period)
                     .font(.caption.weight(.bold))
                     .foregroundStyle(EPSTone.forClass(course).color)
-                    .frame(width: 22, alignment: .center)
+                    .lineLimit(1)
+                    .frame(minWidth: 22, alignment: .center)
             }
             Text(CourseTitle.pretty(course.name))
                 .font(.body.weight(.semibold))

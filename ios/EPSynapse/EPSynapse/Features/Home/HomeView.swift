@@ -13,6 +13,7 @@ struct HomeView: View {
     @State private var path = NavigationPath()
     /// Which front door is open on the logged-out screen. nil shows both buttons.
     @State private var openDoor: SessionStore.Door?
+    @State private var confirmDelete = false
 
     private var isWide: Bool {
         AdaptiveLayout.isWideLayout(horizontal: horizontalSizeClass, vertical: verticalSizeClass)
@@ -130,6 +131,10 @@ struct HomeView: View {
                 openDoor = .other
             }
         }
+        .onChange(of: session.door) { _, door in
+            // Account delete forgets the door so the two-door screen comes back.
+            if door == nil { openDoor = nil }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .epsOpenSettings)) { _ in
             showSettings = true
         }
@@ -150,6 +155,11 @@ struct HomeView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .top)
                 VStack(spacing: 16) {
+                    // Uploaded (model-parsed) schedules carry their own times, so
+                    // Today comes from the server rows. EPS rows use the bells.
+                    if dashboard.isLLMSchedule {
+                        TodayPanel()
+                    }
                     ClassesPanel()
                     NotesPanel(path: $path)
                 }
@@ -157,6 +167,9 @@ struct HomeView: View {
             }
         } else {
             VStack(spacing: 16) {
+                if dashboard.isLLMSchedule {
+                    TodayPanel()
+                }
                 TodoPanel()
                 ClassesPanel()
                 NotesPanel(path: $path)
@@ -351,6 +364,33 @@ struct HomeView: View {
             .buttonStyle(.plain)
             .epsGlassRounded(cornerRadius: 14, tint: EPSTheme.accent.opacity(0.72), interactive: true)
             .epsHapticOnTap()
+
+            // Delete still works while paused. Same confirmation as Settings.
+            Button {
+                confirmDelete = true
+            } label: {
+                Text("Delete account")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.red.opacity(0.85))
+            }
+            .buttonStyle(.plain)
+            .epsHapticOnTap()
+            .padding(.top, 4)
+            .alert("Delete your account?", isPresented: $confirmDelete) {
+                Button("Delete", role: .destructive) {
+                    Task { await session.deleteAccount() }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text(SessionStore.deleteWarning)
+            }
+
+            if !session.deleteStatus.isEmpty {
+                Text(session.deleteStatus)
+                    .font(.footnote)
+                    .foregroundStyle(EPSTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
