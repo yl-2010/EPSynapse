@@ -64,7 +64,7 @@ function modelSelection(spec) {
 
 const DEFAULT_MODEL_SPEC = personalModelSpec(
   process.env.CURSOR_PERSONAL_MODEL,
-  "grok-4.6"
+  "composer-2.5"
 );
 
 function sessionKey(student) {
