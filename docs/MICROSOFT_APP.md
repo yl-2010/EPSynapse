@@ -46,7 +46,7 @@ curl -sS -f http://127.0.0.1:3006/health
 
 ### How to test
 
-Sign in to https://epsynapse.com as a student who is not the demo account. Open Settings > OneNote and tap Connect. The browser goes to login.microsoftonline.com and comes back to `https://api.epsynapse.com/v1/ms/callback`. One of three things happens.
+Sign in to https://epsynapse.com as any student. Open Settings > OneNote and tap Connect. The browser goes to login.microsoftonline.com and comes back to `https://api.epsynapse.com/v1/ms/callback`. One of three things happens.
 
 a. The EPS tenant allows users to consent. Microsoft shows a consent screen titled "Permissions requested" that lists the ten permissions above with EPSynapse as the app name. Accept, and you land back on the site. The OneNote pane says Connected only after Graph returns a notebook list.
 
@@ -129,4 +129,4 @@ What is blocked on the app registration:
 - The consent screen, the admin approval path, and the full scope list in Part 1. None of it can be tested until `MICROSOFT_CLIENT_ID` points at our own registration.
 - Every Microsoft service pane and MCP tool. They stay off until the client id is set and school IT has consented.
 
-The judges' demo account is separate. It uses a Mac-local OneNote session on the studio machine and does not go through Microsoft sign-in, so nothing here changes the demo.
+The hackathon demo account is retired. Every account, including the team's, goes through this same Microsoft sign-in. The Mac-local `STUDIO_*` path is unset in `server/.env` and stays off.

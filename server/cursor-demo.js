@@ -1,13 +1,13 @@
 /**
- * One Google account can use the Cursor SDK for chat instead of a pasted key.
- * Default is the hackathon demo login. Override with CURSOR_DEMO_EMAIL.
+ * Optional: the Google accounts listed in CURSOR_DEMO_EMAIL use the Cursor SDK for
+ * chat instead of their own model key. Off unless that variable is set. No account
+ * is special by default; every student brings their own Groq, Gemini, or OpenRouter key.
  */
-
-const DEFAULT_EMAILS = ["yanylevin@gmail.com"];
 
 export function cursorDemoEmails() {
   const raw = String(process.env.CURSOR_DEMO_EMAIL || "").trim();
-  const list = (raw || DEFAULT_EMAILS.join(","))
+  if (!raw) return [];
+  const list = raw
     .split(",")
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
