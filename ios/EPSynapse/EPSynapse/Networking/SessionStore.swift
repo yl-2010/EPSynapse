@@ -268,9 +268,10 @@ If you skip Save key, chat will send you back to these steps.
     }
 
     if started.isBrowserFlow {
-      msBrowserPending[service] = started.authorizeUrl
+      let url = started.browserURL
+      msBrowserPending[service] = url
       paintConnections()
-      await runBrowserSignIn(service, authorizeUrl: started.authorizeUrl)
+      await runBrowserSignIn(service, authorizeUrl: url)
       return
     }
 
@@ -312,7 +313,8 @@ If you skip Save key, chat will send you back to these steps.
       msBrowserPending[service] = nil
       switch result {
       case "denied":
-        msLocalDenied[service] = reason.isEmpty ? "Microsoft did not allow \(service.title)." : reason
+        // Empty reason is fine. paneState fills in msDenied or the generic line.
+        msLocalDenied[service] = reason
       case "error":
         msErrors[service] = reason.isEmpty ? "Microsoft sign-in failed." : reason
       default:
@@ -343,13 +345,18 @@ If you skip Save key, chat will send you back to these steps.
         msLocalPending[service] = nil
         continue
       }
-      if !status.denied.isEmpty {
-        msLocalDenied[service] = status.denied
+      if status.denied {
+        msLocalDenied[service] = status.deniedReason
         msLocalPending[service] = nil
+        msBrowserPending[service] = nil
         reload = true
         continue
       }
-      if let pending = status.pending, pending.isActive {
+      if let pending = status.pending, pending.isBrowser {
+        // App mode: the server only knows the sign-in page is open.
+        msLocalPending[service] = nil
+        msBrowserPending[service] = pending.authorizeUrl
+      } else if let pending = status.pending, pending.isActive {
         msLocalPending[service] = pending
       } else if msLocalPending[service] != nil, status.pending == nil {
         // The code expired or the server dropped it. Let the pane offer Connect again.
@@ -677,21 +684,31 @@ If you skip Save key, chat will send you back to these steps.
     if let error = msErrors[service], !error.isEmpty {
       return .error(error)
     }
-    let denied = me.msDenied.reason(service)
-    if !denied.isEmpty {
-      return .denied(reason: denied, needsAdminApproval: me.msNeedsAdminApproval || Self.looksLikeAdminConsent(denied))
+    let profileReason = me.msDenied.reason(service)
+    let local = msLocalDenied[service]
+    if !profileReason.isEmpty || local != nil {
+      // Displayed reason: status deniedReason, then msDenied.<service>, then a generic line.
+      let reason = [local ?? "", profileReason].first { !$0.isEmpty } ?? Self.genericDenied
+      return .denied(
+        reason: reason,
+        needsAdminApproval: me.msNeedsAdminApproval || Self.looksLikeAdminConsent(reason)
+      )
     }
-    if let local = msLocalDenied[service], !local.isEmpty {
-      return .denied(reason: local, needsAdminApproval: me.msNeedsAdminApproval || Self.looksLikeAdminConsent(local))
-    }
-    if let pending = msLocalPending[service] ?? me.msPending(service), pending.isActive {
-      return .pendingCode(code: pending.user_code, url: pending.openURL)
+    if let pending = msLocalPending[service] ?? me.msPending(service) {
+      if pending.isActive {
+        return .pendingCode(code: pending.user_code, url: pending.openURL)
+      }
+      if pending.isBrowser {
+        return .pendingBrowser(authorizeUrl: pending.authorizeUrl)
+      }
     }
     if let authorizeUrl = msBrowserPending[service] {
       return .pendingBrowser(authorizeUrl: authorizeUrl)
     }
     return .idle
   }
+
+  private static let genericDenied = "Microsoft denied this service for your sign-in."
 
   private static func looksLikeAdminConsent(_ reason: String) -> Bool {
     let folded = reason.lowercased()

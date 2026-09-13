@@ -320,8 +320,10 @@ struct MSStartResponse: Codable {
   var adminConsentUrl: String
   var error: String
 
-  var isBrowserFlow: Bool { !authorizeUrl.isEmpty && mode != "office" }
-  var isDeviceFlow: Bool { !user_code.isEmpty }
+  /// App mode also copies authorizeUrl into verification_uri, so check this first.
+  var isBrowserFlow: Bool { mode == "app" || !authorizeUrl.isEmpty }
+  var isDeviceFlow: Bool { !isBrowserFlow && !user_code.isEmpty }
+  var browserURL: String { authorizeUrl.isEmpty ? verification_uri_complete : authorizeUrl }
 
   var devicePending: DevicePending {
     DevicePending(
@@ -388,11 +390,16 @@ struct MSServiceBody: Encodable {
   }
 }
 
+/// A pending Microsoft sign-in. Device code carries user_code and verification_uri.
+/// Browser (app mode) carries only authorizeUrl, service, state.
 struct DevicePending: Codable, Equatable {
   var user_code: String
   var verification_uri: String
   var verification_uri_complete: String
   var message: String
+  var authorizeUrl: String
+  var service: String
+  var state: String
 
   var openURL: String {
     if !verification_uri_complete.isEmpty { return verification_uri_complete }
@@ -404,12 +411,18 @@ struct DevicePending: Codable, Equatable {
     user_code: String = "",
     verification_uri: String = "",
     verification_uri_complete: String = "",
-    message: String = ""
+    message: String = "",
+    authorizeUrl: String = "",
+    service: String = "",
+    state: String = ""
   ) {
     self.user_code = user_code
     self.verification_uri = verification_uri
     self.verification_uri_complete = verification_uri_complete
     self.message = message
+    self.authorizeUrl = authorizeUrl
+    self.service = service
+    self.state = state
   }
 
   init(from decoder: Decoder) throws {
@@ -418,10 +431,19 @@ struct DevicePending: Codable, Equatable {
     verification_uri = c.string(.verification_uri)
     verification_uri_complete = c.string(.verification_uri_complete)
     message = c.string(.message)
+    authorizeUrl = c.string(.authorizeUrl)
+    service = c.string(.service)
+    state = c.string(.state)
   }
 
+  /// Device-code pending: there is a code to type.
   var isActive: Bool {
-    !user_code.isEmpty || !verification_uri.isEmpty
+    !user_code.isEmpty
+  }
+
+  /// Browser pending: the student is somewhere in the Microsoft sign-in page.
+  var isBrowser: Bool {
+    user_code.isEmpty && !authorizeUrl.isEmpty
   }
 }
 
@@ -1101,7 +1123,9 @@ struct ConnectionStatusResponse: Codable {
   var outlookConnected: Bool
   var onedriveEmail: String
   var outlookEmail: String
-  var denied: String
+  /// Server sends a Bool. Older builds sent the reason as a string; that form is accepted too.
+  var denied: Bool
+  var deniedReason: String
   var needsAdminApproval: Bool
   var consentRequest: MSConsentRequest?
   var mode: String
@@ -1118,7 +1142,8 @@ struct ConnectionStatusResponse: Codable {
     outlookConnected: Bool = false,
     onedriveEmail: String = "",
     outlookEmail: String = "",
-    denied: String = "",
+    denied: Bool = false,
+    deniedReason: String = "",
     needsAdminApproval: Bool = false,
     consentRequest: MSConsentRequest? = nil,
     mode: String = "",
@@ -1135,6 +1160,7 @@ struct ConnectionStatusResponse: Codable {
     self.onedriveEmail = onedriveEmail
     self.outlookEmail = outlookEmail
     self.denied = denied
+    self.deniedReason = deniedReason
     self.needsAdminApproval = needsAdminApproval
     self.consentRequest = consentRequest
     self.mode = mode
@@ -1153,7 +1179,16 @@ struct ConnectionStatusResponse: Codable {
     outlookConnected = c.bool(.outlookConnected)
     onedriveEmail = c.string(.onedriveEmail)
     outlookEmail = c.string(.outlookEmail)
-    denied = c.string(.denied)
+    var reason = c.string(.deniedReason)
+    if let flag = try? c.decodeIfPresent(Bool.self, forKey: .denied) {
+      denied = flag
+    } else {
+      let legacy = c.string(.denied)
+      denied = !legacy.isEmpty
+      if reason.isEmpty { reason = legacy }
+    }
+    if !reason.isEmpty { denied = true }
+    deniedReason = reason
     needsAdminApproval = c.bool(.needsAdminApproval)
     consentRequest = try? c.decodeIfPresent(MSConsentRequest.self, forKey: .consentRequest)
     mode = c.string(.mode)
