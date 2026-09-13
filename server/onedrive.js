@@ -25,6 +25,10 @@ export const MS_OFF_MESSAGE =
   "Microsoft sign-in is off. EPSynapse needs its own Microsoft app registration approved by school IT before this can connect.";
 
 const LOGIN = `https://login.microsoftonline.com/${MS_TENANT}/oauth2/v2.0`;
+/** Every outbound Microsoft call gives up after this long. */
+export const GRAPH_TIMEOUT_MS = 20_000;
+/** Largest OneDrive file the server will pull into memory. */
+export const MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024;
 
 /** Configured client id, or "" when Microsoft sign-in is off. Never a first-party id. */
 export function graphClientId() {
@@ -131,6 +135,7 @@ export async function exchangeAuthCode({ code, codeVerifier, redirectUri } = {})
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body,
+      signal: AbortSignal.timeout(GRAPH_TIMEOUT_MS),
     });
     data = await readOauthJson(res);
     if (res.ok && data.access_token) {
@@ -201,7 +206,7 @@ function jwtEmail(token) {
   return String(c.preferred_username || c.upn || c.unique_name || c.email || "").trim();
 }
 
-function redactSecrets(raw) {
+export function redactSecrets(raw) {
   return String(raw || "")
     .replace(/Bearer\s+[A-Za-z0-9._\-]+/gi, "Bearer [redacted]")
     .replace(/eyJ[A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+/g, "[jwt]");
@@ -296,6 +301,7 @@ export async function refreshAccessToken(refreshToken, { clientId, scope } = {})
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body,
+      signal: AbortSignal.timeout(GRAPH_TIMEOUT_MS),
     });
     const data = await readOauthJson(res);
     if (!res.ok || !data.access_token) {
@@ -341,7 +347,12 @@ async function graphRequest(token, method, urlOrPath, body, contentType) {
   } else if (payload !== undefined && payload !== null) {
     headers["Content-Type"] = contentType || "application/octet-stream";
   }
-  const res = await fetch(graphUrl(urlOrPath), { method, headers, body: payload });
+  const res = await fetch(graphUrl(urlOrPath), {
+    method,
+    headers,
+    body: payload,
+    signal: AbortSignal.timeout(GRAPH_TIMEOUT_MS),
+  });
   const text = await res.text();
   if (!res.ok) {
     const snippet = redactSecrets(text).replace(/\s+/g, " ").slice(0, 220);
@@ -574,13 +585,55 @@ export async function ensureWriteFolder(token) {
   }
 }
 
+function tooLargeError() {
+  const mb = Math.round(MAX_DOWNLOAD_BYTES / (1024 * 1024));
+  const err = new Error(`That file is over ${mb} MB. Open it in OneDrive instead.`);
+  err.status = 413;
+  return err;
+}
+
+/**
+ * Read a response body into memory, stopping as soon as it passes
+ * MAX_DOWNLOAD_BYTES. Graph does not always send Content-Length for
+ * downloads, so the size check on the metadata call is not enough on its own.
+ */
+async function readBodyCapped(res, limit = MAX_DOWNLOAD_BYTES) {
+  const declared = Number(res.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > limit) {
+    await res.body?.cancel().catch(() => {});
+    throw tooLargeError();
+  }
+  if (!res.body) return Buffer.alloc(0);
+  const chunks = [];
+  let total = 0;
+  const reader = res.body.getReader();
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > limit) {
+        await reader.cancel().catch(() => {});
+        throw tooLargeError();
+      }
+      chunks.push(Buffer.from(value.buffer, value.byteOffset, value.byteLength));
+    }
+  } finally {
+    reader.releaseLock?.();
+  }
+  return Buffer.concat(chunks, total);
+}
+
 export async function downloadFile(token, itemId) {
   const id = encodeURIComponent(String(itemId || "").trim());
   if (!id) throw new Error("item id required");
-  const meta = await graphGet(token, `/me/drive/items/${id}?$select=name`);
+  const meta = await graphGet(token, `/me/drive/items/${id}?$select=name,size`);
+  const size = Number(meta.size);
+  if (Number.isFinite(size) && size > MAX_DOWNLOAD_BYTES) throw tooLargeError();
   const res = await fetch(graphUrl(`/me/drive/items/${id}/content`), {
     headers: { Authorization: `Bearer ${token}` },
     redirect: "follow",
+    signal: AbortSignal.timeout(GRAPH_TIMEOUT_MS),
   });
   if (!res.ok) {
     const snippet = redactSecrets(await res.text()).replace(/\s+/g, " ").slice(0, 220);
@@ -591,7 +644,7 @@ export async function downloadFile(token, itemId) {
   return {
     name: String(meta.name || "").trim(),
     contentType: String(res.headers.get("content-type") || "application/octet-stream"),
-    buffer: Buffer.from(await res.arrayBuffer()),
+    buffer: await readBodyCapped(res),
   };
 }
 

@@ -22,8 +22,8 @@
   <key>KeepAlive</key>
   <true/>
   <key>StandardOutPath</key>
-  <string>/tmp/epsynapse-server.log</string>
+  <string>/Users/yanlevin/Library/Logs/epsynapse/server.log</string>
   <key>StandardErrorPath</key>
-  <string>/tmp/epsynapse-server.log</string>
+  <string>/Users/yanlevin/Library/Logs/epsynapse/server.log</string>
 </dict>
 </plist>

@@ -25,6 +25,6 @@ From the repo root, on `main`, after `git push origin main`:
 npm run deploy:web
 ```
 
-That is `scripts/deploy-web.sh` → `npx vercel deploy --prod --yes --scope jype1`. It loads `~/.config/jype/vercel.env` when `VERCEL_TOKEN` is unset, because the default CLI login on this Mac cannot see team `jype1`. Then hit https://epsynapse.com and confirm it is 200 with the new content.
+That is `scripts/deploy-web.sh` → `npx vercel deploy --prod --yes --scope jype1`. It loads `~/.config/epsynapse/vercel.env` when `VERCEL_TOKEN` is unset, because the default CLI login on this Mac cannot see team `jype1`. Then hit https://epsynapse.com and confirm it is 200 with the new content.
 
 Do not invent a second host. If the script still cannot see `jype1`, stop and say so.

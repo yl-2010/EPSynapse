@@ -6,19 +6,24 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
 
+# Only this one file is trusted. It must be owned by the current user, mode 600,
+# and contain nothing but KEY=value lines, because it is sourced as shell.
 if [[ -z "${VERCEL_TOKEN:-}" ]]; then
-  for f in \
-    "$HOME/.config/epsynapse/vercel.env" \
-    "$HOME/Library/Application Support/Cursor/AgentStores/cursor_agent_stores/u217305257/files/jype-vercel.env"
-  do
-    if [[ -f "$f" ]]; then
-      set -a
-      # shellcheck disable=SC1090
-      source "$f"
-      set +a
-      break
+  f="$HOME/.config/epsynapse/vercel.env"
+  if [[ -f "$f" ]]; then
+    if [[ "$(stat -f '%Su %Lp' "$f")" != "$(id -un) 600" ]]; then
+      echo "$f must be owned by you with mode 600 (chmod 600 \"$f\")." >&2
+      exit 1
     fi
-  done
+    if grep -Evq '^(#.*|[A-Za-z_][A-Za-z0-9_]*=[^;`$()|&<>]*)?$' "$f"; then
+      echo "$f has a line that is not KEY=value. Refusing to source it." >&2
+      exit 1
+    fi
+    set -a
+    # shellcheck disable=SC1090
+    source "$f"
+    set +a
+  fi
 fi
 
 if [[ -z "${VERCEL_TOKEN:-}" ]]; then
@@ -47,8 +52,8 @@ rsync -a --delete \
   --exclude 'ml/' \
   --exclude 'scripts/' \
   "$root/" "$stage/"
-# /class/:id and /note/:id hit Vercel's 404.html; keep it the same SPA as index.
-cp "$stage/index.html" "$stage/404.html"
+# Every app route (/class, /note, /todo, /grades) is rewritten to /index in
+# vercel.json, so 404.html is a real not-found page and is shipped as-is.
 cd "$stage"
 
 # Temp folder is not linked. Pin the existing Vercel project so the CLI
@@ -56,4 +61,5 @@ cd "$stage"
 export VERCEL_ORG_ID="${VERCEL_ORG_ID:-team_EF7WJXYBcuZa84T04Q5jvmKv}"
 export VERCEL_PROJECT_ID="${VERCEL_PROJECT_ID:-prj_OR2sdjPGltYZpvAXu37W6g2cMf27}"
 
-npx vercel deploy --prod --yes --scope jype1 --name epsynapse
+# Pinned so a deploy never pulls an unreviewed CLI. Bump on purpose.
+npx --yes vercel@59.16.0 deploy --prod --yes --scope jype1 --name epsynapse

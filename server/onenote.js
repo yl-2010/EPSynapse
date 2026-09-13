@@ -3,7 +3,7 @@
  * Uses the same Graph token as OneDrive (student.graph) from the auth-code sign-in.
  */
 
-import { GRAPH_BASE, graphGet } from "./onedrive.js";
+import { GRAPH_BASE, GRAPH_TIMEOUT_MS, graphGet, redactSecrets } from "./onedrive.js";
 
 const MAX_HTML = 80_000;
 
@@ -96,10 +96,13 @@ export function onenoteError(err) {
 export async function graphHtml(token, urlOrPath) {
   const s = String(urlOrPath || "").trim();
   const url = /^https?:\/\//i.test(s) ? s : `${GRAPH_BASE}${s.startsWith("/") ? s : `/${s}`}`;
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(GRAPH_TIMEOUT_MS),
+  });
   const text = await res.text();
   if (!res.ok) {
-    const snippet = text.replace(/\s+/g, " ").slice(0, 220);
+    const snippet = redactSecrets(text).replace(/\s+/g, " ").slice(0, 220);
     const err = new Error(`Graph ${res.status}: ${snippet}`);
     err.status = res.status;
     throw err;
@@ -164,10 +167,11 @@ export async function createPage(token, { sectionId, title, html, text } = {}) {
       "Content-Type": "text/html",
     },
     body,
+    signal: AbortSignal.timeout(GRAPH_TIMEOUT_MS),
   });
   const raw = await res.text();
   if (!res.ok) {
-    const snippet = raw.replace(/\s+/g, " ").slice(0, 220);
+    const snippet = redactSecrets(raw).replace(/\s+/g, " ").slice(0, 220);
     const err = new Error(`Graph ${res.status}: ${snippet}`);
     err.status = res.status;
     throw err;

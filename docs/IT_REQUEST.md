@@ -8,7 +8,7 @@ Subject: EPSynapse: four things to make it a proper school app
 
 Hi Mr. Briggs,
 
-Thanks for unblocking the accounts and for the write-up. You were right about the cause. EPSynapse was using the device-code grant against the Office first-party client id. That code is gone. The API now only knows one Microsoft sign-in, authorization code + PKCE against our own app registration, and until that registration exists Microsoft sign-in is simply off. We also cleared every stored Microsoft token for every account that had signed in, so nothing polls anymore.
+Thanks for unblocking the accounts and for the write-up. You were right about the cause. EPSynapse was using the device-code grant against the Office first-party client id. That code is gone. The API now only knows one Microsoft sign-in, authorization code + PKCE against our own app registration, and until that registration exists Microsoft sign-in is simply off. We also cleared every stored Microsoft token for every account that had signed in, so nothing polls anymore. We ran a full security review of the rest of the app afterwards and fixed what it found (the API now binds to loopback, OAuth callbacks are tied to the browser session, tokens are encrypted at rest, and so on). Happy to share the list.
 
 We are also splitting the app in two. EPS students will sign in with their @eastsideprep.org Microsoft account and get four11, OneDrive, OneNote, Outlook, and Teams in that one step, no student id or school picker. Students from other schools sign in with Google, upload a schedule PDF, and use a manual Canvas token. The EPS accounts that signed in during the hackathon are paused until this is set up.
 
@@ -33,7 +33,7 @@ Today every student pastes an access token from Canvas settings and repeats it w
 
 4. A school-owned Google Cloud project
 
-We want EPSynapse to run on the same stack as epschedule (App Engine, Firestore, Cloud Storage, Secret Manager) so it lives in a school project rather than a student's personal account, and so it keeps running after we graduate. Could you create a project under the school Google org (for example `epsynapse`), enable App Engine, Firestore in native mode, Cloud Storage, and Secret Manager, and give the four of us App Engine Deployer, Firestore User, Storage Object Admin, and Secret Manager Secret Accessor? Usage should sit inside the free tier, same as epschedule. We will point api.epsynapse.com at it once it is up.
+We want EPSynapse to run on the same stack as epschedule (App Engine, Firestore, Cloud Storage, Secret Manager) so it lives in a school project rather than a student's personal account, and so it keeps running after we graduate. Could you create a project under the school Google org (for example `epsynapse`), enable App Engine, Firestore in native mode with locked (production) security rules, Cloud Storage, and Secret Manager, and give the four of us App Engine Deployer, Firestore User, Storage Object Admin, and Secret Manager Secret Accessor? Only the API's service account ever touches Firestore, so nothing needs open rules. Usage should sit inside the free tier, same as epschedule. We will point api.epsynapse.com at it once it is up. The exact roles and steps are written down in our repo (`docs/GCP.md`) if that is easier to work from.
 
 Happy to walk through any of this in person, and thanks again for catching the sign-in problem before it did real damage.
 

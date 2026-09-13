@@ -286,6 +286,29 @@ export async function deleteOwnerData(ownerId) {
   return { events };
 }
 
+/**
+ * includeUser=1 reads every owner's research events. The route is public, so the
+ * aggregate is cached for a minute per includeFrozen value and callers share one
+ * in-flight build. Frozen-only answers are cheap and are not cached.
+ */
+const USER_AGGREGATE_TTL_MS = 60 * 1000;
+const userAggregateCache = new Map();
+
+async function userAggregate(includeFrozen) {
+  const key = includeFrozen ? "frozen+user" : "user";
+  const hit = userAggregateCache.get(key);
+  if (hit && Date.now() - hit.at < USER_AGGREGATE_TTL_MS) return hit.promise;
+  const promise = (async () => {
+    const userEvents = await listResearchEvents();
+    return buildResearchMetrics({ includeFrozen, includeUser: true, userEvents });
+  })();
+  userAggregateCache.set(key, { at: Date.now(), promise });
+  promise.catch(() => {
+    if (userAggregateCache.get(key)?.promise === promise) userAggregateCache.delete(key);
+  });
+  return promise;
+}
+
 export function mountResearch(app, { fail }) {
   app.get("/v1/research/metrics", async (req, res) => {
     try {
@@ -295,12 +318,9 @@ export function mountResearch(app, { fail }) {
         req.query.includeFrozen === undefined
           ? true
           : req.query.includeFrozen === "1" || req.query.includeFrozen === "true";
-      const userEvents = includeUser ? await listResearchEvents() : [];
-      const payload = await buildResearchMetrics({
-        includeFrozen,
-        includeUser,
-        userEvents,
-      });
+      const payload = includeUser
+        ? await userAggregate(includeFrozen)
+        : await buildResearchMetrics({ includeFrozen, includeUser, userEvents: [] });
       return res.json(payload);
     } catch (err) {
       return fail(res, err);

@@ -4,6 +4,8 @@
  * Optional DEMO_GROQ_KEY covers the table if nobody has pasted one yet.
  */
 
+import { googleFileId } from "./students.js";
+
 export const SYSTEM_PROMPT = [
   "You are the EPSynapse personal agent for Eastside Prep students.",
   "Be direct and useful. Skip filler.",
@@ -66,6 +68,59 @@ const ALLOWED_ROLES = new Set(["user", "assistant"]);
 const KEY_COOLDOWN_MS = 15 * 60 * 1000;
 const KEY_COOLDOWN_MAX_MS = 60 * 60 * 1000;
 const keyCooldown = new Map();
+
+/**
+ * The shared demo Groq pool is one login's free quota for the whole table.
+ * Each student gets this many completions from it per UTC day; after that they
+ * need their own key. In-memory, so a restart resets the count.
+ */
+export const DEMO_DAILY_CAP = 60;
+export const DEMO_CAP_ERROR = "Add your own model key in Settings to keep going.";
+const demoUsage = new Map();
+
+function utcDayKey(now = new Date()) {
+  return now.toISOString().slice(0, 10);
+}
+
+function demoUsageId(student) {
+  const sub = String(student?.googleSub || "").trim();
+  if (sub) return googleFileId(sub);
+  const email = String(student?.email || student?.googleEmail || "").trim().toLowerCase();
+  return email ? `email__${email}` : "";
+}
+
+function demoCapError() {
+  const err = new Error(DEMO_CAP_ERROR);
+  err.status = 429;
+  err.code = "demo_cap";
+  return err;
+}
+
+/** Completions this student has used from the demo pool today. */
+export function demoUsageToday(student, now = new Date()) {
+  const id = demoUsageId(student);
+  if (!id) return 0;
+  const row = demoUsage.get(id);
+  return row && row.day === utcDayKey(now) ? row.count : 0;
+}
+
+/**
+ * Count one demo-pool completion for this student. Throws a 429 with
+ * DEMO_CAP_ERROR once they pass DEMO_DAILY_CAP for the current UTC day.
+ */
+export function consumeDemoCompletion(student, now = new Date()) {
+  const id = demoUsageId(student);
+  if (!id) throw demoCapError();
+  const day = utcDayKey(now);
+  if (demoUsage.size > 5000) {
+    for (const [key, row] of demoUsage) if (row.day !== day) demoUsage.delete(key);
+  }
+  const row = demoUsage.get(id);
+  const count = row && row.day === day ? row.count : 0;
+  if (count >= DEMO_DAILY_CAP) throw demoCapError();
+  demoUsage.set(id, { day, count: count + 1 });
+  return DEMO_DAILY_CAP - (count + 1);
+}
 
 export function demoGroqKeys() {
   const raw = [process.env.DEMO_GROQ_KEYS, process.env.DEMO_GROQ_KEY].filter(Boolean).join(",");
@@ -226,7 +281,17 @@ export function resolveApiKeys(req, providerId, student) {
   if (bearer) source = "student";
   else if (stored.length) source = "account";
   else if (keys.length) source = "demo";
-  return { keys, source };
+  if (source === "demo") {
+    // Each resolve is one completion for the student. Over the daily cap the
+    // demo keys are withheld and `capError` (status 429) says why. Callers that
+    // only look at keys.length fall through to their missing-key reply.
+    try {
+      consumeDemoCompletion(student);
+    } catch (capError) {
+      return { keys: [], source, capped: true, capError };
+    }
+  }
+  return { keys, source, capped: false, capError: null };
 }
 
 export function resolveApiKey(req, providerId, student) {

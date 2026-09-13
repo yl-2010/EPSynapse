@@ -17,8 +17,8 @@
   <key>KeepAlive</key>
   <true/>
   <key>StandardOutPath</key>
-  <string>/tmp/cloudflared-epsynapse.log</string>
+  <string>/Users/yanlevin/Library/Logs/epsynapse/cloudflared.log</string>
   <key>StandardErrorPath</key>
-  <string>/tmp/cloudflared-epsynapse.log</string>
+  <string>/Users/yanlevin/Library/Logs/epsynapse/cloudflared.log</string>
 </dict>
 </plist>

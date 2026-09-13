@@ -18,7 +18,7 @@ One time, in the school's Google Cloud organization.
 
 1. A project, for example `epsynapse-eps`. Note the project id, it goes in every command below.
 2. Enable App Engine in the project and pick a region. `us-west1` is closest to Kirkland. The region cannot change later.
-3. Enable the Firestore API and create the database in Native mode, same region. Keep the default database id `(default)`.
+3. Enable the Firestore API and create the database in Native mode, same region, with security rules in production (locked) mode. Only the API's service account touches Firestore; no browser or phone reads it directly. Keep the default database id `(default)`.
 4. Enable the Cloud Storage API. App Engine already created the default bucket `<project-id>.appspot.com`. That is the bucket the API uses unless `GCS_BUCKET` is set. If IT prefers a named bucket, create it in the same region and set `GCS_BUCKET` in `server/app.yaml`.
 5. Enable the Secret Manager API and create one secret per name in the `SECRET_NAMES` list in `server/app.yaml`. Missing secrets only log a warning at boot, so it is fine to add them over time.
 6. Grant the App Engine default service account (`<project-id>@appspot.gserviceaccount.com`) these roles. App Engine created it in step 2.
@@ -29,7 +29,7 @@ One time, in the school's Google Cloud organization.
    - `roles/appengine.deployer`
    - `roles/appengine.serviceAdmin`
    - `roles/cloudbuild.builds.editor`
-   - `roles/storage.admin` (deploys stage source in a bucket)
+   - `roles/storage.admin` on the `staging.<project-id>.appspot.com` bucket only (deploys stage source there). Not project-wide, or every deployer could read the student blob bucket.
    - `roles/iam.serviceAccountUser` on the App Engine default service account
    - `roles/secretmanager.admin` if students will rotate secrets themselves. Otherwise IT owns the secrets and students only need to know the names.
 

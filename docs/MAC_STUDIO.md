@@ -17,7 +17,7 @@ Both curls should print JSON with `"ok":true`.
 
 A Mac reboot needs no extra commands. Login starts Express and the tunnel. This `kickstart` is only for a new `server/` commit.
 
-Logs: `/tmp/epsynapse-server.log`
+Logs: `~/Library/Logs/epsynapse/server.log`
 
 Do this after anyone lands a change under `server/`. Until this restart, `api.epsynapse.com` is still the old code.
 

@@ -4,7 +4,11 @@
  * (EPSynapse's own app registration). This file reads and sends mail with them.
  */
 
-import { graphClientId, refreshAccessToken as refreshGraphToken } from "./onedrive.js";
+import {
+  GRAPH_TIMEOUT_MS,
+  graphClientId,
+  refreshAccessToken as refreshGraphToken,
+} from "./onedrive.js";
 
 export const EPS_TENANT_ID = "b2681e8b-dd20-46cf-b163-371a2d7c6014";
 export const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
@@ -174,7 +178,12 @@ async function mailRequest(token, method, url, body) {
     headers["Content-Type"] = "application/json";
     payload = JSON.stringify(payload);
   }
-  const res = await fetch(url, { method, headers, body: payload });
+  const res = await fetch(url, {
+    method,
+    headers,
+    body: payload,
+    signal: AbortSignal.timeout(GRAPH_TIMEOUT_MS),
+  });
   const text = await res.text();
   if (!res.ok) {
     const snippet = redactSecrets(text).replace(/\s+/g, " ").slice(0, 220);

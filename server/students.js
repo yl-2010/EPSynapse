@@ -42,6 +42,7 @@ export const PAUSED_MESSAGE =
 const DEFAULT_CANVAS_HOST = "https://eastsideprep.instructure.com";
 export const EPS_CANVAS_HOST = DEFAULT_CANVAS_HOST;
 const MAX_LEN = 80;
+/** Seconds. Cookie Max-Age and the server-side lifetime of a session doc (30 days). */
 const SESSION_MAX_AGE = 2592000;
 const SKEW_SEC = 90;
 const ID_CHARS = /^[A-Za-z0-9._@+\- ]+$/;
@@ -50,7 +51,7 @@ const MODEL_KEY_MAX = 256;
 const MODEL_KEY_LIMIT = 8;
 
 const sessions = new Map();
-const sessionsReady = migrateLegacySessions();
+const sessionsReady = migrateLegacySessions().then(pruneExpiredSessions);
 let writeChain = sessionsReady;
 
 function defaultCanvasHost(door) {
@@ -384,8 +385,6 @@ export function publicProfile(student) {
     canvasHost: s.canvasHost,
     displayName: s.displayName,
     canvasConnected: Boolean(s.canvasToken),
-    // Field kept for clients; the Cursor demo path is gone.
-    cursorAgent: false,
     modelKeySet: s.modelKeys.length > 0,
     modelProvider: s.modelProvider || "groq",
     modelKeyHint: modelKeyHint(s.modelKeys[0] || s.modelKey),
@@ -614,6 +613,38 @@ async function migrateLegacySessions() {
   }
 }
 
+/** True when the session is older than SESSION_MAX_AGE. A record with no createdAt counts as expired. */
+function sessionExpired(rec, now = Date.now()) {
+  const created = Date.parse(rec?.createdAt || "") || 0;
+  return !created || now - created > SESSION_MAX_AGE * 1000;
+}
+
+/**
+ * Boot-time sweep of session docs past SESSION_MAX_AGE. Best effort: a store error
+ * just means the lookup path deletes them one at a time as they are seen.
+ */
+async function pruneExpiredSessions() {
+  let docs;
+  try {
+    docs = await listDocs(SESSIONS);
+  } catch {
+    return;
+  }
+  const now = Date.now();
+  let removed = 0;
+  for (const { id: sid, data } of docs) {
+    if (!isSessionId(sid)) continue;
+    const rec = sessionRecord(data);
+    if (!rec || !sessionExpired(rec, now)) continue;
+    try {
+      if (await deleteDoc(SESSIONS, sid)) removed += 1;
+    } catch {
+      /* best effort */
+    }
+  }
+  if (removed) console.log(`sessions: pruned ${removed} expired session(s)`);
+}
+
 /** Serialise doc writes so create/destroy from sync callers land in order. */
 function queueWrite(fn) {
   const p = writeChain.then(fn).catch((err) => {
@@ -669,12 +700,13 @@ export async function _resetSessionCache() {
   sessions.clear();
 }
 
+/** Live session record, or null. Expired sessions are deleted on sight and treated as missing. */
 async function resolveSession(sid) {
   const cached = sessions.get(sid);
-  if (cached) return cached;
+  if (cached) return expireIfStale(sid, cached);
   await writeChain;
   const again = sessions.get(sid);
-  if (again) return again;
+  if (again) return expireIfStale(sid, again);
   let raw;
   try {
     raw = await getDoc(SESSIONS, sid);
@@ -683,8 +715,19 @@ async function resolveSession(sid) {
   }
   const rec = sessionRecord(raw);
   if (!rec) return null;
+  if (sessionExpired(rec)) {
+    queueWrite(() => deleteDoc(SESSIONS, sid));
+    return null;
+  }
   sessions.set(sid, rec);
   return rec;
+}
+
+function expireIfStale(sid, rec) {
+  if (!sessionExpired(rec)) return rec;
+  sessions.delete(sid);
+  queueWrite(() => deleteDoc(SESSIONS, sid));
+  return null;
 }
 
 function touchSession(sid, rec) {
@@ -849,10 +892,13 @@ export function mergeMsAuth(student, patch) {
   return student;
 }
 
+/** Shape of newOauthState(): 32 random bytes as hex. Anything else never reaches the disk scan. */
+const OAUTH_STATE_RE = /^[0-9a-f]{64}$/;
+
 /** Fallback when the in-memory state map lost the entry (server restart). */
 export async function findStudentByMsAuthState(state) {
   const needle = String(state || "").trim();
-  if (!needle) return null;
+  if (!OAUTH_STATE_RE.test(needle)) return null;
   const ids = await listStudentFileIds();
   if (!ids) return null;
   for (const fileId of ids) {

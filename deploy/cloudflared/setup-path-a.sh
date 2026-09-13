@@ -8,12 +8,16 @@ TUNNEL_NAME="${TUNNEL_NAME:-jype-api}"
 API_HOSTNAME="${API_HOSTNAME:-api.epsynapse.com}"
 LOCAL_SERVICE="${LOCAL_SERVICE:-http://127.0.0.1:3006}"
 CF_DIR="${HOME}/.cloudflared"
-export TUNNEL_ORIGIN_CERT="${TUNNEL_ORIGIN_CERT:-${CF_DIR}/cert.pem.notelms.bak}"
+# The tunnel lives in the JYPE Cloudflare account. There is no default cert on
+# purpose: pointing this at another account's cert (NoteLMs, yanylevin) would
+# recreate the tunnel in the wrong place.
 CONFIG_OUT="${CONFIG_OUT:-${CF_DIR}/config-epsynapse.yml}"
 
 die() { echo "error: $*" >&2; exit 1; }
 
 command -v cloudflared >/dev/null 2>&1 || die "cloudflared not found. Install: brew install cloudflare/cloudflare/cloudflared"
+[[ -n "${TUNNEL_ORIGIN_CERT:-}" ]] || die "Set TUNNEL_ORIGIN_CERT to the JYPE-account cert.pem (cloudflared tunnel login while signed into that account)."
+export TUNNEL_ORIGIN_CERT
 [[ -f "${TUNNEL_ORIGIN_CERT}" ]] || die "Missing origin cert: ${TUNNEL_ORIGIN_CERT}"
 
 get_tunnel_id_for_name() {

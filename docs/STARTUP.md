@@ -25,7 +25,7 @@ curl -sS -f https://api.epsynapse.com/health
 
 Both curls should print JSON with `"ok":true`.
 
-Logs if something looks wrong: `/tmp/epsynapse-server.log`.
+Logs if something looks wrong: `~/Library/Logs/epsynapse/server.log`.
 
 Do this after anyone lands a change under `server/`. Until this restart, the live API will not have it.
 
@@ -59,7 +59,7 @@ bash /Users/yanlevin/github/EPSynapse/deploy/launchagents/install.sh
 
 That copies the plists, `launchctl enable`s them, and bootstraps if they are not already loaded. Do not run it to pick up `server/` code. Use `kickstart` above for that.
 
-Logs: `/tmp/epsynapse-server.log`, `/tmp/cloudflared-epsynapse.log`.
+Logs: `~/Library/Logs/epsynapse/server.log`, `~/Library/Logs/epsynapse/cloudflared.log` (folder is 700; /tmp was world-readable).
 
 Git auto-deploy is off. After any browser-facing change (`index.html`, `styles.css`, `app.js`, `chatbot.js`, `liquid-glass.js`, `theme-orb.js`, `runtime-config.json`, `vercel.json`, root static files), agents must run `npm run deploy:web` and confirm https://epsynapse.com shows the new page. `git push` does not update the live site.
 

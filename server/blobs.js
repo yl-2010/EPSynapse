@@ -62,8 +62,9 @@ export function blobFilePath(key) {
 
 async function filesPut(key, buffer) {
   const path = blobFilePath(key);
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, buffer);
+  // Student uploads are private to the account that runs the API.
+  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+  await writeFile(path, buffer, { mode: 0o600 });
 }
 
 async function filesGet(key) {

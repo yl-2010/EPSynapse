@@ -134,18 +134,24 @@ function cachedRoster() {
   return rosterCache.people;
 }
 
-/** Case-insensitive match on the roster email, or on username@eastsideprep.org. */
+function isEpsEmail(email) {
+  return String(email || "").trim().toLowerCase().endsWith(`@${EPS_DOMAIN}`);
+}
+
+/**
+ * Case-insensitive match on the roster email. An @eastsideprep.org address also tries
+ * username@eastsideprep.org (roster rows sometimes carry a different casing or alias).
+ * A Gmail or other outside address only matches exactly; its local part is never
+ * mapped onto an EPS person.
+ */
 export async function four11PersonByEmail(email) {
   const needle = String(email || "").trim().toLowerCase();
   if (!needle) return null;
-  const username = usernameFromEmail(needle);
-  const alt = `${username}@${EPS_DOMAIN}`;
   const people = await four11People();
-  return (
-    people.find((p) => p.email.toLowerCase() === needle) ||
-    people.find((p) => p.email.toLowerCase() === alt) ||
-    null
-  );
+  const exact = people.find((p) => p.email.toLowerCase() === needle);
+  if (exact || !isEpsEmail(needle)) return exact || null;
+  const alt = `${usernameFromEmail(needle)}@${EPS_DOMAIN}`;
+  return people.find((p) => p.email.toLowerCase() === alt) || null;
 }
 
 /** One term. termId 1..3. Returns the raw four11 object { individual, sections }. */
@@ -340,10 +346,16 @@ export function toEpsynapseClasses(schedule) {
   return { classes, updated: new Date().toISOString(), source: "four11" };
 }
 
+/** Same rule as index.js: 4xx keeps its message, 5xx is logged and answered generically. */
 function fail(res, err, fallback = 500) {
   const status = Number(err?.status) || fallback;
   const safe = status >= 400 && status < 600 ? status : fallback;
-  return res.status(safe).json({ error: String(err?.message || "Request failed.") });
+  const message = String(err?.message || "Request failed.");
+  if (safe >= 500) {
+    console.error(`[four11] ${safe} ${message}`);
+    return res.status(safe).json({ error: "Something went wrong" });
+  }
+  return res.status(safe).json({ error: message });
 }
 
 /** Emails to try against the roster, Microsoft sign-in first. */

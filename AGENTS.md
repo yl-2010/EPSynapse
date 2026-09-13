@@ -61,7 +61,7 @@ curl -sS -f http://127.0.0.1:3006/health
 
 If the LaunchAgent is not loaded, start with `npm run server` from the repo root, then hit `/health`.
 
-Logs: `/tmp/epsynapse-server.log`, `/tmp/cloudflared-epsynapse.log`.
+Logs: `~/Library/Logs/epsynapse/server.log`, `~/Library/Logs/epsynapse/cloudflared.log` (folder is 700; /tmp was world-readable).
 
 ## Vercel, manual production deploy
 
@@ -95,7 +95,7 @@ From the repo root, after commit + push:
 npm run deploy:web
 ```
 
-That is `scripts/deploy-web.sh`, which runs `npx vercel deploy --prod --yes --scope jype1`. This Mac's default `vercel` login is often a personal account that cannot see team `jype1`. The script loads `~/.config/jype/vercel.env` when `VERCEL_TOKEN` is unset. If that file is missing and the CLI still cannot see `jype1`, stop and say so. Do not invent a second host or connect Git.
+That is `scripts/deploy-web.sh`, which runs `npx vercel deploy --prod --yes --scope jype1`. This Mac's default `vercel` login is often a personal account that cannot see team `jype1`. The script loads `~/.config/epsynapse/vercel.env` when `VERCEL_TOKEN` is unset. If that file is missing and the CLI still cannot see `jype1`, stop and say so. Do not invent a second host or connect Git.
 
 Then hit https://epsynapse.com and confirm it is 200 with the new content.
 

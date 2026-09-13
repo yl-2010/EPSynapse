@@ -14,11 +14,12 @@
  */
 
 import { randomBytes } from "node:crypto";
-import { spawnSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import { createRequire } from "node:module";
 import { unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { deleteDoc, getDoc, putDoc } from "./store.js";
 import { deleteBlob, listBlobs, putBlob } from "./blobs.js";
 import { ownerIdForStudent } from "./chat-history.js";
@@ -29,12 +30,25 @@ import { normalizeDoor } from "./students.js";
 import { parseScheduleWithModel } from "./schedule-llm.js";
 
 const require = createRequire(import.meta.url);
-const pdfParse = require("pdf-parse");
 
 const PERIODS = ["A", "B", "C", "D", "E", "F", "G", "H"];
 const TERMS = ["fall", "winter", "spring"];
 const FREE_NAME = "Free Period";
 const MAX_PDF = 12 * 1024 * 1024;
+
+/**
+ * PDF text comes out of a child process (pdf-text-worker.mjs) so a hostile
+ * upload cannot hang or crash the API. Hard timeout, page cap, stdout cap,
+ * and at most PDF_MAX_PARALLEL extractions at once.
+ */
+const PDF_WORKER = fileURLToPath(new URL("./pdf-text-worker.mjs", import.meta.url));
+const PDF_WORKER_MS = 25_000;
+const PDF_MAX_PAGES = 40;
+const PDF_STDOUT_MAX = 16 * 1024 * 1024;
+const PDF_MAX_PARALLEL = 2;
+const PDF_QUEUE_WAIT_MS = 30_000;
+const PDF_UNREADABLE = "Could not read that PDF";
+const PDF_BUSY = "Busy, try again";
 export const SCHEDULE_SOURCES = ["eps-card", "llm", "four11"];
 const DEFAULT_SOURCE = "eps-card";
 const DEFAULT_TZ = "America/Los_Angeles";
@@ -358,39 +372,117 @@ export function parseScheduleText(text) {
   return { classes };
 }
 
+/** Run a child with the PDF limits. Resolves stdout, rejects on exit code, timeout, or stdout cap. */
+function runCapped(file, args, { stdin, env = process.env } = {}) {
+  return new Promise((resolve, reject) => {
+    const child = execFile(
+      file,
+      args,
+      {
+        encoding: "utf8",
+        timeout: PDF_WORKER_MS,
+        killSignal: "SIGKILL",
+        maxBuffer: PDF_STDOUT_MAX,
+        env,
+        windowsHide: true,
+      },
+      (err, stdout, stderr) => {
+        if (err) {
+          const e = new Error(String(stderr || err.message || "extract failed").slice(0, 300));
+          e.code = err.code;
+          e.killed = Boolean(err.killed);
+          return reject(e);
+        }
+        return resolve(String(stdout || ""));
+      }
+    );
+    if (stdin !== undefined) {
+      child.stdin.on("error", () => {});
+      child.stdin.end(stdin);
+    }
+  });
+}
+
 function extractPdfTextWithPdfKit(filePath) {
   const script = [
     "import PDFKit",
     "import Foundation",
     "let path = CommandLine.arguments[1]",
     "guard let doc = PDFDocument(url: URL(fileURLWithPath: path)) else { fputs(\"no pdf\\n\", stderr); exit(1) }",
-    "for i in 0..<doc.pageCount {",
+    `for i in 0..<min(doc.pageCount, ${PDF_MAX_PAGES}) {`,
     "  if let page = doc.page(at: i), let s = page.string { print(s); print(\"\\n\") }",
     "}",
   ].join("\n");
-  const result = spawnSync("swift", ["-e", script, filePath], {
-    encoding: "utf8",
-    timeout: 25000,
+  return runCapped("swift", ["-e", script, filePath]);
+}
+
+function extractPdfTextWithWorker(buffer) {
+  return runCapped(process.execPath, ["--max-old-space-size=768", PDF_WORKER], {
+    stdin: buffer,
+    // The worker parses untrusted bytes; it gets none of server/.env.
+    env: {
+      PATH: process.env.PATH || "/usr/bin:/bin",
+      PDF_MAX_PAGES: String(PDF_MAX_PAGES),
+    },
   });
-  if (result.status !== 0) {
-    throw new Error(result.stderr || "PDFKit extract failed");
+}
+
+let pdfActive = 0;
+const pdfWaiters = [];
+
+function acquirePdfSlot() {
+  if (pdfActive < PDF_MAX_PARALLEL) {
+    pdfActive += 1;
+    return Promise.resolve();
   }
-  return String(result.stdout || "");
+  return new Promise((resolve, reject) => {
+    const waiter = { resolve, timer: null };
+    waiter.timer = setTimeout(() => {
+      const at = pdfWaiters.indexOf(waiter);
+      if (at >= 0) pdfWaiters.splice(at, 1);
+      const err = new Error(PDF_BUSY);
+      err.status = 503;
+      reject(err);
+    }, PDF_QUEUE_WAIT_MS);
+    pdfWaiters.push(waiter);
+  });
+}
+
+function releasePdfSlot() {
+  const next = pdfWaiters.shift();
+  if (next) {
+    // Hand the slot straight to the next waiter; pdfActive stays the same.
+    clearTimeout(next.timer);
+    next.resolve();
+    return;
+  }
+  pdfActive = Math.max(0, pdfActive - 1);
 }
 
 export async function extractPdfText(buffer) {
-  const tmp = join(tmpdir(), `eps-sched-${randomBytes(8).toString("hex")}.pdf`);
-  await writeFile(tmp, buffer);
+  await acquirePdfSlot();
   try {
-    const kit = extractPdfTextWithPdfKit(tmp);
-    if (kit.trim()) return kit;
-  } catch {
-    /* fall through to pdf-parse */
+    const tmp = join(tmpdir(), `eps-sched-${randomBytes(8).toString("hex")}.pdf`);
+    await writeFile(tmp, buffer, { mode: 0o600 });
+    try {
+      const kit = await extractPdfTextWithPdfKit(tmp);
+      if (kit.trim()) return kit;
+    } catch {
+      /* fall through to the pdf-parse worker */
+    } finally {
+      await unlink(tmp).catch(() => {});
+    }
+    try {
+      return await extractPdfTextWithWorker(buffer);
+    } catch (cause) {
+      const err = new Error(PDF_UNREADABLE);
+      err.status = 400;
+      err.cause = cause;
+      throw err;
+    }
   } finally {
-    await unlink(tmp).catch(() => {});
+    releasePdfSlot();
   }
-  const data = await pdfParse(buffer);
-  return String(data?.text || "");
 }
 
 function zonedParts(date = new Date(), timeZone = "America/Los_Angeles") {

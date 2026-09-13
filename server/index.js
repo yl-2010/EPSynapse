@@ -8,8 +8,10 @@
 // Must stay the first import: it awaits Secret Manager (App Engine) before any other
 // module reads process.env. See boot-secrets.js and docs/GCP.md.
 import "./boot-secrets.js";
+import { timingSafeEqual } from "node:crypto";
 import express from "express";
 import cors from "cors";
+import { rateLimit, ipKeyGenerator } from "express-rate-limit";
 import {
   PROVIDERS,
   consumeSse,
@@ -22,6 +24,7 @@ import {
   mergeToolCallDeltas,
   normalizeUiContext,
   publicAgentConfig,
+  DEMO_CAP_ERROR,
   MISSING_KEY_ERROR,
   fetchWithKeyCycle,
   resolveApiKeys,
@@ -127,7 +130,7 @@ import {
   persistChat,
 } from "./chat-history.js";
 import multer from "multer";
-import { bertEnabled, probeBertService } from "./bert.js";
+import { bertEnabled } from "./bert.js";
 import { canvasOAuthPublic, ensureFreshCanvasToken, mountCanvasOAuth } from "./canvas-oauth.js";
 import { four11Configured, mountFour11, syncAllEpsStudents } from "./four11.js";
 import { deleteOwnerData as deleteNotesData, listNotes, mountNotes } from "./notes.js";
@@ -162,42 +165,108 @@ import {
 } from "./workspace.js";
 
 const PORT = Number(process.env.PORT || 3006);
-const HOST = process.env.HOST || "0.0.0.0";
+/**
+ * The Mac sits behind a Cloudflare Tunnel that connects to loopback, so bind there.
+ * App Engine has to bind every interface; it sets GOOGLE_CLOUD_PROJECT and GAE_ENV.
+ */
+const ON_APP_ENGINE = Boolean(process.env.GOOGLE_CLOUD_PROJECT || process.env.GAE_ENV);
+const HOST = process.env.HOST || (ON_APP_ENGINE ? "0.0.0.0" : "127.0.0.1");
 const allowed = (process.env.ALLOWED_ORIGINS || "")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
 
+/** Empty ALLOWED_ORIGINS means no browser origin is allowed, not "any". */
+function originAllowed(origin) {
+  if (!origin) return false;
+  return allowed.includes("*") || allowed.includes(origin);
+}
+
 const app = express();
+app.disable("x-powered-by");
 app.use(
   cors({
     origin(origin, cb) {
       if (!origin) return cb(null, true);
-      if (!allowed.length || allowed.includes("*") || allowed.includes(origin)) {
-        return cb(null, true);
-      }
-      return cb(null, false);
+      return cb(null, originAllowed(origin));
     },
     credentials: true,
   })
 );
+
+/**
+ * CSRF: a browser always sends Origin on cross-site POST/PUT/PATCH/DELETE. If it is
+ * not one of ours, refuse before any handler runs. Requests without Origin (the iOS
+ * app, curl, cron) pass; the session header or key still gates them.
+ */
+const CSRF_SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+app.use((req, res, next) => {
+  if (CSRF_SAFE_METHODS.has(req.method)) return next();
+  const origin = String(req.headers.origin || "").trim();
+  if (!origin) return next();
+  if (originAllowed(origin)) return next();
+  return res.status(403).json({ error: "Bad origin" });
+});
+
+/* ---------- Rate limits. Keyed by the tunnel's client ip, never x-forwarded-for. ---------- */
+
+function clientIp(req) {
+  const cf = String(req.headers["cf-connecting-ip"] || "").trim();
+  return ipKeyGenerator(cf || req.ip || "");
+}
+
+function limiter({ windowMs = 60 * 1000, limit, keyGenerator = clientIp, skip } = {}) {
+  return rateLimit({
+    windowMs,
+    limit,
+    keyGenerator,
+    skip,
+    standardHeaders: "draft-7",
+    legacyHeaders: false,
+    // req.ip is the tunnel's loopback socket; the real client ip is cf-connecting-ip.
+    validate: { xForwardedForHeader: false, trustProxy: false, keyGeneratorIpFallback: false },
+    handler(_req, res) {
+      res.status(429).json({ error: "Too many requests" });
+    },
+  });
+}
+
+const globalLimiter = limiter({ limit: 600, skip: (req) => req.path === "/health" });
+const googleAuthLimiter = limiter({ limit: 15 });
+const msCallbackLimiter = limiter({ limit: 30 });
+const canvasCallbackLimiter = limiter({ limit: 30 });
+const pdfUploadLimiter = limiter({ limit: 6 });
+const researchLimiter = limiter({ limit: 30 });
+const agentChatLimiter = limiter({
+  limit: 20,
+  keyGenerator: (req) => sessionIdFromRequest(req) || clientIp(req),
+});
+
+app.use(globalLimiter);
 app.use(express.json({ limit: "8mb" }));
 
 /**
  * Paused accounts (EPS students waiting for the school sign-in) can still load
- * /v1/me, which reports paused: true, and log out. Every other student route,
- * and the agent answer 423 so no tool or sync runs for them.
+ * /v1/me, which reports paused: true, log out, and delete the account. Every other
+ * student route, and the agent, answer 423 so no tool or sync runs for them.
+ * Express routes are case-insensitive, so compare lowercased paths.
  */
-const PAUSE_OPEN_PATHS = new Set(["/v1/me", "/v1/me/logout", "/v1/me/delete"]);
+const PAUSE_OPEN_ROUTES = new Set(["GET /v1/me", "POST /v1/me/logout", "POST /v1/me/delete"]);
 const PAUSE_GATED_PREFIXES = ["/v1/me/", "/v1/agent/"];
 
-function pauseGated(path) {
-  if (PAUSE_OPEN_PATHS.has(path)) return false;
+function pauseGated(method, rawPath) {
+  const path = String(rawPath || "").toLowerCase().replace(/\/+$/, "") || "/";
+  if (PAUSE_OPEN_ROUTES.has(`${String(method || "").toUpperCase()} ${path}`)) return false;
+  if (path === "/v1/me") return true;
   return PAUSE_GATED_PREFIXES.some((p) => path === p.replace(/\/$/, "") || path.startsWith(p));
 }
 
+function pausedPayload(student) {
+  return { error: PAUSED_MESSAGE, paused: true, door: student.door };
+}
+
 app.use(async (req, res, next) => {
-  if (!pauseGated(req.path)) return next();
+  if (!pauseGated(req.method, req.path)) return next();
   try {
     let student = await studentFromRequest(req);
     if (!student) {
@@ -206,7 +275,7 @@ app.use(async (req, res, next) => {
       if (m) student = await studentFromRequest({ headers: { "x-epsynapse-session": m[1].trim() } });
     }
     if (student && isPaused(student)) {
-      return res.status(423).json({ error: PAUSED_MESSAGE, paused: true, door: student.door });
+      return res.status(423).json(pausedPayload(student));
     }
   } catch {
     /* fall through; the route does its own auth */
@@ -228,20 +297,39 @@ const pdfUpload = multer({
   },
 });
 
+const GENERIC_ERROR = "Something went wrong";
+
+/**
+ * 4xx errors keep their message; the route or the throwing module wrote it for the
+ * student. Anything that lands as a 5xx is logged here and the client gets a generic
+ * line, so fetch/fs/upstream text never reaches the browser.
+ */
 function fail(res, err, fallback = 500) {
   const status = Number(err?.status) || fallback;
   const safe = status >= 400 && status < 600 ? status : fallback;
-  return res.status(safe).json({
-    error: String(err?.message || "Request failed."),
-  });
+  const message = String(err?.message || "Request failed.");
+  if (safe >= 500) {
+    console.error(`[api] ${safe} ${message}`);
+    return res.status(safe).json({ error: GENERIC_ERROR });
+  }
+  return res.status(safe).json({ error: message });
 }
 
-async function requireStudent(req, res) {
+/**
+ * Session -> student, or 401. Paused accounts get 423 unless the route opted in
+ * (allowPaused, for account deletion). The pause middleware covers the same
+ * prefixes; this is the second lock so no route can miss it.
+ */
+async function requireStudent(req, res, { allowPaused = false } = {}) {
   const student = await studentFromRequest(req);
   if (!student) {
     res.status(401).json({
       error: "Sign in with Google first.",
     });
+    return null;
+  }
+  if (!allowPaused && isPaused(student)) {
+    res.status(423).json(pausedPayload(student));
     return null;
   }
   // No-op unless the student connected Canvas through OAuth and the hour is nearly up.
@@ -291,6 +379,31 @@ const MS_ACCESS_LABEL = { files: "Files", notes: "OneNote", mail: "Mail", chats:
 
 /** state -> { fileId, createdAt }. Callback has no cookie, so this finds the student. */
 const msAuthStates = new Map();
+/**
+ * Native sign-ins: state -> { fileId, service, exchange, createdAt }. The callback
+ * exchanges the code but stores nothing; the app posts the state to /v1/me/ms/finish
+ * from its own session and the grant lands there. Single use, 10 minutes.
+ */
+const msPendingGrants = new Map();
+const MS_GRANT_TTL_MS = 10 * 60 * 1000;
+/** newOauthState() and the Canvas start route both mint 32 random bytes as hex. */
+const OAUTH_STATE_RE = /^[0-9a-f]{64}$/;
+
+function pruneMsPendingGrants() {
+  for (const [key, entry] of msPendingGrants) {
+    if (Date.now() - entry.createdAt > MS_GRANT_TTL_MS) msPendingGrants.delete(key);
+  }
+}
+
+/** Held grant for a state, or null when unknown or expired. Removes it either way. */
+function takeMsPendingGrant(state) {
+  const key = String(state || "").trim();
+  if (!OAUTH_STATE_RE.test(key)) return null;
+  const entry = msPendingGrants.get(key);
+  msPendingGrants.delete(key);
+  if (!entry || Date.now() - entry.createdAt > MS_GRANT_TTL_MS) return null;
+  return entry;
+}
 
 function msServiceName(raw) {
   const s = String(raw || "").trim().toLowerCase();
@@ -544,9 +657,9 @@ async function safeProbe(accessToken) {
   }
 }
 
-function logProbe(email, probe) {
+function logProbe(fileId, probe) {
   console.log(
-    `[ms-oauth] probe email=${email || ""} files=${probe.files} notes=${probe.notes} mail=${probe.mail} chats=${probe.chats} calendar=${probe.calendar}` +
+    `[ms-oauth] probe student=${fileId || ""} files=${probe.files} notes=${probe.notes} mail=${probe.mail} chats=${probe.chats} calendar=${probe.calendar}` +
       (Object.keys(probe.errors || {}).length ? ` errors=${JSON.stringify(probe.errors)}` : "")
   );
 }
@@ -625,7 +738,7 @@ async function applyMicrosoftToken(current, poll, pending, extra = {}) {
 
   mergeMsServices(current, patch);
   await saveStudent(current);
-  logProbe(bag.email, probe);
+  logProbe(googleFileId(current.googleSub), probe);
   return probe;
 }
 
@@ -675,7 +788,7 @@ async function reprobeMicrosoft(student) {
   await saveStudent(student);
   const ms = msServicesOf(student);
   console.log(
-    `[ms-oauth] reprobe email=${ms.email} files=${ms.files} notes=${ms.notes} mail=${ms.mail} chats=${ms.chats}` +
+    `[ms-oauth] reprobe student=${googleFileId(student.googleSub)} files=${ms.files} notes=${ms.notes} mail=${ms.mail} chats=${ms.chats}` +
       (Object.keys(ms.errors).length ? ` errors=${JSON.stringify(ms.errors)}` : "")
   );
   return ms;
@@ -888,19 +1001,13 @@ async function liveSnapshot(student) {
   return bits.join("\n").slice(0, 7000);
 }
 
-app.get("/health", async (_req, res) => {
-  const bert = await probeBertService();
+/** Public. Says the process is up and whether BERT is on; nothing about the BERT host. */
+app.get("/health", (_req, res) => {
   res.json({
     ok: true,
     service: "epsynapse-server",
     time: new Date().toISOString(),
-    bert: {
-      enabled: bertEnabled(),
-      ok: Boolean(bert.ok),
-      url: "http://127.0.0.1:3007",
-      zeroShotLoaded: Boolean(bert.zeroShotLoaded),
-      fineTunedLoaded: Boolean(bert.fineTunedLoaded),
-    },
+    bert: { enabled: bertEnabled() },
   });
 });
 
@@ -908,9 +1015,45 @@ app.get("/v1/auth/google/config", (_req, res) => {
   res.json(publicGoogleConfig());
 });
 
-app.post("/v1/auth/google", async (req, res) => {
+/**
+ * The nonce claim of a Google ID token. Read from the token itself after tokeninfo
+ * has verified the signature over that same string, so the claim is trustworthy.
+ * "" when the token has no nonce (iOS GIDSignIn).
+ */
+function idTokenNonce(idToken) {
+  const parts = String(idToken || "").split(".");
+  if (parts.length !== 3) return "";
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+    return typeof payload?.nonce === "string" ? payload.nonce : "";
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Web sign-ins always send the nonce they minted, and the token must carry it. A
+ * token that carries a nonce nobody claims came from a browser flow and is being
+ * replayed. No nonce anywhere is the iOS path.
+ */
+function checkGoogleNonce(idToken, bodyNonce) {
+  const expected = typeof bodyNonce === "string" ? bodyNonce.trim() : "";
+  const actual = idTokenNonce(idToken);
+  if (expected) {
+    if (!secretEquals(actual, expected)) {
+      throw Object.assign(new Error("Google sign-in did not match this page. Try again."), { status: 401 });
+    }
+    return;
+  }
+  if (actual) {
+    throw Object.assign(new Error("Google sign-in did not match this page. Try again."), { status: 401 });
+  }
+}
+
+app.post("/v1/auth/google", googleAuthLimiter, async (req, res) => {
   try {
     const claims = await verifyIdToken(req.body?.idToken);
+    checkGoogleNonce(req.body?.idToken, req.body?.nonce);
     const student = await upsertGoogleStudent({
       googleSub: claims.sub,
       email: claims.email,
@@ -938,10 +1081,9 @@ app.get("/v1/me", async (req, res) => {
 
 app.post("/v1/me", async (req, res) => {
   try {
-    const student = await studentFromRequest(req);
-    if (!student) {
-      return res.status(401).json({ error: "Sign in with Google first." });
-    }
+    // Settings are gated for paused accounts; only GET /v1/me stays open.
+    const student = await requireStudent(req, res);
+    if (!student) return;
 
     // School and student id are no longer settings. The EPS door identifies the
     // student from the school Microsoft sign-in; the other door has neither.
@@ -1048,7 +1190,7 @@ async function revokeCanvasOauthToken(student) {
  */
 app.post("/v1/me/delete", async (req, res) => {
   try {
-    const student = await requireStudent(req, res);
+    const student = await requireStudent(req, res, { allowPaused: true });
     if (!student) return;
     if (req.body?.confirm !== true) {
       return res.status(400).json({ error: "Send { confirm: true } to delete this account." });
@@ -1378,6 +1520,8 @@ function callbackPage({ service, result, reason, email, returnTo }) {
     `${returnTo}/?ms=${encodeURIComponent(result)}&service=${encodeURIComponent(service)}` +
     (reason ? `&reason=${encodeURIComponent(reason)}` : "");
   const fallback = jsSafe(fallbackUrl);
+  // returnTo is already one of the allowlisted origins (safeReturnTo). Never "*".
+  const target = jsSafe(returnTo);
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>EPSynapse</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -1396,7 +1540,7 @@ a{color:#8ab4ff}
 <script>
 (function(){
   var msg=${payload};
-  try{ if(window.opener && !window.opener.closed){ window.opener.postMessage(msg,"*"); } }catch(e){}
+  try{ if(window.opener && !window.opener.closed){ window.opener.postMessage(msg,${target}); } }catch(e){}
   try{ window.close(); }catch(e){}
   setTimeout(function(){ if(!window.closed){ location.replace(${fallback}); } },400);
 })();
@@ -1412,10 +1556,15 @@ async function findMsAuthStudent(state) {
     const s = await loadStudentByFileId(hit.fileId).catch(() => null);
     if (s?.msAuth?.state === key) return s;
   }
+  // The disk scan reads every student file; only a well-formed state earns that.
+  if (!OAUTH_STATE_RE.test(key)) return null;
   return findStudentByMsAuthState(key);
 }
 
-app.get("/v1/ms/callback", async (req, res) => {
+const MS_WRONG_SESSION = "This sign-in link belongs to a different EPSynapse account. Start again from EPSynapse.";
+const MS_NO_SESSION = "Sign in to EPSynapse in this browser first, then connect again.";
+
+app.get("/v1/ms/callback", msCallbackLimiter, async (req, res) => {
   const state = String(req.query.state || "").trim();
   const code = String(req.query.code || "").trim();
   const oauthError = String(req.query.error || "").trim();
@@ -1433,6 +1582,24 @@ app.get("/v1/ms/callback", async (req, res) => {
       service = msServiceName(auth.service) || "onedrive";
       returnTo = safeReturnTo(auth.returnTo);
       const fileId = googleFileId(student.googleSub);
+      const native = returnTo === "epsynapse://";
+
+      // Bind the grant to the browser that started it, not only to the state value.
+      // A cookie or header that resolves to someone else, or no session at all on the
+      // web path, fails closed: nothing is exchanged or stored.
+      const sessionStudent = await studentFromRequest(req).catch(() => null);
+      const sessionFileId = sessionStudent ? googleFileId(sessionStudent.googleSub) : "";
+      if (sessionFileId && sessionFileId !== fileId) {
+        console.warn(`[ms-oauth] callback session mismatch state-owner=${fileId} session=${sessionFileId}`);
+        outcome = { result: "error", reason: MS_WRONG_SESSION, needsAdminApproval: false };
+        return finishMsCallback(res, { service, returnTo, outcome, email, state, pending: false });
+      }
+      if (!sessionFileId && !native) {
+        outcome = { result: "error", reason: MS_NO_SESSION, needsAdminApproval: false };
+        return finishMsCallback(res, { service, returnTo, outcome, email, state, pending: false });
+      }
+
+      let pending = false;
       await withStudentLock(fileId, async () => {
         const current = (await loadStudentByFileId(fileId)) || student;
         if (oauthError) {
@@ -1468,28 +1635,74 @@ app.get("/v1/ms/callback", async (req, res) => {
           outcome = callbackResult(current, service, exchange);
           return;
         }
+        if (native) {
+          // The app's own session posts the state to /v1/me/ms/finish; tokens land there.
+          pruneMsPendingGrants();
+          msPendingGrants.set(state, { fileId, service, exchange, createdAt: Date.now() });
+          pending = true;
+          outcome = { result: "pending", reason: "", needsAdminApproval: false };
+          return;
+        }
         mergeMsAuth(current, null);
         await applyMicrosoftToken(current, exchange, null);
         email = msSignedInEmail(current);
         outcome = callbackResult(current, service, null);
       });
       msAuthStates.delete(state);
+      return finishMsCallback(res, { service, returnTo, outcome, email, state, pending });
     }
   } catch (err) {
     console.warn("[ms-oauth] callback", shortMsError(err));
     outcome = { result: "error", reason: shortMsError(err), needsAdminApproval: false };
   }
+  return finishMsCallback(res, { service, returnTo, outcome, email, state, pending: false });
+});
+
+/**
+ * Last hop of the Microsoft callback. Native: epsynapse://ms?result=pending&service=&state=
+ * when a grant is parked, otherwise the old result=connected|denied|error shape. Web:
+ * the small page that posts the result to the opener.
+ */
+function finishMsCallback(res, { service, returnTo, outcome, email, state, pending }) {
   const { result, reason } = outcome;
+  res.setHeader("Cache-Control", "no-store");
   if (returnTo === "epsynapse://") {
     // encodeURIComponent, not URLSearchParams: iOS URLComponents does not turn "+" into a space.
     const parts = [`service=${encodeURIComponent(service)}`, `result=${encodeURIComponent(result)}`];
+    if (pending) parts.push(`state=${encodeURIComponent(state)}`);
     if (reason) parts.push(`reason=${encodeURIComponent(reason)}`);
     if (email) parts.push(`email=${encodeURIComponent(email)}`);
     return res.redirect(302, `epsynapse://ms?${parts.join("&")}`);
   }
-  res.setHeader("Cache-Control", "no-store");
   res.type("html");
   return res.send(callbackPage({ service, result, reason, email, returnTo }));
+}
+
+/**
+ * Native apps finish the Microsoft sign-in here from their own session. The grant
+ * parked by the callback is stored exactly as the web callback would have stored it.
+ * Body { state }. 200 { ok: true, service }. 400 { error } when the state is unknown,
+ * expired, already used, or was started by another account.
+ */
+app.post("/v1/me/ms/finish", async (req, res) => {
+  try {
+    const student = await requireStudent(req, res);
+    if (!student) return;
+    const state = String(req.body?.state || "").trim();
+    const grant = takeMsPendingGrant(state);
+    const fileId = googleFileId(student.googleSub);
+    if (!grant || grant.fileId !== fileId) {
+      return res.status(400).json({ error: "That Microsoft sign-in is stale or not yours. Start again from EPSynapse." });
+    }
+    await withStudentLock(fileId, async () => {
+      const current = (await loadStudentByFileId(fileId)) || student;
+      mergeMsAuth(current, null);
+      await applyMicrosoftToken(current, grant.exchange, null);
+    });
+    return res.json({ ok: true, service: grant.service });
+  } catch (err) {
+    return fail(res, err);
+  }
 });
 
 function clearBag(student, key) {
@@ -1576,7 +1789,7 @@ app.post("/v1/me/ms/consent-request", async (req, res) => {
     student.msConsentRequestedAt = new Date().toISOString();
     await saveStudent(student);
     console.log(
-      `[ms-consent] requested service=${service} student=${student.email || student.googleSub} to=${request.to || "(no SCHOOL_IT_EMAIL)"}`
+      `[ms-consent] requested service=${service} student=${googleFileId(student.googleSub)} to=${request.to || "(no SCHOOL_IT_EMAIL)"}`
     );
     let sent = false;
     let sendError = "";
@@ -2026,6 +2239,16 @@ app.put("/v1/me/onedrive/file", async (req, res) => {
   }
 });
 
+/**
+ * Student-authored class and todo files render inline (HTML, SVG, text). The CSP
+ * sandbox puts them in an opaque origin: scripts run, but with no cookies and no
+ * access to the API origin. nosniff stops the browser from guessing another type.
+ */
+function sandboxStudentFile(res) {
+  res.setHeader("Content-Security-Policy", "sandbox allow-scripts allow-forms allow-popups allow-modals");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+}
+
 async function ownerFromStudent(req, res) {
   const student = await requireStudent(req, res);
   if (!student) return null;
@@ -2135,6 +2358,7 @@ app.get("/v1/me/class-files/file", async (req, res) => {
     };
     const file = await readClassFile(ctx.ownerId, parsed.classId, parsed.name);
     const inline = /html|text|json|javascript|svg/i.test(file.contentType);
+    sandboxStudentFile(res);
     res.setHeader("Content-Type", file.contentType);
     res.setHeader(
       "Content-Disposition",
@@ -2205,6 +2429,7 @@ app.get("/v1/me/todo-files/file", async (req, res) => {
     };
     const file = await readTodoFile(ctx.ownerId, parsed.todoId, parsed.name);
     const inline = /html|text|json|javascript|svg/i.test(file.contentType);
+    sandboxStudentFile(res);
     res.setHeader("Content-Type", file.contentType);
     res.setHeader(
       "Content-Disposition",
@@ -2234,7 +2459,7 @@ app.get("/v1/agent/config", (_req, res) => {
   res.json(publicAgentConfig());
 });
 
-app.post("/v1/agent/chat", async (req, res) => {
+app.post("/v1/agent/chat", agentChatLimiter, async (req, res) => {
   const student = await requireStudent(req, res);
   if (!student) return;
 
@@ -2249,7 +2474,12 @@ app.post("/v1/agent/chat", async (req, res) => {
     return res.status(400).json({ error: "Unknown provider." });
   }
 
-  const { keys, source } = resolveApiKeys(req, providerId, student);
+  const { keys, source, capped, capError } = resolveApiKeys(req, providerId, student);
+  if (capped) {
+    return res
+      .status(capError?.status || 429)
+      .json({ error: capError?.message || DEMO_CAP_ERROR });
+  }
   if (!keys.length) {
     return res.status(401).json({
       error: MISSING_KEY_ERROR,
@@ -2607,6 +2837,17 @@ app.post("/v1/agent/chats/:id/read", async (req, res) => {
   }
 });
 
+/** Per-route limits for routes that other modules mount. Registered first so they run first. */
+function limitRoute(path, method, limit) {
+  app.use(path, (req, res, next) => {
+    if (req.method !== method) return next();
+    return limit(req, res, next);
+  });
+}
+limitRoute("/v1/me/schedule/pdf", "POST", pdfUploadLimiter);
+limitRoute("/v1/research/metrics", "GET", researchLimiter);
+limitRoute("/v1/canvas/callback", "GET", canvasCallbackLimiter);
+
 mountSchedule(app, {
   requireStudent,
   fail,
@@ -2647,12 +2888,20 @@ function runFour11SyncAll(trigger) {
  * from outside requests, so that header alone proves the caller. ADMIN_KEY lets
  * an operator run it by hand.
  */
+/** Constant-time string compare. False for different lengths without leaking which. */
+function secretEquals(given, expected) {
+  const a = Buffer.from(String(given || ""));
+  const b = Buffer.from(String(expected || ""));
+  if (!b.length || a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
 function cronCallerAllowed(req) {
   if (String(req.get("x-appengine-cron") || "").toLowerCase() === "true") return true;
   const key = String(process.env.ADMIN_KEY || "").trim();
   if (!key) return false;
   const m = /^Bearer\s+(.+)$/i.exec(String(req.get("authorization") || "").trim());
-  return Boolean(m && m[1].trim() === key);
+  return Boolean(m && secretEquals(m[1].trim(), key));
 }
 
 app.get("/internal/four11/sync-all", async (req, res) => {

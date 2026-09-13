@@ -6,6 +6,7 @@
  */
 
 import {
+  GRAPH_TIMEOUT_MS,
   adminConsentUrl,
   graphClientId,
   refreshAccessToken as refreshGraphToken,
@@ -83,7 +84,12 @@ async function graphRequest(token, method, url, body) {
     headers["Content-Type"] = "application/json";
     payload = JSON.stringify(payload);
   }
-  const res = await fetch(url, { method, headers, body: payload });
+  const res = await fetch(url, {
+    method,
+    headers,
+    body: payload,
+    signal: AbortSignal.timeout(GRAPH_TIMEOUT_MS),
+  });
   const text = await res.text();
   if (!res.ok) {
     const snippet = redactSecrets(text).replace(/\s+/g, " ").slice(0, 220);

@@ -3,11 +3,54 @@
  * Reads courses, assignments, and grades. Does not write planner overrides.
  */
 
+import { lookup } from "node:dns/promises";
+import { BlockList, isIP } from "node:net";
+
 export const DEFAULT_HOST = "https://eastsideprep.instructure.com";
 
 const PAGE_CAP = 3;
 const ASSIGN_CAP = 80;
 const FETCH_MS = 15_000;
+const UNREACHABLE = "Could not reach that Canvas host";
+
+/**
+ * Addresses a student-supplied Canvas host may never resolve to. This Mac runs
+ * LM Studio, BERT, and three other APIs on localhost, so a hostile host that
+ * points at 127.0.0.1 or a LAN address would let Canvas calls probe them.
+ */
+const PRIVATE_NETS = new BlockList();
+[
+  ["0.0.0.0", 8],
+  ["10.0.0.0", 8],
+  ["100.64.0.0", 10],
+  ["127.0.0.0", 8],
+  ["169.254.0.0", 16],
+  ["172.16.0.0", 12],
+  ["192.168.0.0", 16],
+  ["224.0.0.0", 4],
+  ["240.0.0.0", 4],
+].forEach(([net, bits]) => PRIVATE_NETS.addSubnet(net, bits, "ipv4"));
+[
+  ["::", 128],
+  ["::1", 128],
+  ["fc00::", 7],
+  ["fe80::", 10],
+  ["ff00::", 8],
+].forEach(([net, bits]) => PRIVATE_NETS.addSubnet(net, bits, "ipv6"));
+
+export function isPrivateAddress(raw) {
+  const ip = String(raw || "").trim();
+  const mapped = ip.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i);
+  if (mapped) return isPrivateAddress(mapped[1]);
+  const family = isIP(ip);
+  if (family === 4) return PRIVATE_NETS.check(ip, "ipv4");
+  if (family === 6) return PRIVATE_NETS.check(ip.replace(/%.*$/, ""), "ipv6");
+  return true;
+}
+
+function bareHostname(url) {
+  return String(url.hostname || "").replace(/^\[|\]$/g, "").toLowerCase();
+}
 
 export function normalizeHost(raw) {
   const s = String(raw || "").trim();
@@ -21,7 +64,48 @@ export function normalizeHost(raw) {
   if (url.protocol !== "https:") {
     throw new Error("Canvas URL must be https.");
   }
+  const name = bareHostname(url);
+  if (!name || name === "localhost" || name.endsWith(".localhost") || isIP(name)) {
+    throw new Error("Canvas URL must be a hostname like yourschool.instructure.com.");
+  }
   return `${url.protocol}//${url.host}`;
+}
+
+function unreachable() {
+  const err = new Error(UNREACHABLE);
+  err.status = 502;
+  return err;
+}
+
+/**
+ * Resolve the Canvas hostname and refuse loopback, link-local, RFC1918, CGNAT,
+ * unique-local, multicast, and unspecified answers. Any failure is the same
+ * generic error so a bad host cannot be used to map ports on this Mac.
+ */
+async function assertPublicHost(base) {
+  const name = bareHostname(new URL(base));
+  let addrs;
+  try {
+    addrs = await lookup(name, { all: true });
+  } catch {
+    throw unreachable();
+  }
+  if (!Array.isArray(addrs) || !addrs.length) throw unreachable();
+  if (addrs.some((a) => isPrivateAddress(a?.address))) throw unreachable();
+}
+
+/** Only a next page on the same origin as the configured host is followed. */
+function sameOriginNext(base, next) {
+  const href = String(next || "").trim();
+  if (!href) return "";
+  let url;
+  try {
+    url = new URL(href);
+  } catch {
+    return "";
+  }
+  if (url.protocol !== "https:") return "";
+  return url.origin === new URL(base).origin ? url.href : "";
 }
 
 function absCanvasUrl(host, raw) {
@@ -80,10 +164,12 @@ export async function canvasFetch(host, token, pathAndQuery, pageCap = PAGE_CAP)
     throw err;
   }
 
-  const first = String(pathAndQuery || "");
-  let url = first.startsWith("http")
-    ? first
-    : `${base}/api/v1${first.startsWith("/") ? first : `/${first}`}`;
+  // Callers pass API paths only. An absolute URL here would let a response body
+  // steer the next request, so it is treated as a path under /api/v1.
+  const first = String(pathAndQuery || "").replace(/^https?:\/\/[^/]*/i, "");
+  let url = `${base}/api/v1${first.startsWith("/") ? first : `/${first}`}`;
+
+  await assertPublicHost(base);
 
   const out = [];
   const pages = Number.isFinite(pageCap) && pageCap > 0 ? pageCap : PAGE_CAP;
@@ -92,13 +178,20 @@ export async function canvasFetch(host, token, pathAndQuery, pageCap = PAGE_CAP)
     try {
       res = await fetch(url, {
         headers: { Authorization: `Bearer ${tokenStr}`, Accept: "application/json" },
+        redirect: "manual",
         signal: AbortSignal.timeout(FETCH_MS),
       });
     } catch (err) {
       const timedOut = err && err.name === "TimeoutError";
-      const e = new Error(timedOut ? "Canvas timed out." : "Could not reach Canvas.");
+      const e = new Error(timedOut ? "Canvas timed out." : UNREACHABLE);
       e.status = 502;
       throw e;
+    }
+    if (res.status >= 300 && res.status < 400) {
+      // Never follow a redirect: the target could be anything on this Mac.
+      const err = new Error("Canvas sent a redirect instead of data.");
+      err.status = 502;
+      throw err;
     }
     if (res.status === 401 || res.status === 403) {
       const err = new Error("Canvas rejected that token.");
@@ -113,7 +206,7 @@ export async function canvasFetch(host, token, pathAndQuery, pageCap = PAGE_CAP)
     const body = await res.json();
     if (Array.isArray(body)) out.push(...body);
     else return body;
-    url = linkHeaderNext(res.headers.get("link"));
+    url = sameOriginNext(base, linkHeaderNext(res.headers.get("link")));
   }
   return out;
 }
