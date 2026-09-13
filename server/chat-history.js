@@ -158,6 +158,16 @@ export async function loadChat(ownerId, sessionId) {
   };
 }
 
+/** Account deletion: every saved chat for one owner. Idempotent. */
+export async function deleteOwnerData(ownerId) {
+  const collection = chatsCollection(ownerId);
+  let chats = 0;
+  for (const id of await listIds(collection)) {
+    if (await deleteDoc(collection, id).catch(() => false)) chats += 1;
+  }
+  return { chats };
+}
+
 export async function markChatRead(ownerId, sessionId) {
   const id = assertChatId(sessionId);
   const chat = await readChatFile(ownerId, id);

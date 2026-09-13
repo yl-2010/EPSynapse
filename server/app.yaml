@@ -6,6 +6,9 @@
 #
 # App Engine sets PORT (8080) and GOOGLE_CLOUD_PROJECT itself. Secrets come
 # from Secret Manager via secrets.js; nothing sensitive belongs in this file.
+#
+# Scheduled jobs live in cron.yaml (nightly four11 sync at 00:15 Pacific).
+# Deploy it too: gcloud app deploy server/cron.yaml
 runtime: nodejs22
 entrypoint: node index.js
 instance_class: F2
@@ -24,7 +27,7 @@ env_variables:
   SECRETS_FROM_MANAGER: "1"
   # Every name here is read from Secret Manager at boot when not already in env.
   # Client ids are not secret but they are per project, so they live there too.
-  SECRET_NAMES: "GOOGLE_WEB_CLIENT_ID,GOOGLE_IOS_CLIENT_ID,GOOGLE_CLIENT_IDS,MICROSOFT_CLIENT_ID,MICROSOFT_CLIENT_SECRET,MICROSOFT_TENANT,CANVAS_OAUTH_CLIENT_ID,CANVAS_OAUTH_CLIENT_SECRET,FOUR11_API_KEY,ADMIN_KEY,DEMO_GROQ_KEYS,SCHOOL_IT_EMAIL"
+  SECRET_NAMES: "GOOGLE_WEB_CLIENT_ID,GOOGLE_IOS_CLIENT_ID,GOOGLE_CLIENT_IDS,MICROSOFT_CLIENT_ID,MICROSOFT_CLIENT_SECRET,MICROSOFT_TENANT,CANVAS_OAUTH_CLIENT_ID,CANVAS_OAUTH_CLIENT_SECRET,FOUR11_API_KEY,ADMIN_KEY,DEMO_GROQ_KEYS,SCHOOL_IT_EMAIL,DATA_ENCRYPTION_KEY"
 
 automatic_scaling:
   min_instances: 0

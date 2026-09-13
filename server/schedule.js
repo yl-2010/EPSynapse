@@ -19,8 +19,8 @@ import { createRequire } from "node:module";
 import { unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { getDoc, putDoc } from "./store.js";
-import { putBlob } from "./blobs.js";
+import { deleteDoc, getDoc, putDoc } from "./store.js";
+import { deleteBlob, listBlobs, putBlob } from "./blobs.js";
 import { ownerIdForStudent } from "./chat-history.js";
 import { prettyCourseName } from "./canvas.js";
 import { applyClassAliases, loadWorkspaceMeta } from "./workspace.js";
@@ -605,6 +605,22 @@ export async function saveScheduleFromPdf(
   };
   await writeClassesDoc(owner, payload);
   return payload;
+}
+
+/**
+ * Account deletion: the classes doc plus every uploaded PDF under
+ * schedules/<owner>/. Idempotent.
+ */
+export async function deleteOwnerData(ownerId) {
+  const collection = scheduleCollection(ownerId);
+  const out = { classes: false, pdfs: 0 };
+  out.classes = await deleteDoc(collection, "classes").catch(() => false);
+  for (const blob of await listBlobs(`${collection}/`)) {
+    // In files mode classes.json sits in the same folder; store.js already removed it.
+    if (blob.key.endsWith("/classes.json")) continue;
+    if (await deleteBlob(blob.key).catch(() => false)) out.pdfs += 1;
+  }
+  return out;
 }
 
 /**

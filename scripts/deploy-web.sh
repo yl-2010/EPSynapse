@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Production deploy for epsynapse.com on team jype1.
-# Loads a local JYPE token if this shell only has the personal CLI login.
+# Loads the EPSynapse team token if this shell only has the personal CLI login.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -8,7 +8,7 @@ cd "$root"
 
 if [[ -z "${VERCEL_TOKEN:-}" ]]; then
   for f in \
-    "$HOME/.config/jype/vercel.env" \
+    "$HOME/.config/epsynapse/vercel.env" \
     "$HOME/Library/Application Support/Cursor/AgentStores/cursor_agent_stores/u217305257/files/jype-vercel.env"
   do
     if [[ -f "$f" ]]; then
@@ -30,7 +30,7 @@ fi
 # CLI deploys still send the current git author. Vercel blocks production when
 # that email is not on the JYPE GitHub login. Git auto-deploy is already off.
 # Stage the tree without .git so the check has nothing to match.
-stage="$(mktemp -d "${TMPDIR:-/tmp}/jype-web.XXXXXX")"
+stage="$(mktemp -d "${TMPDIR:-/tmp}/epsynapse-web.XXXXXX")"
 cleanup() { rm -rf "$stage"; }
 trap cleanup EXIT
 rsync -a --delete \
@@ -51,9 +51,9 @@ rsync -a --delete \
 cp "$stage/index.html" "$stage/404.html"
 cd "$stage"
 
-# Temp folder is not linked. Pin the existing JYPE project so the CLI
+# Temp folder is not linked. Pin the existing Vercel project so the CLI
 # does not invent a name from the mktemp path.
 export VERCEL_ORG_ID="${VERCEL_ORG_ID:-team_EF7WJXYBcuZa84T04Q5jvmKv}"
 export VERCEL_PROJECT_ID="${VERCEL_PROJECT_ID:-prj_OR2sdjPGltYZpvAXu37W6g2cMf27}"
 
-npx vercel deploy --prod --yes --scope jype1 --name jype
+npx vercel deploy --prod --yes --scope jype1 --name epsynapse

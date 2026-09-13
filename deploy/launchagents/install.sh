@@ -10,7 +10,7 @@ DOMAIN="gui/$(id -u)"
 
 mkdir -p "$DEST"
 
-for label in com.jype.server com.jype.cloudflared; do
+for label in com.epsynapse.server com.epsynapse.cloudflared; do
   cp "${SRC}/${label}.plist" "${DEST}/${label}.plist"
   launchctl enable "${DOMAIN}/${label}"
   if launchctl print "${DOMAIN}/${label}" >/dev/null 2>&1; then

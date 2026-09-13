@@ -299,6 +299,23 @@ export async function deleteNote(ownerId, id) {
   return { ok: true, id: note.id };
 }
 
+/**
+ * Account deletion: every note and every research event for one owner.
+ * Idempotent; an owner with nothing stored returns zeros.
+ */
+export async function deleteOwnerData(ownerId) {
+  const out = { notes: 0, events: 0 };
+  const notesCol = notesCollection(ownerId);
+  for (const id of await listIds(notesCol)) {
+    if (await deleteDoc(notesCol, id).catch(() => false)) out.notes += 1;
+  }
+  const researchCol = researchCollection(ownerId);
+  for (const id of await listIds(researchCol)) {
+    if (await deleteDoc(researchCol, id).catch(() => false)) out.events += 1;
+  }
+  return out;
+}
+
 export { publicNote, publicNoteRow };
 
 export function mountNotes(app, { requireStudent, fail }) {

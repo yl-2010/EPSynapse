@@ -6,8 +6,8 @@
  */
 
 import { join } from "node:path";
-import { getBlob, listBlobs, putBlob } from "./blobs.js";
-import { dataRoot, getDoc, putDoc } from "./store.js";
+import { deleteBlob, getBlob, listBlobs, putBlob } from "./blobs.js";
+import { dataRoot, deleteDoc, getDoc, putDoc } from "./store.js";
 
 const MAX_BYTES = 2 * 1024 * 1024;
 const META_NAME = "_meta.json";
@@ -125,6 +125,22 @@ export async function saveVault(fileId, { name, content, contentType } = {}) {
   meta[safe] = { contentType: type, lastModified };
   await writeMeta(id, meta);
   return vaultItem(safe, buf.length, lastModified);
+}
+
+/** Account deletion: every vault blob and the _meta sidecar for one student. Idempotent. */
+export async function deleteOwnerData(fileId) {
+  let id;
+  try {
+    id = assertFileId(fileId);
+  } catch {
+    return { files: 0 };
+  }
+  let files = 0;
+  for (const blob of await listBlobs(blobPrefix(id))) {
+    if (await deleteBlob(blob.key).catch(() => false)) files += 1;
+  }
+  await deleteDoc(metaCollection(id), META_DOC).catch(() => false);
+  return { files };
 }
 
 export async function readVault(fileId, name) {

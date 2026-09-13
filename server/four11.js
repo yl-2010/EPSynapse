@@ -14,7 +14,7 @@
  * Off when FOUR11_API_KEY is unset. Nothing runs at import time.
  */
 
-import { studentFromRequest } from "./students.js";
+import { forEachStudentFile, isPaused, studentFromRequest } from "./students.js";
 import { ownerIdForStudent } from "./chat-history.js";
 import { saveScheduleClasses } from "./schedule.js";
 import { prettyCourseName } from "./canvas.js";
@@ -369,11 +369,78 @@ export async function four11PersonForStudent(student) {
   return null;
 }
 
+function termLabelNow() {
+  const end = currentSchoolYear();
+  return `${end - 1}-${String(end).slice(2)}`;
+}
+
+/**
+ * Fetch one EPS student's four11 schedule and store it as their classes doc
+ * (source "four11", same shape the PDF upload writes). Returns null when the
+ * student is not on the roster. Throws on four11 errors. Used by the sync route
+ * and the nightly job.
+ */
+export async function syncOneStudent(student) {
+  const person = await four11PersonForStudent(student);
+  if (!person) return null;
+  const courses = await four11Courses(person.username);
+  const roster = await four11People();
+  const schedule = buildEpsSchedule(person, courses, roster);
+  const classes = toEpsynapseClasses(schedule);
+  const ownerId = ownerIdForStudent(student);
+  if (ownerId && classes.classes?.length) {
+    await saveScheduleClasses(ownerId, {
+      classes: classes.classes,
+      source: "four11",
+      school: "Eastside Prep",
+      termLabel: termLabelNow(),
+    });
+  }
+  return { person, schedule, classes };
+}
+
+/**
+ * Nightly refresh, same idea as epschedule's cron. Every EPS student who is not
+ * paused and is on the roster gets a fresh classes doc. Never writes the student
+ * record. Returns { synced, skipped, failed }. Fast no-op when four11 is off.
+ */
+export async function syncAllEpsStudents({ log = () => {} } = {}) {
+  const out = { synced: 0, skipped: 0, failed: 0 };
+  if (!four11Configured()) {
+    log("sync-all skipped: FOUR11_API_KEY is unset");
+    return out;
+  }
+  try {
+    await four11People({ force: true });
+  } catch (err) {
+    log(`sync-all could not load the roster: ${err?.message || err}`);
+    return out;
+  }
+  await forEachStudentFile(async (student, fileId) => {
+    if (student.door !== "eps" || isPaused(student)) {
+      out.skipped += 1;
+      return false;
+    }
+    try {
+      const result = await syncOneStudent(student);
+      if (!result) {
+        out.skipped += 1;
+        return false;
+      }
+      out.synced += 1;
+    } catch (err) {
+      out.failed += 1;
+      log(`sync failed for ${fileId}: ${err?.message || err}`);
+    }
+    return false;
+  });
+  return out;
+}
+
 export function mountFour11(app) {
   /**
-   * Fetch the signed-in EPS student's four11 schedule and return it in both the raw
-   * term shape and the classes.json shape. Nothing is persisted here. index.js should
-   * write `classes` with the same code path saveScheduleFromPdf uses.
+   * Fetch the signed-in EPS student's four11 schedule, store it as their classes
+   * doc, and return both the raw term shape and the classes.json shape.
    */
   app.post("/v1/me/schedule/four11/sync", async (req, res) => {
     try {
@@ -390,25 +457,13 @@ export function mountFour11(app) {
           error: "four11 schedules are for Eastside Prep accounts. Upload your schedule PDF instead.",
         });
       }
-      const person = await four11PersonForStudent(student);
-      if (!person) {
+      const result = await syncOneStudent(student);
+      if (!result) {
         return res.status(404).json({
           error: "That email is not on the Eastside Prep roster. Sign in with your @eastsideprep.org account.",
         });
       }
-      const courses = await four11Courses(person.username);
-      const roster = await four11People();
-      const schedule = buildEpsSchedule(person, courses, roster);
-      const classes = toEpsynapseClasses(schedule);
-      const ownerId = ownerIdForStudent(student);
-      if (ownerId && classes.classes?.length) {
-        await saveScheduleClasses(ownerId, {
-          classes: classes.classes,
-          source: "four11",
-          school: "Eastside Prep",
-          termLabel: `${currentSchoolYear() - 1}-${String(currentSchoolYear()).slice(2)}`,
-        });
-      }
+      const { person, schedule, classes } = result;
       return res.json({
         person: {
           name: person.displayName,

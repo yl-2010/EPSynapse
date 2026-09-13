@@ -1,6 +1,6 @@
 /**
  * Client for the local EPSynapse notes-classifier BERT sidecar.
- * 127.0.0.1:3007 only. Auto-spawns scripts/bert_serve.py via the JYPE .venv.
+ * 127.0.0.1:3007 only. Auto-spawns scripts/bert_serve.py via the repo .venv.
  *
  * Off unless BERT_ENABLED=1. Notes are classified by the student's own model key
  * (classify.js orchestrator) with no BERT votes. The sidecar, the training scripts,
@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 
 const DEFAULT_URL = "http://127.0.0.1:3007";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const LOG_PATH = "/tmp/jype-bert.log";
+const LOG_PATH = "/tmp/epsynapse-bert.log";
 const DEFAULT_READY_TIMEOUT_MS = 180_000;
 
 /** @type {Promise<object>|null} */

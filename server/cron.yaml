@@ -1,0 +1,16 @@
+# App Engine cron for the EPSynapse API. Same idea as epschedule's nightly crawl.
+#
+# Deploy alongside app.yaml:
+#   gcloud app deploy server/cron.yaml
+#
+# App Engine adds X-Appengine-Cron: true to these requests and strips that header
+# from anything arriving from outside, so index.js trusts it. ADMIN_KEY as a
+# Bearer token also works for a manual run.
+cron:
+  - description: "Nightly four11 schedule refresh for every EPS student"
+    url: /internal/four11/sync-all
+    schedule: every day 00:15
+    timezone: America/Los_Angeles
+    retry_parameters:
+      job_retry_limit: 2
+      min_backoff_seconds: 300

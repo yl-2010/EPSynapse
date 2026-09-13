@@ -2,16 +2,27 @@
  * Google-account student profiles and session cookies.
  * File id is google__{sub}. School + student ID are optional settings.
  * Tokens and the model key stay on disk, never the raw secret in publicProfile().
+ *
+ * Secrets (Canvas tokens, model keys, Graph tokens, the PKCE verifier) are sealed with
+ * crypto.js before putDoc and opened in hydrate(), so every reader sees plaintext and
+ * every writer stores enc:v1:... when DATA_ENCRYPTION_KEY is set.
+ *
+ * Sessions are one doc each: sessions/<sid> = { studentId, createdAt, lastSeenAt }.
+ * The in-memory Map is only a cache; a miss falls back to the doc so a restart or a
+ * second App Engine instance still recognises the cookie.
  */
 
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
-import { usesCursorAgent } from "./cursor-demo.js";
-import { dataRoot, getDoc, listIds, putDoc } from "./store.js";
+import { SECRET_KEY_ERROR, encryptionEnabled, isSealed, openSecret, sealSecret } from "./crypto.js";
+import { dataRoot, deleteDoc, getDoc, listDocs, listIds, putDoc } from "./store.js";
 
 const STUDENTS = "students";
 const SESSIONS = "sessions";
-const SESSIONS_DOC = "all";
+/** Pre-2026 layout: every session in one doc (data/sessions.json). Migrated at boot. */
+const LEGACY_SESSIONS_DOC = "all";
+const SESSION_ID_RE = /^[a-f0-9]{32,128}$/;
+const LAST_SEEN_WRITE_MS = 60 * 60 * 1000;
 
 export const COOKIE = "epsynapse_sid";
 export const HEADER = "x-epsynapse-session";
@@ -27,7 +38,9 @@ export const DEFAULT_DOOR = "other";
 export const PAUSED_MESSAGE =
   "EPSynapse for Eastside Prep is almost ready. Your account is paused while the school Microsoft sign-in, four11 schedule, and Canvas connection get set up. You'll sign in with your @eastsideprep.org account once it's live.";
 
+/** Canvas host for the EPS door. Other-door students type their own; their default is "". */
 const DEFAULT_CANVAS_HOST = "https://eastsideprep.instructure.com";
+export const EPS_CANVAS_HOST = DEFAULT_CANVAS_HOST;
 const MAX_LEN = 80;
 const SESSION_MAX_AGE = 2592000;
 const SKEW_SEC = 90;
@@ -37,8 +50,12 @@ const MODEL_KEY_MAX = 256;
 const MODEL_KEY_LIMIT = 8;
 
 const sessions = new Map();
-const sessionsReady = loadSessions();
-let persistChain = sessionsReady;
+const sessionsReady = migrateLegacySessions();
+let writeChain = sessionsReady;
+
+function defaultCanvasHost(door) {
+  return door === "eps" ? DEFAULT_CANVAS_HOST : "";
+}
 
 /** Files-mode directory of student JSON (server/data/students). Meaningless under Firestore. */
 export function studentsDir() {
@@ -104,7 +121,7 @@ function hydrateMsAuth(raw) {
   if (!raw || typeof raw !== "object" || !raw.state) return null;
   return {
     state: String(raw.state || ""),
-    codeVerifier: String(raw.codeVerifier || ""),
+    codeVerifier: openSecret(raw.codeVerifier || ""),
     service: String(raw.service || ""),
     returnTo: String(raw.returnTo || ""),
     authorizeUrl: String(raw.authorizeUrl || ""),
@@ -232,12 +249,39 @@ function assertFileId(fileId) {
   return id;
 }
 
+function openKeys(keys) {
+  return Array.isArray(keys) ? keys.map((k) => openSecret(k)) : keys;
+}
+
+function sealKeys(keys) {
+  return Array.isArray(keys) ? keys.map((k) => sealSecret(k)).filter(Boolean) : [];
+}
+
+function hydrateTokenBag(bag) {
+  return {
+    accessToken: openSecret(bag.accessToken || ""),
+    refreshToken: openSecret(bag.refreshToken || ""),
+    exp: Number(bag.exp) || 0,
+    email: String(bag.email || ""),
+    pending: bag.pending ?? null,
+    clientId: String(bag.clientId || ""),
+    scope: String(bag.scope || ""),
+    denied: Boolean(bag.denied),
+  };
+}
+
+/**
+ * Raw doc (or any student-shaped object) -> full plaintext student. Every reader goes
+ * through here, so sealed fields are opened exactly once. Plaintext legacy values pass
+ * through openSecret untouched; the next save seals them.
+ */
 function hydrate(raw) {
   const src = raw && typeof raw === "object" ? raw : {};
   const graph = src.graph && typeof src.graph === "object" ? src.graph : {};
   const outlook = src.outlook && typeof src.outlook === "object" ? src.outlook : {};
   const teams = src.teams && typeof src.teams === "object" ? src.teams : {};
-  const modelKeys = normalizeModelKeys(src.modelKeys, src.modelKey);
+  const modelKeys = normalizeModelKeys(openKeys(src.modelKeys), openSecret(src.modelKey || ""));
+  const door = normalizeDoor(src.door);
   return {
     googleSub: String(src.googleSub || ""),
     email: String(src.email || ""),
@@ -245,14 +289,14 @@ function hydrate(raw) {
     picture: String(src.picture || ""),
     rosterName: String(src.rosterName || ""),
     rosterMatched: Boolean(src.rosterMatched),
-    door: normalizeDoor(src.door),
+    door,
     paused: Boolean(src.paused),
     school: String(src.school || ""),
     studentId: String(src.studentId || ""),
-    canvasHost: String(src.canvasHost || DEFAULT_CANVAS_HOST),
-    canvasToken: String(src.canvasToken || ""),
+    canvasHost: String(src.canvasHost || defaultCanvasHost(door)),
+    canvasToken: openSecret(src.canvasToken || ""),
     // Canvas OAuth (EPS door, canvas-oauth.js). Empty for a pasted manual token.
-    canvasRefreshToken: String(src.canvasRefreshToken || ""),
+    canvasRefreshToken: openSecret(src.canvasRefreshToken || ""),
     canvasTokenExp: Number(src.canvasTokenExp) || 0,
     canvasAuthMode: src.canvasAuthMode === "oauth" ? "oauth" : "",
     canvasAuth: src.canvasAuth?.state
@@ -266,42 +310,46 @@ function hydrate(raw) {
     modelKey: modelKeys[0] || "",
     modelProvider: normalizeModelProvider(src.modelProvider),
     displayName: String(src.displayName || ""),
-    graph: {
-      accessToken: String(graph.accessToken || ""),
-      refreshToken: String(graph.refreshToken || ""),
-      exp: Number(graph.exp) || 0,
-      email: String(graph.email || ""),
-      pending: graph.pending ?? null,
-      clientId: String(graph.clientId || ""),
-      scope: String(graph.scope || ""),
-      denied: Boolean(graph.denied),
-    },
-    outlook: {
-      accessToken: String(outlook.accessToken || ""),
-      refreshToken: String(outlook.refreshToken || ""),
-      exp: Number(outlook.exp) || 0,
-      email: String(outlook.email || ""),
-      pending: outlook.pending ?? null,
-      clientId: String(outlook.clientId || ""),
-      scope: String(outlook.scope || ""),
-      denied: Boolean(outlook.denied),
-    },
-    teams: {
-      accessToken: String(teams.accessToken || ""),
-      refreshToken: String(teams.refreshToken || ""),
-      exp: Number(teams.exp) || 0,
-      email: String(teams.email || ""),
-      pending: teams.pending ?? null,
-      clientId: String(teams.clientId || ""),
-      scope: String(teams.scope || ""),
-      denied: Boolean(teams.denied),
-    },
+    graph: hydrateTokenBag(graph),
+    outlook: hydrateTokenBag(outlook),
+    teams: hydrateTokenBag(teams),
     msServices: hydrateMsServices(src.msServices),
     msAuth: hydrateMsAuth(src.msAuth),
     msConsentRequestedAt: String(src.msConsentRequestedAt || ""),
     createdAt: String(src.createdAt || ""),
     updatedAt: String(src.updatedAt || ""),
   };
+}
+
+/** Secret fields sealed for putDoc. Input is a hydrated (plaintext) student. Never mutates it. */
+function toDisk(student) {
+  const s = hydrate(student);
+  const bag = (b) => ({ ...b, accessToken: sealSecret(b.accessToken), refreshToken: sealSecret(b.refreshToken) });
+  return {
+    ...s,
+    canvasToken: sealSecret(s.canvasToken),
+    canvasRefreshToken: sealSecret(s.canvasRefreshToken),
+    modelKeys: sealKeys(s.modelKeys),
+    modelKey: sealSecret(s.modelKey),
+    graph: bag(s.graph),
+    outlook: bag(s.outlook),
+    teams: bag(s.teams),
+    msAuth: s.msAuth ? { ...s.msAuth, codeVerifier: sealSecret(s.msAuth.codeVerifier) } : null,
+  };
+}
+
+/** True when a raw doc still has at least one non-empty secret in plaintext. */
+function hasPlaintextSecret(raw) {
+  const src = raw && typeof raw === "object" ? raw : {};
+  const plain = (v) => Boolean(v) && !isSealed(String(v));
+  if (plain(src.canvasToken) || plain(src.canvasRefreshToken) || plain(src.modelKey)) return true;
+  if (Array.isArray(src.modelKeys) && src.modelKeys.some(plain)) return true;
+  for (const name of ["graph", "outlook", "teams"]) {
+    const bag = src[name];
+    if (bag && typeof bag === "object" && (plain(bag.accessToken) || plain(bag.refreshToken))) return true;
+  }
+  if (src.msAuth && typeof src.msAuth === "object" && plain(src.msAuth.codeVerifier)) return true;
+  return false;
 }
 
 function graphConnected(graph) {
@@ -322,7 +370,6 @@ function publicPending() {
 
 export function publicProfile(student) {
   const s = hydrate(student);
-  const cursor = usesCursorAgent(s);
   return {
     email: s.email,
     googleName: s.googleName,
@@ -337,12 +384,13 @@ export function publicProfile(student) {
     canvasHost: s.canvasHost,
     displayName: s.displayName,
     canvasConnected: Boolean(s.canvasToken),
-    cursorAgent: cursor,
-    modelKeySet: cursor || s.modelKeys.length > 0,
-    modelProvider: cursor ? "cursor" : s.modelProvider || "groq",
-    modelKeyHint: cursor ? "cursor" : modelKeyHint(s.modelKeys[0] || s.modelKey),
-    modelKeyHints: cursor ? ["cursor"] : s.modelKeys.map(modelKeyHint),
-    modelKeyCount: cursor ? Math.max(1, s.modelKeys.length) : s.modelKeys.length,
+    // Field kept for clients; the Cursor demo path is gone.
+    cursorAgent: false,
+    modelKeySet: s.modelKeys.length > 0,
+    modelProvider: s.modelProvider || "groq",
+    modelKeyHint: modelKeyHint(s.modelKeys[0] || s.modelKey),
+    modelKeyHints: s.modelKeys.map(modelKeyHint),
+    modelKeyCount: s.modelKeys.length,
     onedriveConnected: graphConnected(s.graph),
     onedriveEmail: s.graph.email || "",
     onedrivePending: publicPending(s.graph.pending),
@@ -355,8 +403,23 @@ export function publicProfile(student) {
   };
 }
 
+/** The only writer. Seals secrets on the way out. */
 async function writeStudent(fileId, data) {
-  await putDoc(STUDENTS, assertFileId(fileId), data);
+  await putDoc(STUDENTS, assertFileId(fileId), toDisk(data));
+}
+
+/**
+ * Re-save one student so plaintext secrets get sealed. Used by tools/reseal-students.mjs.
+ * Returns { needed, sealed }. With dryRun nothing is written.
+ */
+export async function resealStudentFile(fileId, { dryRun = false } = {}) {
+  const id = assertFileId(fileId);
+  const raw = await getDoc(STUDENTS, id);
+  if (!raw) return { needed: false, sealed: false };
+  const needed = hasPlaintextSecret(raw);
+  if (!needed || dryRun || !encryptionEnabled()) return { needed, sealed: false };
+  await writeStudent(id, raw);
+  return { needed: true, sealed: true };
 }
 
 /** Every student file id on disk (or in Firestore). Skips names that are not valid ids. */
@@ -406,7 +469,10 @@ export async function saveStudent(student) {
 export async function loadStudentByGoogleSub(sub) {
   try {
     return await loadStudentByFileId(googleFileId(sub));
-  } catch {
+  } catch (err) {
+    // A wrong or missing DATA_ENCRYPTION_KEY must not look like "no account": upsert
+    // would then overwrite the real doc with a blank one and drop every stored token.
+    if (err?.code === SECRET_KEY_ERROR) throw err;
     return null;
   }
 }
@@ -427,7 +493,7 @@ export async function upsertGoogleStudent({ googleSub, email, googleName, pictur
     paused: false,
     school: "",
     studentId: "",
-    canvasHost: DEFAULT_CANVAS_HOST,
+    canvasHost: defaultCanvasHost(DEFAULT_DOOR),
     canvasToken: "",
     modelKeys: [],
     modelKey: "",
@@ -462,7 +528,7 @@ export async function updateStudentProfile(student, patch) {
   if (src.studentId !== undefined) s.studentId = normalizeStudentId(src.studentId);
   if (src.canvasHost !== undefined) {
     const host = String(src.canvasHost).trim();
-    s.canvasHost = host || DEFAULT_CANVAS_HOST;
+    s.canvasHost = host || defaultCanvasHost(s.door);
   }
   if (src.canvasToken !== undefined) s.canvasToken = String(src.canvasToken);
   if (src.canvasRefreshToken !== undefined) s.canvasRefreshToken = String(src.canvasRefreshToken || "");
@@ -496,41 +562,141 @@ export async function updateStudentProfile(student, patch) {
   return saveStudent(s);
 }
 
-async function loadSessions() {
-  const raw = await getDoc(SESSIONS, SESSIONS_DOC);
+/* ---------------- sessions ---------------- */
+
+function isSessionId(sid) {
+  return SESSION_ID_RE.test(sid) && sid !== LEGACY_SESSIONS_DOC;
+}
+
+function sessionRecord(raw) {
+  if (!raw || typeof raw !== "object" || typeof raw.studentId !== "string") return null;
+  try {
+    assertFileId(raw.studentId);
+  } catch {
+    return null;
+  }
+  return {
+    studentId: raw.studentId,
+    createdAt: String(raw.createdAt || ""),
+    lastSeenAt: String(raw.lastSeenAt || raw.createdAt || ""),
+  };
+}
+
+/**
+ * One-time move from the single sessions/all doc (files: data/sessions.json) to one
+ * doc per session. Existing per-session docs win; the legacy doc is deleted afterwards.
+ * In files mode listIds("sessions") never reports "all" because the alias file sits
+ * beside the sessions/ directory, not inside it. Firestore would list it, so every
+ * session listing filters through isSessionId().
+ */
+async function migrateLegacySessions() {
+  let raw;
+  try {
+    raw = await getDoc(SESSIONS, LEGACY_SESSIONS_DOC);
+  } catch {
+    return;
+  }
   if (!raw || typeof raw !== "object") return;
-  for (const [sid, rec] of Object.entries(raw)) {
-    if (!sid || !rec || typeof rec.studentId !== "string") continue;
-    sessions.set(sid, {
-      studentId: rec.studentId,
-      createdAt: rec.createdAt || "",
-    });
+  let moved = 0;
+  try {
+    for (const [sid, entry] of Object.entries(raw)) {
+      if (!isSessionId(sid)) continue;
+      const rec = sessionRecord(entry);
+      if (!rec) continue;
+      if (await getDoc(SESSIONS, sid)) continue;
+      await putDoc(SESSIONS, sid, rec);
+      moved += 1;
+    }
+    await deleteDoc(SESSIONS, LEGACY_SESSIONS_DOC);
+    console.log(`sessions: migrated ${moved} legacy session(s) to per-session docs`);
+  } catch (err) {
+    console.error("sessions: legacy migration failed:", err?.message || err);
   }
 }
 
-async function persistSessions() {
-  const obj = {};
-  for (const [sid, rec] of sessions) obj[sid] = rec;
-  await putDoc(SESSIONS, SESSIONS_DOC, obj);
+/** Serialise doc writes so create/destroy from sync callers land in order. */
+function queueWrite(fn) {
+  const p = writeChain.then(fn).catch((err) => {
+    console.error("sessions: write failed:", err?.message || err);
+  });
+  writeChain = p;
+  return p;
 }
 
-function schedulePersist() {
-  persistChain = persistChain.then(() => persistSessions()).catch(() => {});
-}
-
+/** Sync for index.js (`const sid = createSession(...)`); the doc write is queued. */
 export function createSession(studentIdKey) {
   const studentId = assertFileId(studentIdKey);
   const sid = randomBytes(32).toString("hex");
-  sessions.set(sid, { studentId, createdAt: new Date().toISOString() });
-  schedulePersist();
+  const now = new Date().toISOString();
+  const rec = { studentId, createdAt: now, lastSeenAt: now };
+  sessions.set(sid, rec);
+  queueWrite(() => putDoc(SESSIONS, sid, rec));
   return sid;
 }
 
+/** Sync for index.js. Returns the queued delete so callers that await it can. */
 export function destroySession(sid) {
   const key = String(sid || "").trim();
-  if (!key) return;
+  if (!key || !isSessionId(key)) return Promise.resolve();
   sessions.delete(key);
-  schedulePersist();
+  return queueWrite(() => deleteDoc(SESSIONS, key));
+}
+
+/** Sign out everywhere / account deletion. Returns how many sessions were removed. */
+export async function destroySessionsForStudent(fileId) {
+  const id = assertFileId(fileId);
+  await writeChain;
+  for (const [sid, rec] of sessions) {
+    if (rec.studentId === id) sessions.delete(sid);
+  }
+  let docs;
+  try {
+    docs = await listDocs(SESSIONS);
+  } catch {
+    docs = [];
+  }
+  let removed = 0;
+  for (const { id: sid, data } of docs) {
+    if (!isSessionId(sid) || data?.studentId !== id) continue;
+    if (await deleteDoc(SESSIONS, sid)) removed += 1;
+  }
+  return removed;
+}
+
+/** Test hook: drop the in-memory cache so the next lookup hits the doc store. */
+export async function _resetSessionCache() {
+  await writeChain;
+  sessions.clear();
+}
+
+async function resolveSession(sid) {
+  const cached = sessions.get(sid);
+  if (cached) return cached;
+  await writeChain;
+  const again = sessions.get(sid);
+  if (again) return again;
+  let raw;
+  try {
+    raw = await getDoc(SESSIONS, sid);
+  } catch {
+    return null;
+  }
+  const rec = sessionRecord(raw);
+  if (!rec) return null;
+  sessions.set(sid, rec);
+  return rec;
+}
+
+function touchSession(sid, rec) {
+  const last = Date.parse(rec.lastSeenAt || "") || 0;
+  const now = Date.now();
+  if (now - last < LAST_SEEN_WRITE_MS) return;
+  rec.lastSeenAt = new Date(now).toISOString();
+  const snapshot = { ...rec };
+  queueWrite(async () => {
+    if (!sessions.has(sid)) return;
+    await putDoc(SESSIONS, sid, snapshot);
+  });
 }
 
 function cookieMap(req) {
@@ -565,10 +731,24 @@ export function sessionIdFromRequest(req) {
 export async function studentFromRequest(req) {
   await sessionsReady;
   const sid = sessionIdFromRequest(req);
-  if (!sid) return null;
-  const rec = sessions.get(sid);
+  if (!sid || !isSessionId(sid)) return null;
+  const rec = await resolveSession(sid);
   if (!rec?.studentId) return null;
-  return loadStudentByFileId(rec.studentId);
+  const student = await loadStudentByFileId(rec.studentId);
+  if (!student) return null;
+  touchSession(sid, rec);
+  return student;
+}
+
+/**
+ * Remove the student doc and every session that points at it. Notes, chats, workspace,
+ * vault, schedules, and research belong to their own modules; index.js deletes those first.
+ */
+export async function deleteStudentAccount(fileId) {
+  const id = assertFileId(fileId);
+  const count = await destroySessionsForStudent(id);
+  await deleteDoc(STUDENTS, id);
+  return { ok: true, sessions: count };
 }
 
 function isHttps(req) {

@@ -3,14 +3,14 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.jype.server</string>
+  <string>com.epsynapse.server</string>
   <key>WorkingDirectory</key>
-  <string>/Users/yanlevin/github/JYPE/server</string>
+  <string>/Users/yanlevin/github/EPSynapse/server</string>
   <key>ProgramArguments</key>
   <array>
     <string>/opt/homebrew/bin/node</string>
     <string>--env-file=.env</string>
-    <string>/Users/yanlevin/github/JYPE/server/index.js</string>
+    <string>/Users/yanlevin/github/EPSynapse/server/index.js</string>
   </array>
   <key>EnvironmentVariables</key>
   <dict>
@@ -22,8 +22,8 @@
   <key>KeepAlive</key>
   <true/>
   <key>StandardOutPath</key>
-  <string>/tmp/jype-server.log</string>
+  <string>/tmp/epsynapse-server.log</string>
   <key>StandardErrorPath</key>
-  <string>/tmp/jype-server.log</string>
+  <string>/tmp/epsynapse-server.log</string>
 </dict>
 </plist>

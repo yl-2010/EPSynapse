@@ -1,15 +1,14 @@
 {
-  "name": "jype-server",
+  "name": "epsynapse-server",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "JYPE / EPSynapse Mac Express API (Cloudflare Tunnel)",
+  "description": "EPSynapse API (Express)",
   "scripts": {
     "start": "node --env-file=.env index.js",
     "dev": "node --env-file=.env --watch index.js"
   },
   "dependencies": {
-    "@cursor/sdk": "^1.0.31",
     "@google-cloud/firestore": "^7.11.0",
     "@google-cloud/secret-manager": "^5.6.0",
     "@google-cloud/storage": "^7.15.0",

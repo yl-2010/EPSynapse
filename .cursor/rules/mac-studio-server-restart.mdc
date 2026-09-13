@@ -19,14 +19,14 @@ Skip restart on MacBook, Cursor Cloud, or any other host.
 
 ## Applicable changes
 
-Restart when edits affect the running Node process, e.g. `server/**`, `server/package.json`, or `deploy/launchagents/com.jype.server.plist` / root `npm run server` plumbing.
+Restart when edits affect the running Node process, e.g. `server/**`, `server/package.json`, or `deploy/launchagents/com.epsynapse.server.plist` / root `npm run server` plumbing.
 
 Skip for static HTML/CSS/JS, iOS, Vercel-only, or docs-only.
 
 ## Restart command
 
 ```bash
-launchctl kickstart -k "gui/$(id -u)/com.jype.server"
+launchctl kickstart -k "gui/$(id -u)/com.epsynapse.server"
 curl -sS -f http://127.0.0.1:3006/health
 ```
 

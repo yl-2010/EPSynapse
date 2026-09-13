@@ -705,6 +705,50 @@ export async function deleteTodoFile(ownerId, todoId, name) {
   return { ok: true, id: todoFileId(originalTodoId(publicId, meta._todoId) || publicId, safe) };
 }
 
+/**
+ * Account deletion: todos, the workspace meta doc, every class file and todo file
+ * blob, and their _meta sidecars. Idempotent. Sidecar keys come from the blob
+ * keys plus listIds, so both the files and the Firestore/GCS layouts are covered.
+ */
+export async function deleteOwnerData(ownerId) {
+  const owner = ownerCollection(ownerId);
+  const out = { todos: 0, files: 0, meta: false };
+
+  const todosCol = todosCollection(ownerId);
+  for (const id of await listIds(todosCol)) {
+    if (await deleteDoc(todosCol, id).catch(() => false)) out.todos += 1;
+  }
+
+  const filesBase = `${owner}/files/`;
+  const todosBase = `${filesBase}todos/`;
+  const classKeys = new Set();
+  const todoKeys = new Set();
+  for (const blob of await listBlobs(filesBase)) {
+    const rest = blob.key.slice(filesBase.length);
+    if (rest.startsWith("todos/")) {
+      const key = rest.slice("todos/".length).split("/")[0];
+      if (key) todoKeys.add(key);
+    } else {
+      const key = rest.split("/")[0];
+      if (key) classKeys.add(key);
+    }
+    if (await deleteBlob(blob.key).catch(() => false)) out.files += 1;
+  }
+  for (const key of await listIds(`${owner}/files`).catch(() => [])) {
+    if (key !== "todos") classKeys.add(key);
+  }
+  for (const key of await listIds(`${owner}/files/todos`).catch(() => [])) todoKeys.add(key);
+  for (const key of classKeys) {
+    await deleteDoc(`${owner}/files/${key}`, META_DOC).catch(() => false);
+  }
+  for (const key of todoKeys) {
+    await deleteDoc(`${todosBase.slice(0, -1)}/${key}`, META_DOC).catch(() => false);
+  }
+
+  out.meta = await deleteDoc(owner, "meta").catch(() => false);
+  return out;
+}
+
 export async function workspaceSnapshotBits(ownerId) {
   if (!ownerId) return [];
   const bits = [];

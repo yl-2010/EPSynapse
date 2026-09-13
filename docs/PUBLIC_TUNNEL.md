@@ -5,7 +5,7 @@ A dedicated Cloudflare Tunnel exposes only the Mac Express API.
 ```
 Browser
   → https://api.epsynapse.com
-       → Cloudflare Tunnel (cloudflared, config-jype.yml)
+       → Cloudflare Tunnel (cloudflared, config-epsynapse.yml)
             → Express :3006
 ```
 
@@ -19,7 +19,7 @@ Browser
 | Zone id | `262bd841c3001e4a0519c6bda3f12f5f` |
 | Nameservers | `hayes.ns.cloudflare.com`, `mallory.ns.cloudflare.com` |
 | Tunnel | `jype-api` → `484f13c6-2593-4b02-ae61-0dc724bab9a1` |
-| Config | `~/.cloudflared/config-jype.yml` |
+| Config | `~/.cloudflared/config-epsynapse.yml` |
 | DNS | Proxied CNAME `api` → `<tunnel-uuid>.cfargotunnel.com` |
 | Apex / www | Proxied A records to Vercel so the static site stays on Vercel |
 
@@ -29,7 +29,7 @@ Other apps on this Mac keep their own tunnels. Four `cloudflared` processes. Do 
 
 ## Runtime
 
-LaunchAgents `com.jype.server` + `com.jype.cloudflared` start at login. Reboot needs no extra commands. First-time install: `bash deploy/launchagents/install.sh`.
+LaunchAgents `com.epsynapse.server` + `com.epsynapse.cloudflared` start at login. Reboot needs no extra commands. First-time install: `bash deploy/launchagents/install.sh`.
 
 ## Verify
 

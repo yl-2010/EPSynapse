@@ -64,18 +64,6 @@ import {
   listChats as listGraphTeamChats,
   sendChatMessage as sendGraphTeamMessage,
 } from "./teams.js";
-import {
-  isStudioDemoStudent,
-  listStudioChatMessages,
-  listStudioChats,
-  listStudioFiles,
-  readStudioFile,
-  sendStudioChat,
-  studioFlags,
-  studioOnenoteToken,
-  studioOutlookToken,
-  writeStudioFile,
-} from "./studio-ms.js";
 import { mergeGraph, mergeOutlook, mergeTeams, saveStudent } from "./students.js";
 
 const MAX_RESULT = 6000;
@@ -671,10 +659,6 @@ async function graphAccess(student) {
 }
 
 async function onenoteAccess(student) {
-  if (studioFlags(student).onenote) {
-    const tok = await studioOnenoteToken();
-    if (tok) return tok;
-  }
   // The last Graph probe said this sign-in cannot read OneNote. Do not pretend.
   if (student?.msServices?.notes === false) return "";
   return graphAccess(student);
@@ -696,7 +680,6 @@ async function mailAccess(student) {
     }
     return fresh.accessToken;
   }
-  if (isStudioDemoStudent(student)) return studioOutlookToken();
   return "";
 }
 
@@ -882,28 +865,13 @@ export async function executeAgentTool(call, { ownerId, student, req } = {}) {
       case "list_onedrive_files": {
         const q = String(input.q || "").trim();
         const token = await graphAccess(student);
-        let files = [];
-        if (token) {
-          files = q ? await searchFiles(token, q) : await listDashboardFiles(token, {});
-        }
-        if (studioFlags(student).onedrive) {
-          files = [...files, ...(await listStudioFiles({ q, limit: 40 }))];
-        }
-        if (!files.length && !token && !studioFlags(student).onedrive) {
-          return fail("Connect OneDrive in settings first.");
-        }
-        return ok({ files: files.slice(0, 40) });
+        if (!token) return fail("Connect OneDrive in settings first.");
+        const files = q ? await searchFiles(token, q) : await listDashboardFiles(token, {});
+        return ok({ files: (files || []).slice(0, 40) });
       }
       case "read_onedrive_file": {
         const id = String(input.id || "").trim();
         if (!id) return fail("File id required.");
-        if (id.startsWith("studio:") || (!student?.graph?.accessToken && studioFlags(student).onedrive)) {
-          const file = await readStudioFile(id);
-          const text = isProbablyText(file.contentType, file.name)
-            ? file.buffer.toString("utf8").slice(0, MAX_RESULT)
-            : `[binary ${file.buffer.length} bytes]`;
-          return ok({ name: file.name, contentType: file.contentType, content: text, path: file.path });
-        }
         const token = await graphAccess(student);
         if (!token) return fail("Connect OneDrive in settings first.");
         const file = await downloadFile(token, id);
@@ -974,16 +942,10 @@ export async function executeAgentTool(call, { ownerId, student, req } = {}) {
         const name = String(input.name || "").trim();
         const content = String(input.content ?? "");
         const contentType = String(input.contentType || "text/plain");
-        const out = {};
-        if (studioFlags(student).onedrive) {
-          out.studio = await writeStudioFile({ name, content, contentType });
-        }
         const token = await graphAccess(student);
-        if (token) {
-          out.onedrive = await uploadFile(token, { name, content, contentType });
-        }
-        if (!out.studio && !out.onedrive) return fail("Connect OneDrive in settings first.");
-        return ok(out, { kinds: ["files"] });
+        if (!token) return fail("Connect OneDrive in settings first.");
+        const onedrive = await uploadFile(token, { name, content, contentType });
+        return ok({ onedrive }, { kinds: ["files"] });
       }
       case "list_outlook_mail": {
         const token = await mailAccess(student);
@@ -1015,9 +977,6 @@ export async function executeAgentTool(call, { ownerId, student, req } = {}) {
       case "list_teams_chats": {
         const token = await teamsGraphAccess(student);
         if (token) return ok({ chats: await listGraphTeamChats(token, { limit: Number(input.limit) || 20 }) });
-        if (studioFlags(student).teams) {
-          return ok({ chats: await listStudioChats({ limit: Number(input.limit) || 20 }) });
-        }
         return fail("Connect Teams in settings first.");
       }
       case "read_teams_thread": {
@@ -1028,18 +987,12 @@ export async function executeAgentTool(call, { ownerId, student, req } = {}) {
             messages: await listGraphTeamMessages(token, chat, { limit: Number(input.limit) || 20 }),
           });
         }
-        if (studioFlags(student).teams) {
-          return ok({ messages: await listStudioChatMessages(chat, { limit: Number(input.limit) || 20 }) });
-        }
         return fail("Connect Teams in settings first.");
       }
       case "send_teams_message": {
         const token = await teamsGraphAccess(student);
         if (token) {
           return ok(await sendGraphTeamMessage(token, { chat: input.chat, text: input.text }));
-        }
-        if (studioFlags(student).teams) {
-          return ok(await sendStudioChat({ chat: input.chat, text: input.text }));
         }
         return fail("Connect Teams in settings first.");
       }

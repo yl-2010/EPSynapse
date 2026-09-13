@@ -1,4 +1,4 @@
-# Cloudflare Tunnel (JYPE / EPSynapse)
+# Cloudflare Tunnel (EPSynapse)
 
 `epsynapse.com` is registered on the **JYPE** Vercel team. Nameservers are Cloudflare (`hayes` / `mallory`). The site still lives on Vercel.
 
@@ -10,7 +10,7 @@ Do **not** put LM Studio (`:1234`) on this tunnel.
 |-------|--------|
 | Tunnel name | `jype-api` |
 | Tunnel UUID | `484f13c6-2593-4b02-ae61-0dc724bab9a1` |
-| Local config | `~/.cloudflared/config-jype.yml` |
+| Local config | `~/.cloudflared/config-epsynapse.yml` |
 | Credentials | `~/.cloudflared/484f13c6-2593-4b02-ae61-0dc724bab9a1.json` |
 | Cloudflare account | JYPE (`7147db2985dd609d51db0d7d2eb66378`) |
 | Hostname | `api.epsynapse.com` → `http://127.0.0.1:3006` |
@@ -28,7 +28,7 @@ bash deploy/cloudflared/setup-path-a.sh
 
 ## Login / LaunchAgents
 
-`com.jype.server` + `com.jype.cloudflared` start at login. A reboot needs no extra commands.
+`com.epsynapse.server` + `com.epsynapse.cloudflared` start at login. A reboot needs no extra commands.
 
 First time on a Mac:
 
@@ -43,4 +43,4 @@ curl -sS http://127.0.0.1:3006/health
 curl -sS https://api.epsynapse.com/health
 ```
 
-Expect: `{"ok":true,"service":"jype-server",...}`
+Expect: `{"ok":true,"service":"epsynapse-server",...}`

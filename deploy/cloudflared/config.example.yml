@@ -1,11 +1,11 @@
-# JYPE / EPSynapse: Cloudflare Tunnel → local API (port 3006)
+# EPSynapse: Cloudflare Tunnel → local API (port 3006)
 #
-# 1. Copy to ~/.cloudflared/config-jype.yml
+# 1. Copy to ~/.cloudflared/config-epsynapse.yml
 # 2. Use tunnel UUID + credentials from the JYPE Cloudflare account
 #    (TUNNEL_ORIGIN_CERT=~/.cloudflared/cert.pem.jype.bak once that login exists)
 # 3. DNS: proxied CNAME api → TUNNEL_UUID.cfargotunnel.com
 #    (Vercel DNS until nameservers move to Cloudflare; then the same CNAME on the CF zone)
-# 4. Run: cloudflared tunnel --config ~/.cloudflared/config-jype.yml run
+# 4. Run: cloudflared tunnel --config ~/.cloudflared/config-epsynapse.yml run
 #
 # Full steps: README.md in this folder.
 

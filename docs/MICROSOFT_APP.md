@@ -40,7 +40,7 @@ SCHOOL_IT_EMAIL=<address the "Send request to school IT" button emails>
 Every value except `MICROSOFT_CLIENT_ID` and `SCHOOL_IT_EMAIL` has the default shown, so you can leave those lines out. Leave `MICROSOFT_CLIENT_ID` unset and Microsoft sign-in stays off. Then restart and check health:
 
 ```bash
-launchctl kickstart -k "gui/$(id -u)/com.jype.server"
+launchctl kickstart -k "gui/$(id -u)/com.epsynapse.server"
 curl -sS -f http://127.0.0.1:3006/health
 ```
 

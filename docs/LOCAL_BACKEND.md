@@ -6,7 +6,7 @@ Express API in [`server/`](../server/). Port **3006**. Public hostname `api.epsy
 
 | Method | Path | Auth | Notes |
 |--------|------|------|-------|
-| `GET` | `/health` | none | `{ ok, service: "jype-server", time }` |
+| `GET` | `/health` | none | `{ ok, service: "epsynapse-server", time }` |
 
 ## Env
 
@@ -15,7 +15,7 @@ Copy [`server/.env.example`](../server/.env.example) → `server/.env`. Default 
 ## Run
 
 ```bash
-cd /Users/yanlevin/github/JYPE
+cd /Users/yanlevin/github/EPSynapse
 npm install --prefix server
 npm run server
 ```

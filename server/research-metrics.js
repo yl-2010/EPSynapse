@@ -7,7 +7,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { listResearchEvents } from "./notes.js";
-import { getDoc } from "./store.js";
+import { deleteDoc, getDoc, listIds } from "./store.js";
 import { FIXED_SUBJECTS, isFixedSubject, normalizeSubjectLabel, taxonomyFromLabel } from "./subjects.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -266,6 +266,24 @@ export async function buildResearchMetrics({
     frozen_test_n: useFrozen ? frozenN : 0,
     source: sources.join("+"),
   });
+}
+
+const RESEARCH_COLLECTION = "research";
+
+/**
+ * Account deletion: the per-owner research events (collection research/<ownerId>).
+ * notes.js removes these too; this pass catches events left behind by an older
+ * note delete. Idempotent. The frozen eval in meta/research-metrics is not per owner.
+ */
+export async function deleteOwnerData(ownerId) {
+  const id = String(ownerId || "").trim();
+  if (!id || id === "." || id === ".." || /[\\/\0]/.test(id)) return { events: 0 };
+  const collection = `${RESEARCH_COLLECTION}/${id}`;
+  let events = 0;
+  for (const eventId of await listIds(collection)) {
+    if (await deleteDoc(collection, eventId).catch(() => false)) events += 1;
+  }
+  return { events };
 }
 
 export function mountResearch(app, { fail }) {

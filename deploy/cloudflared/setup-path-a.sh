@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Writes ~/.cloudflared/config-jype.yml for the existing jype-api tunnel.
+# Writes ~/.cloudflared/config-epsynapse.yml for the existing jype-api tunnel.
 # Prerequisites: brew install cloudflare/cloudflare/cloudflared
 
 set -euo pipefail
@@ -9,7 +9,7 @@ API_HOSTNAME="${API_HOSTNAME:-api.epsynapse.com}"
 LOCAL_SERVICE="${LOCAL_SERVICE:-http://127.0.0.1:3006}"
 CF_DIR="${HOME}/.cloudflared"
 export TUNNEL_ORIGIN_CERT="${TUNNEL_ORIGIN_CERT:-${CF_DIR}/cert.pem.notelms.bak}"
-CONFIG_OUT="${CONFIG_OUT:-${CF_DIR}/config-jype.yml}"
+CONFIG_OUT="${CONFIG_OUT:-${CF_DIR}/config-epsynapse.yml}"
 
 die() { echo "error: $*" >&2; exit 1; }
 
@@ -40,7 +40,7 @@ CREDS="${CF_DIR}/${TUNNEL_ID}.json"
 [[ -f "${CREDS}" ]] || die "Missing credentials file: ${CREDS}"
 
 cat > "${CONFIG_OUT}" <<EOF
-# JYPE / EPSynapse: dedicated tunnel
+# EPSynapse: dedicated tunnel
 # Tunnel: ${TUNNEL_NAME} (${TUNNEL_ID}) → ${LOCAL_SERVICE}
 
 tunnel: ${TUNNEL_ID}

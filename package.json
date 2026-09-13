@@ -1,8 +1,8 @@
 {
-  "name": "jype",
+  "name": "epsynapse",
   "private": true,
   "version": "0.1.0",
-  "description": "JYPE / EPSynapse — Frontier Cascadia 2026",
+  "description": "EPSynapse",
   "scripts": {
     "server": "npm run start --prefix server",
     "server:dev": "npm run dev --prefix server",
@@ -10,7 +10,7 @@
     "deploy:web": "bash scripts/deploy-web.sh",
     "bert:train": ".venv/bin/python scripts/train_bert.py",
     "bert:eval": ".venv/bin/python scripts/eval_bert.py",
-    "bert:serve": "bash scripts/start-jype-bert.sh"
+    "bert:serve": "bash scripts/start-epsynapse-bert.sh"
   },
   "engines": {
     "node": ">=20"

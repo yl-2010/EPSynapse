@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.jype.cloudflared</string>
+  <string>com.epsynapse.cloudflared</string>
   <key>ProgramArguments</key>
   <array>
     <string>/opt/homebrew/bin/cloudflared</string>
     <string>tunnel</string>
     <string>--config</string>
-    <string>/Users/yanlevin/.cloudflared/config-jype.yml</string>
+    <string>/Users/yanlevin/.cloudflared/config-epsynapse.yml</string>
     <string>run</string>
   </array>
   <key>RunAtLoad</key>
@@ -17,8 +17,8 @@
   <key>KeepAlive</key>
   <true/>
   <key>StandardOutPath</key>
-  <string>/tmp/cloudflared-jype.log</string>
+  <string>/tmp/cloudflared-epsynapse.log</string>
   <key>StandardErrorPath</key>
-  <string>/tmp/cloudflared-jype.log</string>
+  <string>/tmp/cloudflared-epsynapse.log</string>
 </dict>
 </plist>

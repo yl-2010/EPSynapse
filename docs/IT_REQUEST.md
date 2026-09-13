@@ -25,7 +25,7 @@ Delegated Microsoft Graph permissions, signed-in user only: User.Read, Files.Rea
 
 2. four11 API key
 
-epschedule reads `four11.eastsideprep.org/epschedule/people` and `/epsnet/courses/{id}` with an API key IT issued. We would like the same kind of key so a student who signs in with Microsoft gets their exact schedule with no PDF upload. We match on the school email, read only that student's own courses, and cache nothing beyond the current term.
+epschedule reads `four11.eastsideprep.org/epschedule/people` and `/epsnet/courses/{id}` with an API key IT issued. We would like the same kind of key so a student who signs in with Microsoft gets their exact schedule with no PDF upload. We match on the school email, read only that student's own courses, and refresh once a night at 00:15 the same way epschedule does. Nothing is cached beyond the current term.
 
 3. Canvas Developer Key
 

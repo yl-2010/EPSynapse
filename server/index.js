@@ -1,5 +1,5 @@
 /**
- * JYPE / EPSynapse Mac Express API.
+ * EPSynapse API.
  * Cloudflare Tunnel to this process. Port 3006. Leave 3000 / 3002 / 3004 alone.
  *
  * Port 3006 — public hostname api.epsynapse.com (own tunnel).
@@ -30,8 +30,6 @@ import {
   upstreamHeaders,
 } from "./agent.js";
 import { AGENT_TOOLS, executeAgentTool, navigateHref, normalizeNavigate } from "./agent-tools.js";
-import { runCursorAgentChat } from "./cursor-agent.js";
-import { usesCursorAgent } from "./cursor-demo.js";
 import {
   applyScheduleToGrades,
   dashboardPayload,
@@ -93,23 +91,11 @@ import {
   listChatMessages as listTeamsMessages,
   sendChatMessage as sendTeamsGraph,
 } from "./teams.js";
-import {
-  isStudioDemoStudent,
-  listStudioChatMessages,
-  listStudioChats,
-  listStudioFiles,
-  readStudioFile,
-  sendStudioChat,
-  studioFlags,
-  studioOnenoteToken,
-  studioOutlookToken,
-  writeStudioFile,
-} from "./studio-ms.js";
-import { listVault, readVault, saveVault } from "./vault.js";
-import { getSchool, listSchools, publicSchool, setRoster } from "./schools.js";
+import { deleteOwnerData as deleteVaultData, listVault, readVault, saveVault } from "./vault.js";
 import {
   clearSessionCookie,
   createSession,
+  deleteStudentAccount,
   destroySession,
   findStudentByMsAuthState,
   forEachStudentFile,
@@ -133,6 +119,7 @@ import {
 } from "./students.js";
 import {
   chatHistoryIsUnread,
+  deleteOwnerData as deleteChatData,
   listChats,
   loadChat,
   markChatRead,
@@ -142,12 +129,13 @@ import {
 import multer from "multer";
 import { bertEnabled, probeBertService } from "./bert.js";
 import { canvasOAuthPublic, ensureFreshCanvasToken, mountCanvasOAuth } from "./canvas-oauth.js";
-import { four11Configured, mountFour11 } from "./four11.js";
-import { listNotes, mountNotes } from "./notes.js";
-import { mountResearch } from "./research-metrics.js";
-import { loadSchedule, mountSchedule } from "./schedule.js";
+import { four11Configured, mountFour11, syncAllEpsStudents } from "./four11.js";
+import { deleteOwnerData as deleteNotesData, listNotes, mountNotes } from "./notes.js";
+import { deleteOwnerData as deleteResearchData, mountResearch } from "./research-metrics.js";
+import { deleteOwnerData as deleteScheduleData, loadSchedule, mountSchedule } from "./schedule.js";
 import {
   applyClassAliases,
+  deleteOwnerData as deleteWorkspaceData,
   hideCanvasTodo,
   isLocalTodoId,
   listAllClassFiles,
@@ -200,7 +188,7 @@ app.use(express.json({ limit: "8mb" }));
  * /v1/me, which reports paused: true, and log out. Every other student route,
  * and the agent answer 423 so no tool or sync runs for them.
  */
-const PAUSE_OPEN_PATHS = new Set(["/v1/me", "/v1/me/logout"]);
+const PAUSE_OPEN_PATHS = new Set(["/v1/me", "/v1/me/logout", "/v1/me/delete"]);
 const PAUSE_GATED_PREFIXES = ["/v1/me/", "/v1/agent/"];
 
 function pauseGated(path) {
@@ -258,6 +246,36 @@ async function requireStudent(req, res) {
   }
   // No-op unless the student connected Canvas through OAuth and the hour is nearly up.
   return ensureFreshCanvasToken(student);
+}
+
+const CANVAS_HOST_REQUIRED =
+  "Enter your school's Canvas URL first (for example https://yourschool.instructure.com).";
+const HOSTNAME_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i;
+
+/**
+ * Canvas host from user input or the stored profile. "" when nothing was given
+ * (the other door starts with no host). Accepts "school.instructure.com" or
+ * "https://school.instructure.com/anything"; throws 400 on anything that is not a hostname.
+ */
+function canvasHostFor(raw) {
+  const s = String(raw || "").trim();
+  if (!s) return "";
+  let host;
+  try {
+    host = normalizeHost(s);
+  } catch (err) {
+    throw Object.assign(new Error(err?.message || "Canvas URL must be a valid https host."), { status: 400 });
+  }
+  const name = new URL(host).hostname;
+  if (!HOSTNAME_RE.test(name)) {
+    throw Object.assign(new Error("Canvas URL must be a hostname like yourschool.instructure.com."), { status: 400 });
+  }
+  return host;
+}
+
+/** A Canvas token with no host cannot be used. Treat that as not connected. */
+function canvasReady(student) {
+  return Boolean(student?.canvasToken && String(student?.canvasHost || "").trim());
 }
 
 const MS_REDIRECT_URI =
@@ -351,28 +369,24 @@ function onedriveReallyConnected(student, ms) {
 }
 
 function publicMe(student) {
-  const flags = studioFlags(student);
   const base = publicProfile(student);
   const ms = msServicesOf(student);
   const graphTok = hasLiveToken(student?.graph);
   const denied = {
-    onedrive: flags.onedrive ? "" : msDeniedReason(ms, "files", graphTok),
-    onenote: flags.onenote ? "" : msDeniedReason(ms, "notes", graphTok),
-    outlook: flags.outlook ? "" : msDeniedReason(ms, "mail", hasLiveToken(student?.outlook)),
-    teams: flags.teams ? "" : msDeniedReason(ms, "chats", hasLiveToken(student?.teams)),
+    onedrive: msDeniedReason(ms, "files", graphTok),
+    onenote: msDeniedReason(ms, "notes", graphTok),
+    outlook: msDeniedReason(ms, "mail", hasLiveToken(student?.outlook)),
+    teams: msDeniedReason(ms, "chats", hasLiveToken(student?.teams)),
   };
   const needsApproval = msNeedsAdminApproval(ms);
   return {
     ...base,
-    onedriveConnected: Boolean(onedriveReallyConnected(student, ms) || flags.onedrive),
-    onenoteConnected: Boolean(onenoteGraphConnected(student, ms) || flags.onenote),
+    canvasConnected: canvasReady(student),
+    onedriveConnected: onedriveReallyConnected(student, ms),
+    onenoteConnected: onenoteGraphConnected(student, ms),
     onenoteEmail: base.onedriveEmail || "",
-    outlookConnected: Boolean(outlookReallyConnected(student, ms) || flags.outlook),
-    teamsConnected: Boolean(teamsReallyConnected(student, ms) || flags.teams),
-    studioOnedrive: flags.onedrive,
-    studioOnenote: flags.onenote,
-    studioOutlook: flags.outlook,
-    studioTeams: flags.teams,
+    outlookConnected: outlookReallyConnected(student, ms),
+    teamsConnected: teamsReallyConnected(student, ms),
     msClientMode: msClientMode(),
     msConfigured: msConfigured(),
     msSignedInEmail: msSignedInEmail(student),
@@ -726,7 +740,6 @@ async function teamsToken(student) {
 
 async function outlookAccessToken(student) {
   if (student.outlook?.accessToken) return outlookToken(student);
-  if (isStudioDemoStudent(student)) return studioOutlookToken();
   return "";
 }
 
@@ -735,7 +748,7 @@ async function liveSnapshot(student) {
   if (student.displayName) bits.push(`Student: ${student.displayName}`);
   if (student.school) bits.push(`School: ${student.school}`);
 
-  if (student.canvasToken) {
+  if (canvasReady(student)) {
     try {
       const dash = await dashboardPayload(student.canvasHost, student.canvasToken);
       const ownerId = ownerIdForStudent(student);
@@ -778,7 +791,6 @@ async function liveSnapshot(student) {
     }
   }
 
-  const flags = studioFlags(student);
   if (student.graph?.accessToken) {
     try {
       const token = await graphToken(student);
@@ -787,14 +799,6 @@ async function liveSnapshot(student) {
       bits.push(`OneDrive recent: ${names.join("; ") || "empty"}`);
     } catch (err) {
       bits.push(`OneDrive: ${shortMsError(err) || "could not list files this turn."}`);
-    }
-  } else if (flags.onedrive) {
-    try {
-      const files = await listStudioFiles({ limit: 12 });
-      const names = (files || []).map((f) => f.name).filter(Boolean);
-      bits.push(`OneDrive on this Mac: ${names.join("; ") || "empty"}`);
-    } catch (err) {
-      bits.push(`OneDrive: ${shortMsError(err) || "could not list Finder files this turn."}`);
     }
   } else {
     bits.push("OneDrive: not connected.");
@@ -851,15 +855,6 @@ async function liveSnapshot(student) {
     } catch (err) {
       bits.push(`Teams: ${shortMsError(err) || "could not list chats this turn."}`);
     }
-  } else if (flags.teams) {
-    try {
-      const chats = await listStudioChats({ limit: 8 });
-      bits.push(
-        `Teams chats: ${(chats || []).map((c) => c.name).filter(Boolean).join("; ") || "empty"}`
-      );
-    } catch (err) {
-      bits.push(`Teams: ${shortMsError(err) || "could not list chats this turn."}`);
-    }
   } else {
     bits.push("Teams: not connected.");
   }
@@ -897,7 +892,7 @@ app.get("/health", async (_req, res) => {
   const bert = await probeBertService();
   res.json({
     ok: true,
-    service: "jype-server",
+    service: "epsynapse-server",
     time: new Date().toISOString(),
     bert: {
       enabled: bertEnabled(),
@@ -929,45 +924,6 @@ app.post("/v1/auth/google", async (req, res) => {
   }
 });
 
-app.get("/v1/schools", async (req, res) => {
-  try {
-    const schools = await listSchools(req.query.q);
-    return res.json({ schools });
-  } catch (err) {
-    return fail(res, err);
-  }
-});
-
-app.get("/v1/schools/:slug", async (req, res) => {
-  try {
-    const school = await getSchool(req.params.slug);
-    if (!school) return res.status(404).json({ error: "School not found." });
-    return res.json(publicSchool(school));
-  } catch (err) {
-    return fail(res, err, 404);
-  }
-});
-
-app.post("/v1/admin/schools/:slug/roster", async (req, res) => {
-  const key = String(process.env.ADMIN_KEY || "").trim();
-  if (!key) {
-    return res.status(503).json({ error: "Admin key is not configured." });
-  }
-  const header = String(req.get("authorization") || "");
-  const token = header.toLowerCase().startsWith("bearer ")
-    ? header.slice(7).trim()
-    : "";
-  if (!token || token !== key) {
-    return res.status(401).json({ error: "Bad admin key." });
-  }
-  try {
-    const school = await setRoster(req.params.slug, req.body?.students);
-    return res.json(publicSchool(school));
-  } catch (err) {
-    return fail(res, err, err.status || 400);
-  }
-});
-
 app.get("/v1/me", async (req, res) => {
   try {
     const student = await studentFromRequest(req);
@@ -990,11 +946,17 @@ app.post("/v1/me", async (req, res) => {
     // School and student id are no longer settings. The EPS door identifies the
     // student from the school Microsoft sign-in; the other door has neither.
     const patch = {};
-    if (req.body?.canvasHost) patch.canvasHost = normalizeHost(req.body.canvasHost);
+    if (req.body?.canvasHost !== undefined) {
+      const host = canvasHostFor(req.body.canvasHost);
+      if (!host) return res.status(400).json({ error: CANVAS_HOST_REQUIRED });
+      patch.canvasHost = host;
+    }
 
     const pasted = String(req.body?.canvasToken || "").trim();
     if (pasted) {
-      const self = await validateToken(patch.canvasHost || student.canvasHost, pasted);
+      const host = patch.canvasHost || canvasHostFor(student.canvasHost);
+      if (!host) return res.status(400).json({ error: CANVAS_HOST_REQUIRED });
+      const self = await validateToken(host, pasted);
       patch.canvasToken = pasted;
       patch.canvasRefreshToken = "";
       patch.canvasTokenExp = 0;
@@ -1063,11 +1025,78 @@ app.post("/v1/me/logout", async (req, res) => {
   return res.json({ ok: true });
 });
 
+/** Best effort. Canvas: DELETE {host}/login/oauth2/token with the access token. */
+async function revokeCanvasOauthToken(student) {
+  const token = String(student?.canvasToken || "").trim();
+  const host = canvasHostFor(student?.canvasHost);
+  if (!token || !host) return;
+  try {
+    await fetch(`${host}/login/oauth2/token`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch (err) {
+    console.warn("[account-delete] canvas revoke", shortMsError(err));
+  }
+}
+
+/**
+ * Delete the signed-in student and everything stored for them. Works for paused
+ * accounts too (see PAUSE_OPEN_PATHS). Each helper is idempotent, so a retry after
+ * a partial failure finishes the job.
+ */
+app.post("/v1/me/delete", async (req, res) => {
+  try {
+    const student = await requireStudent(req, res);
+    if (!student) return;
+    if (req.body?.confirm !== true) {
+      return res.status(400).json({ error: "Send { confirm: true } to delete this account." });
+    }
+    const fileId = googleFileId(student.googleSub);
+    const ownerId = ownerIdForStudent(student);
+
+    if (student.canvasAuthMode === "oauth") await revokeCanvasOauthToken(student);
+
+    const steps = [
+      ["notes", () => deleteNotesData(ownerId)],
+      ["chats", () => deleteChatData(ownerId)],
+      ["workspace", () => deleteWorkspaceData(ownerId)],
+      ["vault", () => deleteVaultData(fileId)],
+      ["schedule", () => deleteScheduleData(ownerId)],
+      ["research", () => deleteResearchData(ownerId)],
+    ];
+    const failed = [];
+    for (const [name, run] of steps) {
+      try {
+        await run();
+      } catch (err) {
+        failed.push(name);
+        console.warn(`[account-delete] ${name} failed for ${fileId}: ${shortMsError(err)}`);
+      }
+    }
+    if (failed.length) {
+      return res.status(500).json({
+        error: `Could not delete ${failed.join(", ")}. Try again.`,
+        failed,
+      });
+    }
+
+    const result = await deleteStudentAccount(fileId);
+    clearSessionCookie(req, res);
+    console.log(`[account-delete] removed ${fileId} sessions=${result?.sessions ?? 0}`);
+    return res.json({ ok: true });
+  } catch (err) {
+    return fail(res, err);
+  }
+});
+
 app.post("/v1/me/canvas", async (req, res) => {
   try {
     const student = await requireStudent(req, res);
     if (!student) return;
-    const host = normalizeHost(req.body?.canvasHost || student.canvasHost);
+    const host = canvasHostFor(req.body?.canvasHost || student.canvasHost);
+    if (!host) return res.status(400).json({ error: CANVAS_HOST_REQUIRED });
     const token = String(req.body?.canvasToken || "").trim();
     if (!token) {
       return res.status(400).json({ error: "Paste a Canvas access token." });
@@ -1091,7 +1120,7 @@ app.get("/v1/me/canvas/courses", async (req, res) => {
   try {
     const student = await requireStudent(req, res);
     if (!student) return;
-    if (!student.canvasToken) {
+    if (!canvasReady(student)) {
       return res.status(400).json({ error: "Connect Canvas in settings first." });
     }
     const courses = await listCourses(student.canvasHost, student.canvasToken);
@@ -1109,7 +1138,7 @@ app.get("/v1/me/canvas/assignments", async (req, res) => {
     if (!student) return;
     const ownerId = ownerIdForStudent(student);
     let canvas = [];
-    if (student.canvasToken) {
+    if (canvasReady(student)) {
       canvas = await listAssignments(student.canvasHost, student.canvasToken).catch(() => []);
     }
     const local = ownerId ? await listTodos(ownerId).catch(() => []) : [];
@@ -1160,7 +1189,7 @@ app.get("/v1/me/canvas/grades", async (req, res) => {
   try {
     const student = await requireStudent(req, res);
     if (!student) return;
-    if (!student.canvasToken) {
+    if (!canvasReady(student)) {
       return res.status(400).json({ error: "Connect Canvas in settings first." });
     }
     const work = /^(1|true|yes)$/i.test(String(req.query.work || ""));
@@ -1250,15 +1279,14 @@ function appPendingFor(student) {
   return { authorizeUrl: auth.authorizeUrl, service: auth.service, state: auth.state };
 }
 
-function statusExtras(student, service, flags) {
+function statusExtras(student, service) {
   const ms = msServicesOf(student);
   const key = MS_SERVICE_KEY[service];
-  const studio = Boolean(flags[service]);
-  const reason = studio ? "" : msDeniedReason(ms, key, true);
+  const reason = msDeniedReason(ms, key, true);
   return {
     denied: Boolean(reason),
     deniedReason: reason,
-    needsAdminApproval: studio ? false : msNeedsAdminApproval(ms),
+    needsAdminApproval: msNeedsAdminApproval(ms),
     consentRequest: consentRequestFor(student, service),
     mode: msClientMode(),
     configured: msConfigured(),
@@ -1286,16 +1314,14 @@ app.get("/v1/me/onedrive/status", async (req, res) => {
     if (!student) return;
     const current = await freshStudentForStatus(student);
     await reprobeIfStale(current);
-    const flags = studioFlags(current);
     const ms = msServicesOf(current);
     return res.json({
-      connected: Boolean(onedriveReallyConnected(current, ms) || flags.onedrive),
+      connected: onedriveReallyConnected(current, ms),
       pending: appPendingFor(current),
       email: current.graph?.email || "",
       error: "",
-      studio: flags.onedrive,
-      ...statusExtras(current, "onedrive", flags),
-      outlookConnected: Boolean(outlookReallyConnected(current, ms) || flags.outlook),
+      ...statusExtras(current, "onedrive"),
+      outlookConnected: outlookReallyConnected(current, ms),
       outlookEmail: current.outlook?.email || "",
     });
   } catch (err) {
@@ -1555,7 +1581,7 @@ app.post("/v1/me/ms/consent-request", async (req, res) => {
     let sent = false;
     let sendError = "";
     const ms = msServicesOf(student);
-    const canMail = ms.mail === true || studioFlags(student).outlook;
+    const canMail = ms.mail === true;
     if (request.to && canMail) {
       try {
         const token = await outlookAccessToken(student);
@@ -1587,7 +1613,6 @@ app.get("/v1/me/onedrive/files", async (req, res) => {
       vaultFiles = vaultFiles.filter((f) => String(f.name || "").toLowerCase().includes(needle));
     }
     let graphFiles = [];
-    let studioFiles = [];
     let error = "";
     if (student.graph?.accessToken) {
       try {
@@ -1599,15 +1624,8 @@ app.get("/v1/me/onedrive/files", async (req, res) => {
         error = shortMsError(err);
       }
     }
-    if (studioFlags(student).onedrive) {
-      try {
-        studioFiles = await listStudioFiles({ q, limit: 40 });
-      } catch (err) {
-        if (!error) error = shortMsError(err);
-      }
-    }
     return res.json({
-      files: mergeListedFiles(vaultFiles, graphFiles, studioFiles),
+      files: mergeListedFiles(vaultFiles, graphFiles),
       folder,
       error,
     });
@@ -1624,10 +1642,6 @@ app.get("/v1/me/onedrive/file", async (req, res) => {
     let file;
     if (id.startsWith("vault:")) {
       file = await readVault(googleFileId(student.googleSub), id.slice("vault:".length));
-    } else if (id.startsWith("studio:")) {
-      file = await readStudioFile(id);
-    } else if (!student.graph?.accessToken && studioFlags(student).onedrive) {
-      file = await readStudioFile(id);
     } else {
       if (!student.graph?.accessToken) {
         return res.status(400).json({ error: "Open that file in OneDrive." });
@@ -1657,10 +1671,6 @@ async function onenoteGraphToken(student) {
 }
 
 async function onenoteAccess(student) {
-  if (studioFlags(student).onenote) {
-    const tok = await studioOnenoteToken();
-    if (tok) return tok;
-  }
   const ms = msServicesOf(student);
   if (hasLiveToken(student?.graph) && ms.notes === false) {
     throw deniedError(student, "notes", "OneNote");
@@ -1677,22 +1687,10 @@ app.get("/v1/me/onenote/status", async (req, res) => {
   try {
     const student = await requireStudent(req, res);
     if (!student) return;
-    const flags = studioFlags(student);
     let notebooks = [];
     let error = "";
     let listed = false;
-    if (flags.onenote) {
-      try {
-        const token = await studioOnenoteToken();
-        if (token) {
-          notebooks = await listNotebooks(token);
-          listed = true;
-        }
-      } catch (err) {
-        error = onenoteError(err);
-      }
-    }
-    if (!listed && hasLiveToken(student.graph)) {
+    if (hasLiveToken(student.graph)) {
       try {
         const token = await onenoteGraphToken(student);
         notebooks = await listNotebooks(token);
@@ -1716,8 +1714,8 @@ app.get("/v1/me/onenote/status", async (req, res) => {
       }
     }
     const ms = msServicesOf(student);
-    const connected = Boolean(listed || flags.onenote);
-    const reason = flags.onenote ? "" : msDeniedReason(ms, "notes", hasLiveToken(student.graph));
+    const connected = listed;
+    const reason = msDeniedReason(ms, "notes", hasLiveToken(student.graph));
     if (!connected && !error) {
       error = reason || (hasLiveToken(student.graph) ? "OneNote did not answer." : "");
     }
@@ -1728,8 +1726,7 @@ app.get("/v1/me/onenote/status", async (req, res) => {
       error,
       denied: Boolean(reason),
       deniedReason: reason,
-      needsAdminApproval: flags.onenote ? false : msNeedsAdminApproval(ms),
-      studio: flags.onenote,
+      needsAdminApproval: msNeedsAdminApproval(ms),
       pending: connected ? null : appPendingFor(student),
       adminConsentUrl: adminConsentUrl(),
       consentRequest: consentRequestFor(student, "onenote"),
@@ -1829,16 +1826,14 @@ app.get("/v1/me/outlook/status", async (req, res) => {
     if (!student) return;
     const current = await freshStudentForStatus(student);
     await reprobeIfStale(current);
-    const flags = studioFlags(current);
     const ms = msServicesOf(current);
     return res.json({
-      connected: Boolean(outlookReallyConnected(current, ms) || flags.outlook),
+      connected: outlookReallyConnected(current, ms),
       pending: appPendingFor(current),
       email: current.outlook?.email || "",
       error: "",
-      studio: flags.outlook,
-      ...statusExtras(current, "outlook", flags),
-      onedriveConnected: Boolean(onedriveReallyConnected(current, ms) || flags.onedrive),
+      ...statusExtras(current, "outlook"),
+      onedriveConnected: onedriveReallyConnected(current, ms),
       onedriveEmail: current.graph?.email || "",
     });
   } catch (err) {
@@ -1935,15 +1930,13 @@ app.get("/v1/me/teams/status", async (req, res) => {
     if (!student) return;
     const current = await freshStudentForStatus(student);
     await reprobeIfStale(current);
-    const flags = studioFlags(current);
     const ms = msServicesOf(current);
     return res.json({
-      connected: Boolean(teamsReallyConnected(current, ms) || flags.teams),
+      connected: teamsReallyConnected(current, ms),
       pending: appPendingFor(current),
       email: current.teams?.email || "",
       error: "",
-      studio: flags.teams,
-      ...statusExtras(current, "teams", flags),
+      ...statusExtras(current, "teams"),
     });
   } catch (err) {
     return fail(res, err);
@@ -1958,9 +1951,6 @@ app.get("/v1/me/teams/chats", async (req, res) => {
     if (student.teams?.accessToken) {
       const token = await teamsToken(student);
       return res.json({ chats: await listTeamsChats(token, { limit }), error: "" });
-    }
-    if (studioFlags(student).teams) {
-      return res.json({ chats: await listStudioChats({ limit }), error: "" });
     }
     return res.json({ chats: [], error: "" });
   } catch (err) {
@@ -1979,9 +1969,6 @@ app.get("/v1/me/teams/messages", async (req, res) => {
       const token = await teamsToken(student);
       return res.json({ messages: await listTeamsMessages(token, chat, { limit }), error: "" });
     }
-    if (studioFlags(student).teams) {
-      return res.json({ messages: await listStudioChatMessages(chat, { limit }), error: "" });
-    }
     return res.json({ messages: [], error: "Connect Teams first." });
   } catch (err) {
     return fail(res, err, err.status || 502);
@@ -1997,9 +1984,6 @@ app.post("/v1/me/teams/send", async (req, res) => {
     if (student.teams?.accessToken) {
       const token = await teamsToken(student);
       return res.json(await sendTeamsGraph(token, { chat, text }));
-    }
-    if (studioFlags(student).teams) {
-      return res.json(await sendStudioChat({ chat, text }));
     }
     return res.status(400).json({ error: "Connect Teams first." });
   } catch (err) {
@@ -2022,18 +2006,6 @@ app.put("/v1/me/onedrive/file", async (req, res) => {
       content,
       contentType,
     });
-    if (studioFlags(student).onedrive) {
-      try {
-        const studio = await writeStudioFile({ name, content, contentType });
-        if (!student.graph?.accessToken) {
-          return res.json({ ...saved, ...studio, error: "" });
-        }
-      } catch (err) {
-        if (!student.graph?.accessToken) {
-          return res.json({ ...saved, error: shortMsError(err) });
-        }
-      }
-    }
     if (!student.graph?.accessToken) {
       return res.json({ ...saved, error: "" });
     }
@@ -2271,18 +2243,13 @@ app.post("/v1/agent/chat", async (req, res) => {
     return res.status(400).json({ error: "Send at least one user message." });
   }
 
-  const useCursor = usesCursorAgent(student);
-  const providerId = useCursor
-    ? "cursor"
-    : String(req.body?.provider || student.modelProvider || "groq");
-  const provider = useCursor ? { id: "cursor", label: "Cursor" } : PROVIDERS[providerId];
+  const providerId = String(req.body?.provider || student.modelProvider || "groq");
+  const provider = PROVIDERS[providerId];
   if (!provider) {
     return res.status(400).json({ error: "Unknown provider." });
   }
 
-  const { keys, source } = useCursor
-    ? { keys: ["cursor"], source: "cursor" }
-    : resolveApiKeys(req, providerId, student);
+  const { keys, source } = resolveApiKeys(req, providerId, student);
   if (!keys.length) {
     return res.status(401).json({
       error: MISSING_KEY_ERROR,
@@ -2477,21 +2444,6 @@ app.post("/v1/agent/chat", async (req, res) => {
       snapshot = snapshot ? `${snapshot}\n\n${uiBlock}` : uiBlock;
     }
 
-    if (useCursor) {
-      const cursorOut = await runCursorAgentChat({
-        student,
-        messages: convo,
-        snapshot,
-        ownerId,
-        req,
-        writeEvent,
-      });
-      for (const kind of cursorOut.kinds || []) kinds.add(kind);
-      const nextNav = normalizeNavigate(cursorOut.navigate);
-      if (nextNav) navigate = nextNav;
-      return finishMutations(cursorOut.streamed ? "" : cursorOut.content || (kinds.size ? "Done" : ""));
-    }
-
     for (let round = 0; round < 8; round += 1) {
       let upstream;
       try {
@@ -2667,8 +2619,77 @@ mountResearch(app, { fail });
 mountCanvasOAuth(app);
 mountFour11(app);
 
+/* ---------- Nightly four11 sync (like epschedule's cron) ---------- */
+
+const NIGHTLY_HOUR = 0;
+const NIGHTLY_MINUTE = 15;
+const DAY_MS = 24 * 60 * 60 * 1000;
+let four11SyncInflight = null;
+
+/** One run at a time. Later callers share the in-flight promise. */
+function runFour11SyncAll(trigger) {
+  if (four11SyncInflight) return four11SyncInflight;
+  four11SyncInflight = (async () => {
+    console.log(`[four11] sync-all start (${trigger})`);
+    try {
+      const out = await syncAllEpsStudents({ log: (line) => console.log(`[four11] ${line}`) });
+      console.log(`[four11] sync-all done synced=${out.synced} skipped=${out.skipped} failed=${out.failed}`);
+      return out;
+    } finally {
+      four11SyncInflight = null;
+    }
+  })();
+  return four11SyncInflight;
+}
+
+/**
+ * App Engine cron target (server/cron.yaml). App Engine strips X-Appengine-Cron
+ * from outside requests, so that header alone proves the caller. ADMIN_KEY lets
+ * an operator run it by hand.
+ */
+function cronCallerAllowed(req) {
+  if (String(req.get("x-appengine-cron") || "").toLowerCase() === "true") return true;
+  const key = String(process.env.ADMIN_KEY || "").trim();
+  if (!key) return false;
+  const m = /^Bearer\s+(.+)$/i.exec(String(req.get("authorization") || "").trim());
+  return Boolean(m && m[1].trim() === key);
+}
+
+app.get("/internal/four11/sync-all", async (req, res) => {
+  if (!cronCallerAllowed(req)) return res.status(403).json({ error: "Forbidden." });
+  try {
+    return res.json({ ok: true, ...(await runFour11SyncAll("cron")) });
+  } catch (err) {
+    return fail(res, err);
+  }
+});
+
+function msUntilNext(hour, minute) {
+  const now = new Date();
+  const next = new Date(now);
+  next.setHours(hour, minute, 0, 0);
+  if (next <= now) next.setDate(next.getDate() + 1);
+  return next - now;
+}
+
+/** Mac: FOUR11_NIGHTLY=1 runs the same sync at 00:15 local time every day. */
+function scheduleNightlyFour11Sync() {
+  if (String(process.env.FOUR11_NIGHTLY || "").trim() !== "1") return;
+  const first = msUntilNext(NIGHTLY_HOUR, NIGHTLY_MINUTE);
+  console.log(`[four11] nightly sync on, first run in ${Math.round(first / 60000)} min`);
+  const tick = () => {
+    runFour11SyncAll("nightly").catch((err) => console.warn("[four11] nightly sync failed", shortMsError(err)));
+  };
+  const timer = setTimeout(() => {
+    tick();
+    setInterval(tick, DAY_MS).unref();
+  }, first);
+  timer.unref();
+}
+
 app.listen(PORT, HOST, () => {
-  console.log(`[jype-server] listening on http://${HOST}:${PORT}`);
+  console.log(`[epsynapse] listening on http://${HOST}:${PORT}`);
   console.log(`[ms-oauth] Microsoft sign-in ${msConfigured() ? "on (auth code + PKCE)" : "off: MICROSOFT_CLIENT_ID is unset"}`);
   void purgeForeignMicrosoftTokensAtBoot();
+  scheduleNightlyFour11Sync();
 });

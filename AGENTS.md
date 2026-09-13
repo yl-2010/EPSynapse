@@ -48,20 +48,20 @@ hostname | grep -qi 'Mac-Studio' || scutil --get ComputerName | grep -qi 'Mac St
 
 ### When a restart applies
 
-Restart if you changed `server/**` or the LaunchAgent / run plumbing (`deploy/launchagents/com.jype.server.plist`, root `package.json` `server` scripts).
+Restart if you changed `server/**` or the LaunchAgent / run plumbing (`deploy/launchagents/com.epsynapse.server.plist`, root `package.json` `server` scripts).
 
 Do not restart for static site, docs-only, or agent markdown.
 
 ### How to restart
 
 ```bash
-launchctl kickstart -k "gui/$(id -u)/com.jype.server"
+launchctl kickstart -k "gui/$(id -u)/com.epsynapse.server"
 curl -sS -f http://127.0.0.1:3006/health
 ```
 
 If the LaunchAgent is not loaded, start with `npm run server` from the repo root, then hit `/health`.
 
-Logs: `/tmp/jype-server.log`, `/tmp/cloudflared-jype.log`.
+Logs: `/tmp/epsynapse-server.log`, `/tmp/cloudflared-epsynapse.log`.
 
 ## Vercel, manual production deploy
 
@@ -69,7 +69,7 @@ Git pushes do not auto-deploy. Hobby is 100 deploys/day. Ignored builds still co
 
 A `git push` only updates GitHub. The live site does not change until someone runs a production deploy.
 
-Vercel team is JYPE (`jype1`, `team_EF7WJXYBcuZa84T04Q5jvmKv`). Project is `jype` (`prj_OR2sdjPGltYZpvAXu37W6g2cMf27`). Domain `epsynapse.com` lives on that team. Fallback URL: `https://jype-six.vercel.app`.
+Vercel team is JYPE (`jype1`, `team_EF7WJXYBcuZa84T04Q5jvmKv`). Project is `epsynapse` (`prj_OR2sdjPGltYZpvAXu37W6g2cMf27`, renamed from `jype`; the team slug `jype1` and the `jype-six.vercel.app` fallback still work and are not ours to rename without downtime). Domain `epsynapse.com` lives on that team. Fallback URL: `https://jype-six.vercel.app`.
 
 ### When a deploy applies
 
@@ -138,13 +138,13 @@ BERT is off (`BERT_ENABLED` unset). Notes are classified by the student's model.
 | `ml/`, `models/` | Local BERT. Off by default, kept for later. Not shipped to Vercel. |
 | `docs/` | How to start, tunnel, local API. Not shipped to Vercel. |
 | `deploy/cloudflared/` | Tunnel notes and setup script. Credentials stay in `~/.cloudflared/`. |
-| `deploy/launchagents/` | `com.jype.server` and `com.jype.cloudflared` plists. |
+| `deploy/launchagents/` | `com.epsynapse.server` and `com.epsynapse.cloudflared` plists. |
 | `ideas.md` | EPSynapse product notes. |
 | `.cursor/` | Local Cursor notes. Not the site. |
 
 ## Architecture
 
-JYPE owns its own accounts, tunnel, and port.
+EPSynapse owns its own accounts, tunnel, and port.
 
 ```
 Browser
@@ -161,9 +161,9 @@ This Mac already runs other APIs. Do not merge tunnels or steal their ports.
 | 3000 | SocketHR Express (`api.sockethr.com`) |
 | 3002 | NoteLMs Express (`api.notelms.com`) |
 | 3004 | yanylevin Express (`api.yanylevin.com`) |
-| 3006 | JYPE Express (`api.epsynapse.com`) |
+| 3006 | EPSynapse Express (`api.epsynapse.com`) |
 | 1234 | LM Studio (never public) |
-| 3007 | JYPE BERT (never public) |
+| 3007 | EPSynapse BERT (never public) |
 
 Do not attach `api.epsynapse.com` as a Vercel project domain.
 
@@ -190,7 +190,7 @@ Full rule: [`.cursor/rules/subagent-model.mdc`](.cursor/rules/subagent-model.mdc
 ## Hard rules
 
 - Do not expose LM Studio or BERT publicly. Localhost only. Never put them on the Cloudflare Tunnel.
-- Four `cloudflared` processes run on this Mac. Do not combine them. JYPE is port 3006 only.
+- Four `cloudflared` processes run on this Mac. Do not combine them. EPSynapse is port 3006 only.
 - Never commit `server/.env`, `.env`, or auth secrets.
 - Do not connect the GitHub repo to Vercel Git. Manual `deploy:web` only.
 - After any root static / browser change, run `npm run deploy:web` before you stop. `git push` is not a site deploy.
@@ -204,6 +204,7 @@ Full rule: [`.cursor/rules/subagent-model.mdc`](.cursor/rules/subagent-model.mdc
 - [`docs/PUBLIC_TUNNEL.md`](docs/PUBLIC_TUNNEL.md)
 - [`docs/LOCAL_BACKEND.md`](docs/LOCAL_BACKEND.md)
 - [`docs/IOS.md`](docs/IOS.md)
+- [`docs/PLAN.md`](docs/PLAN.md), the order of remaining work and what depends on what
 - [`docs/IT_REQUEST.md`](docs/IT_REQUEST.md), what we asked school IT for
 - [`docs/EPS_INTEGRATIONS.md`](docs/EPS_INTEGRATIONS.md), Canvas OAuth and four11
 - [`docs/GCP.md`](docs/GCP.md), the App Engine target
