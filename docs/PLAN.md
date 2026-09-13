@@ -99,6 +99,31 @@ Copy the home class view from the yanylevin repo (`education/app.js`: `classSect
 
 Do not fork the logic. Port the functions and keep the names so fixes in yanylevin can be copied over.
 
+### 10. EPS student files live in their OneDrive
+
+Needs: 2 (Microsoft sign-in with `Files.ReadWrite` or `Files.ReadWrite.AppFolder`). Do it before 6 so nothing large ever moves into the cloud project.
+
+The server already owns a folder in each EPS student's OneDrive: `WRITE_FOLDER = "EPSynapse"` in `server/onedrive.js`, with `ensureWriteFolder`, `listFiles`, upload, and the agent's `write_onedrive_file` tool. Make that folder the only place EPS student files live.
+
+- Layout: `EPSynapse/<Class name>/` for class files, `EPSynapse/Notes/` for note exports, `EPSynapse/Uploads/` for anything the app writes that has no class. The class page's Files tab lists `/me/drive/root:/EPSynapse/<Class name>:/children` straight from Graph; a file the student drops there from Finder or the OneDrive app appears on the next load. Use `/me/drive/root/delta` with a stored `deltaLink` per student so a reload is one cheap call, and a Graph change-notification subscription later if we want it to update without a reload.
+- Open and download go through the driveItem's `webUrl` and `@microsoft.graph.downloadUrl`, never through our storage. The API stores only the driveItem id and name as a pointer next to the class.
+- `server/vault.js` and the class-file routes in `index.js` become the other-door path only. For EPS they read and write Graph. Delete account removes the pointers; the folder in OneDrive stays with the student.
+- What stays in Firestore: the student record, sealed tokens, todos, notes text, chat threads, schedule JSON, session docs. All small. Cloud Storage then holds only other-door PDFs and uploads.
+- Trade-offs to accept: every read needs a live Graph token (refresh tokens last as long as the school's policy allows; if one lapses the Files tab says reconnect, nothing is lost); Graph throttles per user, so keep the delta approach rather than listing every folder per page; a file the student deletes or moves out of the folder disappears from EPSynapse, which is the point.
+- Scope choice for Mr. Briggs: `Files.ReadWrite` lets the agent also read the rest of the drive (today's behavior). `Files.ReadWrite.AppFolder` limits EPSynapse to `Apps/EPSynapse` (`/me/drive/special/approot`). If he picks AppFolder, change `WRITE_FOLDER` handling to use `approot` and drop the whole-drive listing. The rest of this step is the same.
+
+Where data lives on the new stack, once 6 and 10 are done:
+
+| Data | Where |
+|------|-------|
+| Student record, door, paused flag, sealed Canvas / Microsoft / model tokens | Firestore `students` |
+| Sessions | Firestore `sessions`, one doc each, expire after 30 days |
+| Todos, notes, chat threads, schedule JSON, research events | Firestore, keyed by owner id |
+| EPS student files (class files, uploads, note exports) | The student's OneDrive, `EPSynapse/` folder. Pointers only in Firestore |
+| Other-door schedule PDFs and uploads | Cloud Storage bucket, `blobs.js` |
+| API secrets (client ids, four11 key, encryption key) | Secret Manager |
+| Nothing | The Mac Studio, once the LaunchAgents are disabled |
+
 ## Security review, Sep 13
 
 A separate agent ran a full read-only audit (canvas `epsynapse-security-audit`). Triage against the code as it stands now:
@@ -146,4 +171,7 @@ IT email ─┬─ A Entra id ──► 2 MS sign-in ──► 3 linking ──�
           ├─ C Canvas key ─────────┘──► 5 Canvas one click
           │
           └─ D GCP project ──► 6 migrate ──► (before 7)
+
+2 MS sign-in ──► 10 files in OneDrive ──► (before 6, so nothing large moves to GCP)
+4 auto sync  ──► 9 EPS class view
 ```

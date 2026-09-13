@@ -21,7 +21,9 @@ Please create it in the school tenant (b2681e8b-dd20-46cf-b163-371a2d7c6014) so 
 - https://api.epsynapse.com/v1/ms/callback
 - http://localhost:3006/v1/ms/callback
 
-Delegated Microsoft Graph permissions, signed-in user only: User.Read, Files.ReadWrite, Notes.ReadWrite, Mail.ReadWrite, Mail.Send, Chat.ReadWrite, offline_access, openid, profile, email. If you can grant admin consent for the tenant, students never see a consent prompt. Please add the four of us as owners and send us the Application (client) id. Nothing else is needed on our side.
+Delegated Microsoft Graph permissions, signed-in user only: User.Read, Files.ReadWrite, Notes.ReadWrite, Mail.ReadWrite, Mail.Send, Chat.ReadWrite, offline_access, openid, profile, email. If you can grant admin consent for the tenant, students never see a consent prompt. Please add the four of us (Yan, Prasham, Everette, Jeffery) as owners and send us the Application (client) id. Nothing else is needed on our side.
+
+One design note that affects this: we plan to keep each student's files (class handouts, uploads, anything the app writes) in the student's own OneDrive, in an EPSynapse folder, rather than in the cloud project below. Students can drop files into that folder from Finder or the OneDrive app and they show up in EPSynapse. If you would rather EPSynapse never see the rest of a student's drive, we can request Files.ReadWrite.AppFolder instead of Files.ReadWrite and use the Apps/EPSynapse folder Microsoft creates for that scope. Your call; both work for us.
 
 2. four11 API key
 
@@ -33,11 +35,11 @@ Today every student pastes an access token from Canvas settings and repeats it w
 
 4. A school-owned Google Cloud project
 
-We want EPSynapse to run on the same stack as epschedule (App Engine, Firestore, Cloud Storage, Secret Manager) so it lives in a school project rather than a student's personal account, and so it keeps running after we graduate. Could you create a project under the school Google org (for example `epsynapse`), enable App Engine, Firestore in native mode with locked (production) security rules, Cloud Storage, and Secret Manager, and give the four of us App Engine Deployer, Firestore User, Storage Object Admin, and Secret Manager Secret Accessor? Only the API's service account ever touches Firestore, so nothing needs open rules. Usage should sit inside the free tier, same as epschedule. We will point api.epsynapse.com at it once it is up. The exact roles and steps are written down in our repo (`docs/GCP.md`) if that is easier to work from.
+We want EPSynapse to run on the same stack as epschedule (App Engine, Firestore, Cloud Storage, Secret Manager) so it lives in a school project rather than a student's personal account, and so it keeps running after we graduate. Could you create a project under the school Google org (for example `epsynapse`), enable App Engine, Firestore in native mode with locked (production) security rules, Cloud Storage, and Secret Manager, and give the four of us App Engine Deployer, Firestore User, Storage Object Admin, and Secret Manager Secret Accessor? Only the API's service account ever touches Firestore, so nothing needs open rules. What lives there is small: account records, encrypted tokens, todos, notes, chat history, and schedules. Files stay in OneDrive as described above, so storage use is a few megabytes and should sit inside the free tier, same as epschedule. We will point api.epsynapse.com at it once it is up. The exact roles and steps are written down in our repo (`docs/GCP.md`) if that is easier to work from.
 
 Happy to walk through any of this in person, and thanks again for catching the sign-in problem before it did real damage.
 
-Yan, Prasham, Everette, and Angela
+Yan, Prasham, Everette, and Jeffery
 
 ## After IT answers
 
