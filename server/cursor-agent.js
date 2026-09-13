@@ -105,12 +105,34 @@ function cursorSystemPrompt(email) {
     SYSTEM_PROMPT,
     `Signed-in user email: ${email}`,
     "This account uses Cursor on this Mac. No pasted Groq key. If they ask about Chat key or Groq, say that.",
-    `Always Read and apply ${UNSLOP_SKILL_PATH} on every turn. Do not skip it. Do not inline the whole skill.`,
+    `Read ${UNSLOP_SKILL_PATH} silently and apply it. Never mention Unslop, reading a skill, or that you are about to reply.`,
     "Change notes, todos, class files, and the open page with the tools. Do not edit files in the working directory.",
     "Do not spawn a Cursor cloud agent.",
-    "Long work: send_chat_message first with a short status. Send more when something useful happens. Then a final Done.",
-    "Quick answers: one reply only.",
+    "The user only sees your final reply. Do not narrate the plan. No 'Quick greeting' or 'then reply' lines.",
+    "send_chat_message is a working-status ping for long tool work only. Never use it for a greeting or a short answer.",
   ].join("\n");
+}
+
+/** Drop leaked plan/status text so the bubble is only the real reply. */
+export function stripAgentNarration(text) {
+  let out = String(text || "").replace(/\r\n/g, "\n").trim();
+  if (!out) return "";
+  out = out.replace(/^quick greeting\.\s*/i, "");
+  out = out.replace(/i[’']ll read unslop,?\s*then reply\.\s*/gi, "");
+  out = out.replace(/i[’']ll read [^.\n]+,?\s*then reply\.\s*/gi, "");
+  out = out
+    .split("\n")
+    .filter((line) => {
+      const t = line.trim();
+      if (!t) return true;
+      if (/unslop/i.test(t) && t.length < 80) return false;
+      if (/^quick greeting\.?$/i.test(t)) return false;
+      if (/^i[’']ll read .+, then reply\.?$/i.test(t)) return false;
+      return true;
+    })
+    .join("\n")
+    .trim();
+  return out;
 }
 
 function buildPrompt({ email, messages, snapshot, replay }) {
@@ -165,8 +187,10 @@ function sessionCustomTools(ctx) {
     execute({ text }) {
       const raw = String(text || "").trim();
       if (!raw) return "ignored empty";
-      ctx.writeEvent?.({ choices: [{ delta: { content: `${raw}\n` } }] });
-      ctx.streamed = true;
+      const status = /unslop|then reply|quick greeting|i[’']ll read/i.test(raw)
+        ? "Working…"
+        : raw.slice(0, 80);
+      ctx.writeEvent?.({ type: "status", text: status });
       return "delivered";
     },
   };
@@ -299,8 +323,6 @@ export async function runCursorAgentChat({
               for (const block of event.message.content) {
                 if (block?.type === "text" && typeof block.text === "string") {
                   chunks.push(block.text);
-                  writeEvent?.({ choices: [{ delta: { content: block.text } }] });
-                  ctx.streamed = true;
                 }
               }
             }
@@ -325,13 +347,14 @@ export async function runCursorAgentChat({
       : "";
   if (!content) {
     for (let i = chunks.length - 1; i >= 0; i -= 1) {
-      const piece = String(chunks[i] || "").trim();
+      const piece = stripAgentNarration(chunks[i]);
       if (piece) {
         content = piece;
         break;
       }
     }
   }
+  content = stripAgentNarration(content);
   if (!content) {
     content =
       String(outcome.result?.status || "").toLowerCase() === "error"
