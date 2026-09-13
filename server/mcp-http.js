@@ -21,7 +21,7 @@ import {
   publicProfile,
   studentFromRequest,
 } from "./students.js";
-import { adminConsentUrl } from "./teams.js";
+import { adminConsentUrl, MS_OFF_MESSAGE, msConfigured } from "./onedrive.js";
 
 const SERVER_NAME = "epsynapse";
 const SERVER_VERSION = "0.1.0";
@@ -192,7 +192,15 @@ function serviceState(student, publicMe) {
 function deniedMessage(service, reason) {
   const base = reason || `${SERVICE_LABEL[service]} is blocked for this account.`;
   const withApproval = /approve/i.test(base) ? base : `${base} ${APPROVAL_SENTENCE}`;
-  return `${withApproval} Approval link: ${adminConsentUrl()}`;
+  const link = adminConsentUrl();
+  return link ? `${withApproval} Approval link: ${link}` : withApproval;
+}
+
+const MS_SERVICES = new Set(["onedrive", "onenote", "outlook", "teams"]);
+
+/** True when a Microsoft tool cannot run because MICROSOFT_CLIENT_ID is unset and the demo path is not covering it. */
+function microsoftOff(service, state) {
+  return MS_SERVICES.has(service) && !msConfigured() && !state[service].connected;
 }
 
 function connectionStatus(student, publicMe) {
@@ -206,18 +214,20 @@ function connectionStatus(student, publicMe) {
       ...(s.denied
         ? { denied: true, reason: s.denied, adminConsentUrl: adminConsentUrl(), note: APPROVAL_SENTENCE }
         : {}),
+      ...(microsoftOff(key, state) ? { off: true, reason: MS_OFF_MESSAGE } : {}),
     };
   }
   const missing = Object.entries(state)
-    .filter(([, s]) => !s.connected && !s.denied)
+    .filter(([k, s]) => !s.connected && !s.denied && !microsoftOff(k, state))
     .map(([k]) => SERVICE_LABEL[k]);
   const out = {
     student: student.email || "",
+    microsoftSignIn: msConfigured() ? "on" : "off",
     services,
     ...(missing.length
       ? { howToConnect: `Connect ${missing.join(", ")} at https://epsynapse.com under Settings.` }
       : {}),
-    ...(anyDenied ? { adminConsentUrl: adminConsentUrl(), note: APPROVAL_SENTENCE } : {}),
+    ...(anyDenied && adminConsentUrl() ? { adminConsentUrl: adminConsentUrl(), note: APPROVAL_SENTENCE } : {}),
   };
   return out;
 }
@@ -319,7 +329,14 @@ async function handleMessage(msg, ctx) {
       }
 
       const service = TOOL_SERVICE[name];
-      const denied = service ? serviceState(student, publicMe)[service].denied : "";
+      const state = service ? serviceState(student, publicMe) : null;
+      if (state && microsoftOff(service, state)) {
+        return rpcResult(id, {
+          content: [{ type: "text", text: MS_OFF_MESSAGE }],
+          isError: true,
+        });
+      }
+      const denied = state ? state[service].denied : "";
       if (denied) {
         return rpcResult(id, {
           content: [{ type: "text", text: deniedMessage(service, denied) }],

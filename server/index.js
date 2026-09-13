@@ -40,28 +40,26 @@ import {
   validateToken,
 } from "./canvas.js";
 import {
-  acceptPastedToken,
   adminConsentUrl,
+  bagMatchesClient,
   buildAuthorizeUrl,
-  completeDeviceUrl,
   downloadFile,
   ensureFreshToken,
   exchangeAuthCode,
   hasLiveToken,
   isConnected,
   listDashboardFiles,
+  MS_OFF_MESSAGE,
   msClientMode,
+  msConfigured,
   msScopes,
   needsAdminApprovalText,
   newOauthState,
   newPkcePair,
-  pollDeviceCode,
   probeDenied,
   probeGraph,
   probeReauth,
-  publicPending,
   searchFiles,
-  startDeviceCode,
   tokenHasNotesRead,
   uploadFile,
   userDeclinedText,
@@ -78,27 +76,19 @@ import {
 } from "./onenote.js";
 import { publicGoogleConfig, verifyIdToken } from "./google.js";
 import {
-  acceptPastedToken as acceptOutlookToken,
   ensureFreshToken as ensureOutlookToken,
   isConnected as outlookConnected,
   listEvents,
   listMessages,
-  pollDeviceCode as pollOutlookCode,
-  publicPending as outlookPending,
   readMessage,
   sendMessage,
-  startDeviceCode as startOutlookCode,
 } from "./outlook.js";
 import {
-  acceptPastedToken as acceptTeamsToken,
   ensureFreshToken as ensureTeamsToken,
   isConnected as teamsGraphConnected,
   listChats as listTeamsChats,
   listChatMessages as listTeamsMessages,
-  pollDeviceCode as pollTeamsCode,
-  publicPending as teamsPending,
   sendChatMessage as sendTeamsGraph,
-  startDeviceCode as startTeamsCode,
 } from "./teams.js";
 import {
   isStudioDemoStudent,
@@ -126,6 +116,7 @@ import {
   createSession,
   destroySession,
   findStudentByMsAuthState,
+  forEachStudentFile,
   googleFileId,
   loadStudentByFileId,
   mergeGraph,
@@ -352,6 +343,7 @@ function publicMe(student) {
     studioOutlook: flags.outlook,
     studioTeams: flags.teams,
     msClientMode: msClientMode(),
+    msConfigured: msConfigured(),
     msSignedInEmail: msSignedInEmail(student),
     msDenied: denied,
     msNeedsAdminApproval: needsApproval,
@@ -440,21 +432,6 @@ function sessionJson(req, res, student, sid) {
   });
 }
 
-async function persistGraph(student, patch) {
-  mergeGraph(student, patch);
-  return saveStudent(student);
-}
-
-async function persistOutlook(student, patch) {
-  mergeOutlook(student, patch);
-  return saveStudent(student);
-}
-
-async function persistTeams(student, patch) {
-  mergeTeams(student, patch);
-  return saveStudent(student);
-}
-
 const studentLocks = new Map();
 
 function withStudentLock(fileId, fn) {
@@ -469,51 +446,6 @@ function withStudentLock(fileId, fn) {
     )
   );
   return next;
-}
-
-function waitingDeviceError(error) {
-  const e = String(error || "");
-  return e === "authorization_pending" || e === "slow_down";
-}
-
-function terminalDeviceError(error) {
-  const e = String(error || "").toLowerCase();
-  return (
-    e === "expired_token" ||
-    e === "authorization_declined" ||
-    e === "access_denied" ||
-    e === "bad_verification_code" ||
-    e === "invalid_grant" ||
-    e.includes("aadsts70016") ||
-    e.includes("aadsts65001") ||
-    e.includes("aadsts65002") ||
-    e.includes("expired") ||
-    e.includes("declined")
-  );
-}
-
-const BROKEN_OUTLOOK_WEB_CLIENT = "9199bf20-a13f-4107-85dc-02114787ef48";
-
-function livePending(pending) {
-  if (!pending?.device_code || !pending.user_code) return null;
-  if (String(pending.clientId || "") === BROKEN_OUTLOOK_WEB_CLIENT) return null;
-  const exp = Number(pending.expiresAt) || 0;
-  if (exp && exp < Date.now()) return null;
-  return pending;
-}
-
-function pendingStartPayload(pending) {
-  const user_code = pending.user_code || "";
-  const verification_uri = pending.verification_uri || "https://login.microsoft.com/device";
-  return {
-    user_code,
-    verification_uri,
-    verification_uri_complete:
-      pending.verification_uri_complete || completeDeviceUrl(user_code, verification_uri),
-    message: pending.message || "",
-    interval: pending.interval || 5,
-    adminConsentUrl: adminConsentUrl(),
-  };
 }
 
 function shortMsError(err) {
@@ -600,7 +532,7 @@ async function applyMicrosoftToken(current, poll, pending, extra = {}) {
     checkedAt: new Date().toISOString(),
   };
   // A bag that already holds a different working token keeps its flag. This new token
-  // may be a narrower one (Teams-only device code) that says nothing about that service.
+  // may carry narrower scopes and say nothing about that service.
   const keepOther = (bagName) => hasLiveToken(current[bagName]) && !current[bagName].denied;
   const record = (key, ok) => {
     patch[key] = ok;
@@ -1220,7 +1152,7 @@ app.get("/v1/me/canvas/grades", async (req, res) => {
   }
 });
 
-/* ---------- Microsoft sign-in: app mode (auth code + PKCE) or office mode (device code) ---------- */
+/* ---------- Microsoft sign-in: auth code + PKCE only, or off when MICROSOFT_CLIENT_ID is unset ---------- */
 
 async function startAppAuth(student, service, returnTo) {
   const state = newOauthState();
@@ -1252,72 +1184,32 @@ async function startAppAuth(student, service, returnTo) {
     state,
     adminConsentUrl: adminConsentUrl(),
     consentRequest: consentRequestFor(student, service),
-    user_code: "",
     verification_uri: authorizeUrl,
     verification_uri_complete: authorizeUrl,
     message: `Open the link to sign in with your school Microsoft account and allow ${MS_SERVICE_LABEL[service]}.`,
-    interval: 3,
   };
 }
 
-function deviceStartFailed(service, started) {
-  return {
-    mode: "office",
-    service,
-    user_code: "",
-    verification_uri: "",
-    message: started?.error || `Microsoft would not start ${MS_SERVICE_LABEL[service]} sign-in.`,
-    adminConsentUrl: started?.adminConsentUrl || adminConsentUrl(),
-  };
+/** 503 body when MICROSOFT_CLIENT_ID is unset. The only other path is auth code + PKCE. */
+function msOffPayload(service) {
+  return { error: MS_OFF_MESSAGE, mode: "off", configured: false, service };
 }
 
-function devicePending(started) {
-  return {
-    device_code: started.device_code,
-    clientId: started.clientId,
-    scope: started.scope || "",
-    interval: started.interval,
-    expiresAt: started.expiresAt,
-    user_code: started.user_code,
-    verification_uri: started.verification_uri,
-    verification_uri_complete: started.verification_uri_complete || "",
-    message: started.message,
-  };
-}
-
-async function startOfficeAuth(student, service) {
-  if (service === "outlook") {
-    const started = await startOutlookCode();
-    if (!started.ok) return deviceStartFailed(service, started);
-    await persistOutlook(student, { pending: devicePending(started) });
-    return { ...pendingStartPayload(started), mode: "office", service };
-  }
-  if (service === "teams") {
-    const started = await startTeamsCode();
-    if (!started.ok) return deviceStartFailed(service, started);
-    await persistTeams(student, { pending: devicePending(started) });
-    return { ...pendingStartPayload(started), mode: "office", service };
-  }
-  const started = await startDeviceCode();
-  if (!started.ok) return deviceStartFailed(service, started);
-  await persistGraph(student, { pending: devicePending(started) });
-  return { ...pendingStartPayload(started), mode: "office", service };
-}
-
-async function startMicrosoft(student, service, returnTo) {
-  if (msClientMode() === "app") return startAppAuth(student, service, returnTo);
-  return startOfficeAuth(student, service);
+/** Start the browser sign-in, or 503 when Microsoft is off. Never a device code. */
+async function startMicrosoftRoute(req, res, service) {
+  const student = await requireStudent(req, res);
+  if (!student) return;
+  if (!msConfigured()) return res.status(503).json(msOffPayload(service));
+  return res.json(await startAppAuth(student, service, req.body?.returnTo));
 }
 
 app.post("/v1/me/ms/start", async (req, res) => {
   try {
-    const student = await requireStudent(req, res);
-    if (!student) return;
     const service = msServiceName(req.body?.service);
     if (!service) {
       return res.status(400).json({ error: "service must be onedrive, onenote, outlook, or teams." });
     }
-    return res.json(await startMicrosoft(student, service, req.body?.returnTo));
+    return await startMicrosoftRoute(req, res, service);
   } catch (err) {
     return fail(res, err);
   }
@@ -1325,9 +1217,7 @@ app.post("/v1/me/ms/start", async (req, res) => {
 
 app.post("/v1/me/onedrive/start", async (req, res) => {
   try {
-    const student = await requireStudent(req, res);
-    if (!student) return;
-    return res.json(await startMicrosoft(student, "onedrive", req.body?.returnTo));
+    return await startMicrosoftRoute(req, res, "onedrive");
   } catch (err) {
     return fail(res, err);
   }
@@ -1350,36 +1240,22 @@ function statusExtras(student, service, flags) {
     needsAdminApproval: studio ? false : msNeedsAdminApproval(ms),
     consentRequest: consentRequestFor(student, service),
     mode: msClientMode(),
+    configured: msConfigured(),
     msSignedInEmail: msSignedInEmail(student),
     adminConsentUrl: adminConsentUrl(),
   };
 }
 
-/** Device-code poll for one bag. Returns the freshest student plus any terminal error. */
-async function pollDeviceBag(student, bagKey, pollFn, persistFn) {
+/**
+ * Freshest copy of the student for a status call. Also drops any Microsoft token that
+ * did not come from our app registration; there is no flow left that could refresh it.
+ */
+async function freshStudentForStatus(student) {
   const fileId = googleFileId(student.googleSub);
   return withStudentLock(fileId, async () => {
     const current = (await loadStudentByFileId(fileId)) || student;
-    const pending = current[bagKey]?.pending;
-    if (!pending?.device_code) return { current, pollError: "" };
-    if (!livePending(pending)) {
-      await persistFn(current, { pending: null });
-      return { current, pollError: "That Microsoft sign-in expired. Connect again." };
-    }
-    const poll = await pollFn(pending.device_code, pending.clientId);
-    if (poll.ok) {
-      await applyMicrosoftToken(current, poll, pending);
-      return { current, pollError: "" };
-    }
-    if (poll.pending || waitingDeviceError(poll.error)) {
-      return { current, pollError: "" };
-    }
-    console.warn(`[ms-oauth] ${bagKey} poll`, poll.error);
-    if (terminalDeviceError(poll.error)) {
-      await persistFn(current, { pending: null });
-      return { current, pollError: poll.error };
-    }
-    return { current, pollError: poll.error || "" };
+    if (dropForeignMicrosoftTokens(current)) await saveStudent(current);
+    return current;
   });
 }
 
@@ -1387,15 +1263,15 @@ app.get("/v1/me/onedrive/status", async (req, res) => {
   try {
     const student = await requireStudent(req, res);
     if (!student) return;
-    const { current, pollError } = await pollDeviceBag(student, "graph", pollDeviceCode, persistGraph);
+    const current = await freshStudentForStatus(student);
     await reprobeIfStale(current);
     const flags = studioFlags(current);
     const ms = msServicesOf(current);
     return res.json({
       connected: Boolean(onedriveReallyConnected(current, ms) || flags.onedrive),
-      pending: publicPending(current.graph) || appPendingFor(current),
+      pending: appPendingFor(current),
       email: current.graph?.email || "",
-      error: pollError || "",
+      error: "",
       studio: flags.onedrive,
       ...statusExtras(current, "onedrive", flags),
       outlookConnected: Boolean(outlookReallyConnected(current, ms) || flags.outlook),
@@ -1576,6 +1452,36 @@ function clearBag(student, key) {
   if (key === "teams") mergeTeams(student, patch);
 }
 
+/**
+ * Drop any Microsoft token or pending sign-in that did not come from our own app
+ * registration. Tokens from the removed device-code flow have another clientId (or
+ * none) and nothing can refresh them any more. Returns true when something changed.
+ */
+function dropForeignMicrosoftTokens(student) {
+  let changed = false;
+  for (const key of ["graph", "outlook", "teams"]) {
+    const bag = student?.[key];
+    if (!bag || typeof bag !== "object") continue;
+    const hasToken = Boolean(String(bag.accessToken || "").trim() || String(bag.refreshToken || "").trim());
+    const stalePending = bag.pending && typeof bag.pending === "object";
+    if ((hasToken && !bagMatchesClient(bag)) || stalePending) {
+      clearBag(student, key);
+      changed = true;
+    }
+  }
+  if (changed) mergeMsServices(student, null);
+  return changed;
+}
+
+async function purgeForeignMicrosoftTokensAtBoot() {
+  try {
+    const n = await forEachStudentFile((student) => dropForeignMicrosoftTokens(student));
+    if (n) console.log(`[ms-oauth] dropped Microsoft tokens from ${n} student file(s) that did not come from MICROSOFT_CLIENT_ID`);
+  } catch (err) {
+    console.warn("[ms-oauth] token purge failed", shortMsError(err));
+  }
+}
+
 app.post("/v1/me/ms/disconnect", async (req, res) => {
   try {
     const student = await requireStudent(req, res);
@@ -1644,31 +1550,6 @@ app.post("/v1/me/ms/consent-request", async (req, res) => {
     return res.json({ ok: true, sent, sendError, ...request });
   } catch (err) {
     return fail(res, err);
-  }
-});
-
-app.post("/v1/me/onedrive/token", async (req, res) => {
-  try {
-    const student = await requireStudent(req, res);
-    if (!student) return;
-    const accepted = acceptPastedToken(req.body?.accessToken);
-    if (!accepted.ok) {
-      return res.status(400).json({ error: accepted.error || "That token is not a Graph token." });
-    }
-    await persistGraph(student, {
-      accessToken: accepted.accessToken,
-      refreshToken: accepted.refreshToken,
-      exp: accepted.exp,
-      email: accepted.email,
-      pending: null,
-    });
-    return res.json({
-      connected: true,
-      email: accepted.email,
-      pending: null,
-    });
-  } catch (err) {
-    return fail(res, err, 400);
   }
 });
 
@@ -1915,9 +1796,7 @@ app.post("/v1/me/onenote/pages", async (req, res) => {
 
 app.post("/v1/me/outlook/start", async (req, res) => {
   try {
-    const student = await requireStudent(req, res);
-    if (!student) return;
-    return res.json(await startMicrosoft(student, "outlook", req.body?.returnTo));
+    return await startMicrosoftRoute(req, res, "outlook");
   } catch (err) {
     return fail(res, err);
   }
@@ -1927,15 +1806,15 @@ app.get("/v1/me/outlook/status", async (req, res) => {
   try {
     const student = await requireStudent(req, res);
     if (!student) return;
-    const { current, pollError } = await pollDeviceBag(student, "outlook", pollOutlookCode, persistOutlook);
+    const current = await freshStudentForStatus(student);
     await reprobeIfStale(current);
     const flags = studioFlags(current);
     const ms = msServicesOf(current);
     return res.json({
       connected: Boolean(outlookReallyConnected(current, ms) || flags.outlook),
-      pending: outlookPending(current.outlook) || appPendingFor(current),
+      pending: appPendingFor(current),
       email: current.outlook?.email || "",
-      error: pollError || "",
+      error: "",
       studio: flags.outlook,
       ...statusExtras(current, "outlook", flags),
       onedriveConnected: Boolean(onedriveReallyConnected(current, ms) || flags.onedrive),
@@ -1943,33 +1822,6 @@ app.get("/v1/me/outlook/status", async (req, res) => {
     });
   } catch (err) {
     return fail(res, err);
-  }
-});
-
-app.post("/v1/me/outlook/token", async (req, res) => {
-  try {
-    const student = await requireStudent(req, res);
-    if (!student) return;
-    const accepted = acceptOutlookToken(req.body?.accessToken);
-    if (!accepted.ok) {
-      return res.status(400).json({ error: accepted.error || "That token is not an Outlook token." });
-    }
-    await persistOutlook(student, {
-      accessToken: accepted.accessToken,
-      refreshToken: accepted.refreshToken,
-      exp: accepted.exp,
-      email: accepted.email,
-      clientId: accepted.clientId,
-      scope: accepted.scope,
-      pending: null,
-    });
-    return res.json({
-      connected: true,
-      email: accepted.email,
-      pending: null,
-    });
-  } catch (err) {
-    return fail(res, err, 400);
   }
 });
 
@@ -2050,9 +1902,7 @@ app.post("/v1/me/outlook/send", async (req, res) => {
 
 app.post("/v1/me/teams/start", async (req, res) => {
   try {
-    const student = await requireStudent(req, res);
-    if (!student) return;
-    return res.json(await startMicrosoft(student, "teams", req.body?.returnTo));
+    return await startMicrosoftRoute(req, res, "teams");
   } catch (err) {
     return fail(res, err);
   }
@@ -2062,43 +1912,20 @@ app.get("/v1/me/teams/status", async (req, res) => {
   try {
     const student = await requireStudent(req, res);
     if (!student) return;
-    const { current, pollError } = await pollDeviceBag(student, "teams", pollTeamsCode, persistTeams);
+    const current = await freshStudentForStatus(student);
     await reprobeIfStale(current);
     const flags = studioFlags(current);
     const ms = msServicesOf(current);
     return res.json({
       connected: Boolean(teamsReallyConnected(current, ms) || flags.teams),
-      pending: teamsPending(current.teams) || appPendingFor(current),
+      pending: appPendingFor(current),
       email: current.teams?.email || "",
-      error: pollError || "",
+      error: "",
       studio: flags.teams,
       ...statusExtras(current, "teams", flags),
     });
   } catch (err) {
     return fail(res, err);
-  }
-});
-
-app.post("/v1/me/teams/token", async (req, res) => {
-  try {
-    const student = await requireStudent(req, res);
-    if (!student) return;
-    const accepted = acceptTeamsToken(req.body?.accessToken);
-    if (!accepted.ok) {
-      return res.status(400).json({ error: accepted.error || "That token is not a Teams token." });
-    }
-    await persistTeams(student, {
-      accessToken: accepted.accessToken,
-      refreshToken: accepted.refreshToken,
-      exp: accepted.exp,
-      email: accepted.email,
-      clientId: accepted.clientId,
-      scope: accepted.scope,
-      pending: null,
-    });
-    return res.json({ connected: true, email: accepted.email, pending: null });
-  } catch (err) {
-    return fail(res, err, 400);
   }
 });
 
@@ -2818,4 +2645,6 @@ mountMcp(app, { publicMe });
 
 app.listen(PORT, HOST, () => {
   console.log(`[jype-server] listening on http://${HOST}:${PORT}`);
+  console.log(`[ms-oauth] Microsoft sign-in ${msConfigured() ? "on (auth code + PKCE)" : "off: MICROSOFT_CLIENT_ID is unset"}`);
+  void purgeForeignMicrosoftTokensAtBoot();
 });

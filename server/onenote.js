@@ -1,6 +1,6 @@
 /**
  * School OneNote via Microsoft Graph.
- * Uses the same Office device-code token as OneDrive (student.graph).
+ * Uses the same Graph token as OneDrive (student.graph) from the auth-code sign-in.
  */
 
 import { GRAPH_BASE, graphGet } from "./onedrive.js";

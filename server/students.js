@@ -293,18 +293,12 @@ function graphConnected(graph) {
   return exp > Math.floor(Date.now() / 1000) - SKEW_SEC;
 }
 
-function publicPending(pending) {
-  if (!pending || typeof pending !== "object") return null;
-  const user_code = String(pending.user_code || "");
-  const verification_uri = String(pending.verification_uri || "");
-  const message = String(pending.message || "");
-  if (!user_code && !verification_uri && !message) return null;
-  const verification_uri_complete =
-    String(pending.verification_uri_complete || "").trim() ||
-    (user_code
-      ? `https://login.microsoft.com/device?otc=${encodeURIComponent(user_code)}`
-      : "");
-  return { user_code, verification_uri, verification_uri_complete, message };
+/**
+ * Per-bag pending state is always null now. The only sign-in is the auth-code redirect,
+ * which lives in student.msAuth and is reported by the status routes as appPending.
+ */
+function publicPending() {
+  return null;
 }
 
 export function publicProfile(student) {
@@ -665,6 +659,31 @@ export async function findStudentByMsAuthState(state) {
     if (student?.msAuth?.state === needle) return student;
   }
   return null;
+}
+
+/**
+ * Visit every student file. fn(student, fileId) returns true when it changed the
+ * student; the file is then written back in place. Used for one-off cleanups at boot.
+ */
+export async function forEachStudentFile(fn) {
+  let names;
+  try {
+    names = await readdir(studentsDir());
+  } catch {
+    return 0;
+  }
+  let changed = 0;
+  for (const name of names) {
+    if (!name.endsWith(".json")) continue;
+    const fileId = name.slice(0, -5);
+    const student = await loadStudentByFileId(fileId).catch(() => null);
+    if (!student) continue;
+    if (await fn(student, fileId)) {
+      await writeJsonAtomic(studentPath(fileId), student);
+      changed += 1;
+    }
+  }
+  return changed;
 }
 
 export function mergeOutlook(student, patch) {

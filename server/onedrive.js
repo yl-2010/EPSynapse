@@ -1,17 +1,19 @@
 /**
  * School Microsoft 365 via Microsoft Graph.
  *
- * Two client modes:
- * - "office": the Microsoft Office first-party client with device code. Pre-consented on
- *   the school tenant, so Microsoft never asks, but the token only carries whatever
- *   Office already has (no OneNote read at Eastside Prep).
- * - "app": our own registration (MICROSOFT_CLIENT_ID). Authorization code + PKCE with
- *   named delegated scopes. School IT approves it once through adminConsentUrl().
+ * One sign-in path only: authorization code + PKCE against EPSynapse's own Entra app
+ * registration (MICROSOFT_CLIENT_ID). The student signs in and consents in a browser
+ * and Microsoft redirects back to /v1/ms/callback. School IT approves the app once
+ * through adminConsentUrl().
+ *
+ * There is no device-code flow, no first-party client id, and no pasted-token path.
+ * Microsoft Defender treats device-code sign-ins from a script as device-code
+ * phishing and disabled student accounts when EPSynapse used it. When
+ * MICROSOFT_CLIENT_ID is unset, Microsoft sign-in is simply off.
  */
 
 import { createHash, randomBytes } from "node:crypto";
 
-export const OFFICE_CLIENT_ID = "d3590ed6-52b3-4102-aeff-aad2292ab01c";
 export const EPS_TENANT_ID = "b2681e8b-dd20-46cf-b163-371a2d7c6014";
 export const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
 export const WRITE_FOLDER = "EPSynapse";
@@ -19,22 +21,27 @@ export const MS_TENANT = String(process.env.MICROSOFT_TENANT || "").trim() || EP
 export const APP_SCOPES =
   "User.Read Files.ReadWrite Notes.ReadWrite Mail.ReadWrite Mail.Send Chat.ReadWrite offline_access openid profile email";
 export const ADMIN_CONSENT_REDIRECT = "https://epsynapse.com/?ms=admin-consent";
+export const MS_OFF_MESSAGE =
+  "Microsoft sign-in is off. EPSynapse needs its own Microsoft app registration approved by school IT before this can connect.";
 
 const LOGIN = `https://login.microsoftonline.com/${MS_TENANT}/oauth2/v2.0`;
-const DEVICE_SCOPE =
-  "https://graph.microsoft.com/.default offline_access openid profile";
 
+/** Configured client id, or "" when Microsoft sign-in is off. Never a first-party id. */
 export function graphClientId() {
-  return String(process.env.MICROSOFT_CLIENT_ID || "").trim() || OFFICE_CLIENT_ID;
+  return String(process.env.MICROSOFT_CLIENT_ID || "").trim();
+}
+
+export function msConfigured() {
+  return graphClientId().length > 0;
 }
 
 export function msClientSecret() {
   return String(process.env.MICROSOFT_CLIENT_SECRET || "").trim();
 }
 
+/** "app" when MICROSOFT_CLIENT_ID is set, "off" otherwise. */
 export function msClientMode() {
-  const id = graphClientId();
-  return id && id.toLowerCase() !== OFFICE_CLIENT_ID ? "app" : "office";
+  return msConfigured() ? "app" : "off";
 }
 
 export function msScopes() {
@@ -42,11 +49,15 @@ export function msScopes() {
   return override || APP_SCOPES;
 }
 
-function refreshScope() {
-  return msClientMode() === "app" ? msScopes() : DEVICE_SCOPE;
+/** True when a stored token bag came from the configured app registration. */
+export function bagMatchesClient(bag) {
+  if (!msConfigured()) return false;
+  const id = String(bag?.clientId || "").trim().toLowerCase();
+  return id === graphClientId().toLowerCase();
 }
 
 export function adminConsentUrl() {
+  if (!msConfigured()) return "";
   const q = new URLSearchParams({
     client_id: graphClientId(),
     scope: "https://graph.microsoft.com/.default",
@@ -102,6 +113,7 @@ export function userDeclinedText(text) {
 export async function exchangeAuthCode({ code, codeVerifier, redirectUri } = {}) {
   const authCode = String(code || "").trim();
   if (!authCode) return { ok: false, error: "missing code" };
+  if (!msConfigured()) return { ok: false, error: "microsoft_off", errorDescription: MS_OFF_MESSAGE };
   const clientId = graphClientId();
   const body = new URLSearchParams({
     client_id: clientId,
@@ -145,12 +157,6 @@ export async function exchangeAuthCode({ code, codeVerifier, redirectUri } = {})
   };
 }
 
-export function completeDeviceUrl(userCode, uri) {
-  const code = String(userCode || "").trim();
-  if (code) return `https://login.microsoft.com/device?otc=${encodeURIComponent(code)}`;
-  return String(uri || "https://login.microsoft.com/device").trim();
-}
-
 export function tokenScopes(token) {
   return String(jwtClaims(token).scp || "").toLowerCase();
 }
@@ -168,7 +174,6 @@ export function tokenHasMail(token) {
 }
 const TOKEN_SKEW_S = 90;
 const GRAPH_APP_ID = "00000003-0000-0000-c000-000000000000";
-const DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code";
 
 function b64urlJson(part) {
   try {
@@ -186,12 +191,6 @@ function jwtClaims(token) {
   return claims && typeof claims === "object" ? claims : {};
 }
 
-function tokenAudience(token) {
-  const aud = jwtClaims(token).aud;
-  if (Array.isArray(aud)) return aud.map(String).join(" ");
-  return String(aud || "");
-}
-
 function jwtExp(token) {
   const exp = Number(jwtClaims(token).exp);
   return Number.isFinite(exp) ? exp : 0;
@@ -200,11 +199,6 @@ function jwtExp(token) {
 function jwtEmail(token) {
   const c = jwtClaims(token);
   return String(c.preferred_username || c.upn || c.unique_name || c.email || "").trim();
-}
-
-function isGraphAudience(token) {
-  const aud = tokenAudience(token).toLowerCase();
-  return aud.includes("graph.microsoft.com") || aud.includes(GRAPH_APP_ID);
 }
 
 function redactSecrets(raw) {
@@ -220,14 +214,6 @@ function oauthError(data, fallback) {
     .trim()
     .slice(0, 160);
   return code || desc || fallback || "oauth failed";
-}
-
-function pasteFallback(error) {
-  return {
-    ok: false,
-    error: String(error || "Microsoft blocked this sign-in."),
-    pasteToken: false,
-  };
 }
 
 function tokenPayload(accessToken, refreshToken = "") {
@@ -284,94 +270,27 @@ async function readOauthJson(res) {
   }
 }
 
-export async function startDeviceCode() {
-  const clientId = graphClientId();
-  try {
-    const res = await fetch(`${LOGIN}/devicecode`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: clientId,
-        scope: DEVICE_SCOPE,
-      }),
-    });
-    const data = await readOauthJson(res);
-    if (!res.ok || !data.device_code || !data.user_code) {
-      return pasteFallback(oauthError(data, `device code ${res.status}`));
-    }
-    const expiresIn = Number(data.expires_in) || 900;
-    return {
-      ok: true,
-      user_code: String(data.user_code),
-      verification_uri: String(data.verification_uri || ""),
-      verification_uri_complete:
-        String(data.verification_uri_complete || "").trim() ||
-        completeDeviceUrl(data.user_code, data.verification_uri),
-      device_code: String(data.device_code),
-      clientId,
-      interval: Number(data.interval) || 5,
-      expiresAt: Date.now() + expiresIn * 1000,
-      message: String(data.message || "").trim(),
-    };
-  } catch (err) {
-    return pasteFallback(err instanceof Error ? err.message : "device code failed");
-  }
-}
-
-export async function pollDeviceCode(deviceCode, clientId) {
-  const code = String(deviceCode || "").trim();
-  if (!code) return pasteFallback("missing device_code");
-  const id = String(clientId || "").trim() || graphClientId();
-  let data;
-  try {
-    const res = await fetch(`${LOGIN}/token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: id,
-        grant_type: DEVICE_GRANT,
-        device_code: code,
-      }),
-    });
-    data = await readOauthJson(res);
-    if (res.ok && data.access_token) {
-      return tokenPayload(data.access_token, data.refresh_token);
-    }
-  } catch (err) {
-    return pasteFallback(err instanceof Error ? err.message : "token poll failed");
-  }
-  const error = String(data?.error || "token poll failed");
-  if (error === "authorization_pending" || error === "slow_down") {
-    return { ok: false, pending: true, error };
-  }
-  return pasteFallback(oauthError(data, error));
-}
-
-export function acceptPastedToken(accessToken) {
-  const token = String(accessToken || "").trim();
-  if (!token || token.split(".").length < 2) {
-    return { ok: false, error: "invalid token" };
-  }
-  if (!isGraphAudience(token)) {
-    return { ok: false, error: "token audience is not Graph" };
-  }
-  return tokenPayload(token, "");
-}
-
+/**
+ * Refresh only tokens that came from our own app registration. A bag with a different
+ * or missing clientId is a leftover from a flow that no longer exists and is refused.
+ */
 export async function refreshAccessToken(refreshToken, { clientId, scope } = {}) {
   const rt = String(refreshToken || "").trim();
   if (!rt) return { ok: false, error: "no refresh token" };
-  const id = String(clientId || "").trim() || graphClientId();
+  if (!msConfigured()) return { ok: false, error: MS_OFF_MESSAGE };
+  const id = graphClientId();
+  const given = String(clientId || "").trim().toLowerCase();
+  if (given && given !== id.toLowerCase()) {
+    return { ok: false, error: "This Microsoft sign-in is from an old flow. Connect again." };
+  }
   const body = new URLSearchParams({
     client_id: id,
     grant_type: "refresh_token",
     refresh_token: rt,
-    scope: String(scope || "").trim() || refreshScope(),
+    scope: String(scope || "").trim() || msScopes(),
   });
   const secret = msClientSecret();
-  if (secret && id === graphClientId() && msClientMode() === "app") {
-    body.set("client_secret", secret);
-  }
+  if (secret) body.set("client_secret", secret);
   try {
     const res = await fetch(`${LOGIN}/token`, {
       method: "POST",
@@ -693,22 +612,6 @@ export async function uploadFile(token, { name, content, contentType } = {}) {
     name: String(item.name || safe).trim(),
     webUrl: String(item.webUrl || "").trim(),
     size: Number(item.size) || body.length,
-  };
-}
-
-export function publicPending(graph) {
-  const src =
-    graph?.pending && typeof graph.pending === "object" ? graph.pending : graph;
-  const code = String(src?.user_code || "").trim();
-  const uri = String(src?.verification_uri || "").trim();
-  if (!code && !uri) return null;
-  if (isConnected(graph)) return null;
-  return {
-    user_code: code,
-    verification_uri: uri,
-    verification_uri_complete:
-      String(src.verification_uri_complete || "").trim() || completeDeviceUrl(code, uri),
-    message: String(src.message || "").trim(),
   };
 }
 

@@ -1,15 +1,14 @@
 /**
- * School Teams via Microsoft Graph device-code flow.
- * Chat scopes need Eastside Prep IT approval. adminConsentUrl() is for that step.
+ * School Teams via Microsoft Graph.
+ * Tokens come only from the authorization code + PKCE sign-in in onedrive.js
+ * (EPSynapse's own app registration). Chat scopes need Eastside Prep IT approval;
+ * adminConsentUrl() is for that step.
  */
 
 import {
   adminConsentUrl,
-  completeDeviceUrl,
-  msClientMode,
-  msClientSecret,
-  MS_TENANT,
-  OFFICE_CLIENT_ID,
+  graphClientId,
+  refreshAccessToken as refreshGraphToken,
 } from "./onedrive.js";
 
 export { adminConsentUrl };
@@ -17,17 +16,11 @@ export { adminConsentUrl };
 export const EPS_TENANT_ID = "b2681e8b-dd20-46cf-b163-371a2d7c6014";
 export const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
 
-const LOGIN = `https://login.microsoftonline.com/${MS_TENANT}/oauth2/v2.0`;
-const TEAMS_SCOPE =
-  "Chat.Read Chat.ReadWrite ChatMessage.Send offline_access openid profile";
-
 const TOKEN_SKEW_S = 90;
-const GRAPH_APP_ID = "00000003-0000-0000-c000-000000000000";
-const DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code";
 const MESSAGE_TEXT_MAX = 4000;
 
 export function teamsClientId() {
-  return String(process.env.MICROSOFT_CLIENT_ID || "").trim() || OFFICE_CLIENT_ID;
+  return graphClientId();
 }
 
 function b64urlJson(part) {
@@ -51,188 +44,10 @@ function jwtExp(token) {
   return Number.isFinite(exp) ? exp : 0;
 }
 
-function jwtEmail(token) {
-  const c = jwtClaims(token);
-  return String(c.preferred_username || c.upn || c.unique_name || c.email || "").trim();
-}
-
-function tokenAudience(token) {
-  const aud = jwtClaims(token).aud;
-  if (Array.isArray(aud)) return aud.map(String).join(" ");
-  return String(aud || "");
-}
-
-function isGraphAudience(token) {
-  const aud = tokenAudience(token).toLowerCase();
-  return aud.includes("graph.microsoft.com") || aud.includes(GRAPH_APP_ID);
-}
-
-function hasChatScope(token) {
-  const scp = String(jwtClaims(token).scp || "").toLowerCase();
-  if (!scp) return true;
-  return /chat\.(read|readwrite)|chatmessage\.send/.test(scp);
-}
-
 function redactSecrets(raw) {
   return String(raw || "")
     .replace(/Bearer\s+[A-Za-z0-9._\-]+/gi, "Bearer [redacted]")
     .replace(/eyJ[A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+/g, "[jwt]");
-}
-
-function oauthError(data, fallback) {
-  const code = String(data?.error || "").trim();
-  const desc = redactSecrets(data?.error_description || "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 180);
-  return code || desc || fallback || "oauth failed";
-}
-
-function tokenPayload(accessToken, refreshToken = "", extra = {}) {
-  return {
-    ok: true,
-    accessToken,
-    refreshToken: refreshToken || "",
-    exp: jwtExp(accessToken),
-    email: jwtEmail(accessToken),
-    clientId: extra.clientId || "",
-    scope: extra.scope || "",
-  };
-}
-
-async function readOauthJson(res) {
-  const text = await res.text();
-  if (!text.trim()) return {};
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { error: redactSecrets(text).replace(/\s+/g, " ").slice(0, 160) };
-  }
-}
-
-async function requestDeviceCode(clientId, scope) {
-  const res = await fetch(`${LOGIN}/devicecode`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ client_id: clientId, scope }),
-  });
-  const data = await readOauthJson(res);
-  if (!res.ok || !data.device_code || !data.user_code) {
-    return { ok: false, error: oauthError(data, `device code ${res.status}`) };
-  }
-  const expiresIn = Number(data.expires_in) || 900;
-  return {
-    ok: true,
-    user_code: String(data.user_code),
-    verification_uri: String(data.verification_uri || ""),
-    verification_uri_complete:
-      String(data.verification_uri_complete || "").trim() ||
-      completeDeviceUrl(data.user_code, data.verification_uri),
-    device_code: String(data.device_code),
-    clientId,
-    scope,
-    interval: Number(data.interval) || 5,
-    expiresAt: Date.now() + expiresIn * 1000,
-    message: String(data.message || "").trim(),
-  };
-}
-
-export async function startDeviceCode() {
-  try {
-    const flow = await requestDeviceCode(teamsClientId(), TEAMS_SCOPE);
-    if (flow.ok) return flow;
-    return {
-      ok: false,
-      error: flow.error || "Microsoft would not start Teams sign-in.",
-      adminConsentUrl: adminConsentUrl(),
-    };
-  } catch (err) {
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : "device code failed",
-      adminConsentUrl: adminConsentUrl(),
-    };
-  }
-}
-
-export async function pollDeviceCode(deviceCode, clientId) {
-  const code = String(deviceCode || "").trim();
-  const id = String(clientId || "").trim() || teamsClientId();
-  if (!code) return { ok: false, error: "missing device_code" };
-  let data;
-  try {
-    const res = await fetch(`${LOGIN}/token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: id,
-        grant_type: DEVICE_GRANT,
-        device_code: code,
-      }),
-    });
-    data = await readOauthJson(res);
-    if (res.ok && data.access_token) {
-      return tokenPayload(data.access_token, data.refresh_token, {
-        clientId: id,
-        scope: TEAMS_SCOPE,
-      });
-    }
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "token poll failed" };
-  }
-  const error = String(data?.error || "token poll failed");
-  if (error === "authorization_pending" || error === "slow_down") {
-    return { ok: false, pending: true, error };
-  }
-  return { ok: false, error: oauthError(data, error) };
-}
-
-export function acceptPastedToken(accessToken) {
-  const token = String(accessToken || "").trim();
-  if (!token || token.split(".").length < 2) {
-    return { ok: false, error: "invalid token" };
-  }
-  if (!isGraphAudience(token)) {
-    return { ok: false, error: "token audience is not Microsoft Graph" };
-  }
-  if (!hasChatScope(token)) {
-    return { ok: false, error: "token is missing Teams chat scopes" };
-  }
-  return tokenPayload(token, "", { clientId: teamsClientId(), scope: TEAMS_SCOPE });
-}
-
-async function refreshAccessToken(refreshToken, clientId, scope) {
-  const rt = String(refreshToken || "").trim();
-  const id = String(clientId || "").trim() || teamsClientId();
-  const scp = String(scope || "").trim() || TEAMS_SCOPE;
-  if (!rt) return { ok: false, error: "no refresh token" };
-  const body = new URLSearchParams({
-    client_id: id,
-    grant_type: "refresh_token",
-    refresh_token: rt,
-    scope: scp,
-  });
-  const secret = msClientSecret();
-  if (secret && msClientMode() === "app" && id === teamsClientId()) {
-    body.set("client_secret", secret);
-  }
-  try {
-    const res = await fetch(`${LOGIN}/token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body,
-    });
-    const data = await readOauthJson(res);
-    if (!res.ok || !data.access_token) {
-      return { ok: false, error: oauthError(data, `refresh ${res.status}`) };
-    }
-    return tokenPayload(data.access_token, data.refresh_token || rt, {
-      clientId: id,
-      scope: scp,
-    });
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "refresh failed" };
-  }
 }
 
 export async function ensureFreshToken(teams) {
@@ -240,11 +55,10 @@ export async function ensureFreshToken(teams) {
   if (!access) throw new Error("not connected to Teams");
   const exp = Number(teams.exp) || jwtExp(access);
   if (exp * 1000 > Date.now() + TOKEN_SKEW_S * 1000) return teams;
-  const refreshed = await refreshAccessToken(
-    teams.refreshToken,
-    teams.clientId,
-    teams.scope
-  );
+  const refreshed = await refreshGraphToken(teams.refreshToken, {
+    clientId: teams.clientId,
+    scope: teams.scope,
+  });
   if (!refreshed.ok) {
     throw new Error(refreshed.error || "Teams token expired");
   }
@@ -254,8 +68,8 @@ export async function ensureFreshToken(teams) {
     refreshToken: refreshed.refreshToken || teams.refreshToken || "",
     exp: refreshed.exp,
     email: refreshed.email || teams.email || "",
-    clientId: refreshed.clientId || teams.clientId || "",
-    scope: refreshed.scope || teams.scope || "",
+    clientId: teams.clientId || graphClientId(),
+    scope: teams.scope || "",
   };
 }
 
@@ -362,21 +176,6 @@ export async function sendChatMessage(token, { chat, text } = {}) {
     { body: { contentType: "text", content } }
   );
   return { sent: true, chatId };
-}
-
-export function publicPending(teams) {
-  const src = teams?.pending && typeof teams.pending === "object" ? teams.pending : teams;
-  const code = String(src?.user_code || "").trim();
-  const uri = String(src?.verification_uri || "").trim();
-  if (!code && !uri) return null;
-  if (isConnected(teams)) return null;
-  return {
-    user_code: code,
-    verification_uri: uri,
-    verification_uri_complete:
-      String(src.verification_uri_complete || "").trim() || completeDeviceUrl(code, uri),
-    message: String(src.message || "").trim(),
-  };
 }
 
 export function isConnected(teams) {
