@@ -9,6 +9,7 @@
     "dev": "node --env-file=.env --watch index.js"
   },
   "dependencies": {
+    "@cursor/sdk": "^1.0.31",
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "multer": "^2.0.2",

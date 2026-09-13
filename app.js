@@ -569,7 +569,11 @@
   }
 
   function accountHasKey() {
-    return Boolean(me && me.modelKeySet);
+    return Boolean(me && (me.modelKeySet || me.cursorAgent));
+  }
+
+  function accountUsesCursor() {
+    return Boolean(me && (me.cursorAgent || me.modelProvider === "cursor"));
   }
 
   function accountKeyCount() {
@@ -593,6 +597,7 @@
   }
 
   function chatKeySummary() {
+    if (accountUsesCursor()) return "Cursor";
     if (!accountHasKey()) return "Add a Groq key";
     const id = providerLabel();
     const n = accountKeyCount();
@@ -605,8 +610,11 @@
       providerSel.value = id;
     }
     localStorage.setItem(LS_PROV, providerSel.value || id);
-    document.documentElement.dataset.modelProvider = providerSel.value || id;
+    document.documentElement.dataset.modelProvider = accountUsesCursor()
+      ? "cursor"
+      : providerSel.value || id;
     document.documentElement.dataset.modelKeySet = accountHasKey() ? "1" : "";
+    document.documentElement.dataset.cursorAgent = accountUsesCursor() ? "1" : "";
     refreshKeyStatus();
     window.__epsynapseRefreshChatGuide?.();
   }
@@ -2629,17 +2637,35 @@
 
   function refreshKeyStatus() {
     const hasKey = accountHasKey();
+    const cursor = accountUsesCursor();
     const entry = document.getElementById("key-entry");
     const ready = document.getElementById("key-ready");
     const readyLabel = document.getElementById("key-ready-label");
     const adding = entry && entry.dataset.add === "1";
-    if (entry) entry.hidden = hasKey && !adding;
+    if (entry) entry.hidden = (hasKey && !adding) || cursor;
     if (ready) ready.hidden = !hasKey;
     if (readyLabel) readyLabel.textContent = hasKey ? chatKeySummary() : "";
-    paintKeyList();
+    if (!cursor) paintKeyList();
     paintKeysSummary();
     const steps = document.getElementById("key-steps");
-    if (steps) steps.hidden = hasKey && !adding;
+    if (steps) steps.hidden = (hasKey && !adding) || cursor;
+    const addBtn = document.getElementById("key-add");
+    const clearBtn = document.getElementById("key-clear");
+    const limitHint = document.getElementById("key-limit-hint");
+    const groqLink = document.querySelector('[data-pane="chat"] a.set-link');
+    if (addBtn) addBtn.hidden = cursor;
+    if (clearBtn) clearBtn.hidden = cursor;
+    if (limitHint) limitHint.hidden = cursor;
+    if (groqLink) groqLink.hidden = cursor;
+    if (cursor) {
+      const list = document.getElementById("key-list");
+      if (list) {
+        list.innerHTML = "";
+        list.hidden = true;
+      }
+      setStatus(keyStatus, "This account uses Cursor on the Mac. No Groq key.");
+      return;
+    }
     if (hasKey && !adding) {
       setStatus(keyStatus, "");
       return;

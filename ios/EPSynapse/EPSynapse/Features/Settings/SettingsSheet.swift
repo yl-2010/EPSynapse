@@ -288,11 +288,18 @@ struct SettingsSheet: View {
 
     private var chatPane: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if !hasChatKey || replacingKey {
+            if isCursorAgent {
+                Text("Cursor")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(EPSTheme.fg)
+                Text("This account uses Cursor on the Mac. No Groq key.")
+                    .font(.footnote)
+                    .foregroundStyle(EPSTheme.muted)
+            } else if !hasChatKey || replacingKey {
                 stepList(Self.chatSteps)
             }
 
-            if hasChatKey {
+            if hasChatKey && !isCursorAgent {
                 HStack(alignment: .center, spacing: 12) {
                     Text(chatKeyTitle)
                         .font(.body.weight(.semibold))
@@ -320,7 +327,7 @@ struct SettingsSheet: View {
                 }
             }
 
-            if !hasChatKey || replacingKey {
+            if !isCursorAgent && (!hasChatKey || replacingKey) {
                 fieldLabel("Model")
                 glassField {
                     Picker("Model", selection: $session.provider) {
@@ -354,7 +361,9 @@ struct SettingsSheet: View {
                     .font(.footnote)
                     .foregroundStyle(EPSTheme.muted)
             }
-            helpLink("How to get a Groq key", Self.groqHelp)
+            if !isCursorAgent {
+                helpLink("How to get a Groq key", Self.groqHelp)
+            }
         }
     }
 
@@ -687,7 +696,12 @@ struct SettingsSheet: View {
         return saved.isEmpty ? "Eastside Prep" : saved
     }
 
+    private var isCursorAgent: Bool {
+        session.profile?.modelProvider == "cursor"
+    }
+
     private var chatMeta: String {
+        if isCursorAgent { return "Cursor" }
         guard hasChatKey else { return "Add a Groq key" }
         if chatKeyCount > 1 { return "\(providerLabel) · \(chatKeyCount) keys" }
         return providerLabel
@@ -724,10 +738,12 @@ struct SettingsSheet: View {
         if let label = session.providers.first(where: { $0.id == session.provider })?.label, !label.isEmpty {
             return label
         }
+        if isCursorAgent { return "Cursor" }
         switch session.provider {
         case "groq": return "Groq"
         case "gemini": return "Gemini"
         case "openrouter": return "OpenRouter"
+        case "cursor": return "Cursor"
         default: return session.provider.isEmpty ? "Groq" : session.provider
         }
     }

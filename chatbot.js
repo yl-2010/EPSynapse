@@ -55,6 +55,8 @@
   ].join("\n");
   const READY_GUIDE =
     "Your Groq key and Canvas token are saved on this account. When OneDrive, Outlook, and Teams say Connected in settings, the agent can use them too. Ask about a class, homework, or the day. If chat stops, Groq usually rejected the key or hit the free limit (about 1000 chats a day). Create a new gsk_ at [console.groq.com/keys](https://console.groq.com/keys), paste it in Settings → Chat key, or wait. A second key on the same Groq login does not reset a daily cap. Steps on [epsynapse.com/groq](/groq).";
+  const CURSOR_READY_GUIDE =
+    "This account uses Cursor on the Mac. No Groq key. When Canvas, OneDrive, Outlook, and Teams say Connected in settings, the agent can use them too. Ask about a class, homework, or the day.";
   const LIMIT_GUIDE = [
     "Chat stopped because Groq refused the saved key. That is Groq, not this page.",
     "",
@@ -362,8 +364,13 @@
   function hasChatKey() {
     return (
       Boolean(localStorage.getItem(LS_KEY)) ||
-      document.documentElement.dataset.modelKeySet === "1"
+      document.documentElement.dataset.modelKeySet === "1" ||
+      document.documentElement.dataset.cursorAgent === "1"
     );
+  }
+
+  function usesCursor() {
+    return document.documentElement.dataset.cursorAgent === "1";
   }
 
   function hasCanvas() {
@@ -407,7 +414,9 @@
     if (!input) return;
     input.placeholder = hasChatKey()
       ? "Ask your personal agent…"
-      : "Save a Groq key in Settings first…";
+      : usesCursor()
+        ? "Ask your personal agent…"
+        : "Save a Groq key in Settings first…";
   }
 
   function clearGuide() {
@@ -423,9 +432,9 @@
     el.className = "yan-chat-bubble yan-chat-bubble--assistant";
     el.dataset.liquidGlass = "rounded";
     el.dataset.filterId = "lg-edu-chat-guide";
-    let body = READY_GUIDE;
+    let body = usesCursor() ? CURSOR_READY_GUIDE : READY_GUIDE;
     if (!hasChatKey()) body = SETUP_GUIDE;
-    else if (localStorage.getItem(LS_KEY_ERR)) body = LIMIT_GUIDE;
+    else if (!usesCursor() && localStorage.getItem(LS_KEY_ERR)) body = LIMIT_GUIDE;
     else if (!hasCanvas()) body = CANVAS_GUIDE;
     writeBubble(el, "assistant", body);
     turn.appendChild(el);

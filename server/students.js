@@ -8,6 +8,7 @@ import { randomBytes } from "node:crypto";
 import { mkdir, readdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { usesCursorAgent } from "./cursor-demo.js";
 
 export const COOKIE = "epsynapse_sid";
 export const HEADER = "x-epsynapse-session";
@@ -308,6 +309,7 @@ function publicPending(pending) {
 
 export function publicProfile(student) {
   const s = hydrate(student);
+  const cursor = usesCursorAgent(s);
   return {
     email: s.email,
     googleName: s.googleName,
@@ -319,11 +321,12 @@ export function publicProfile(student) {
     canvasHost: s.canvasHost,
     displayName: s.displayName,
     canvasConnected: Boolean(s.canvasToken),
-    modelKeySet: s.modelKeys.length > 0,
-    modelProvider: s.modelProvider || "groq",
-    modelKeyHint: modelKeyHint(s.modelKeys[0] || s.modelKey),
-    modelKeyHints: s.modelKeys.map(modelKeyHint),
-    modelKeyCount: s.modelKeys.length,
+    cursorAgent: cursor,
+    modelKeySet: cursor || s.modelKeys.length > 0,
+    modelProvider: cursor ? "cursor" : s.modelProvider || "groq",
+    modelKeyHint: cursor ? "cursor" : modelKeyHint(s.modelKeys[0] || s.modelKey),
+    modelKeyHints: cursor ? ["cursor"] : s.modelKeys.map(modelKeyHint),
+    modelKeyCount: cursor ? Math.max(1, s.modelKeys.length) : s.modelKeys.length,
     onedriveConnected: graphConnected(s.graph),
     onedriveEmail: s.graph.email || "",
     onedrivePending: publicPending(s.graph.pending),

@@ -27,6 +27,8 @@ import {
   upstreamHeaders,
 } from "./agent.js";
 import { AGENT_TOOLS, executeAgentTool, navigateHref, normalizeNavigate } from "./agent-tools.js";
+import { runCursorAgentChat } from "./cursor-agent.js";
+import { usesCursorAgent } from "./cursor-demo.js";
 import {
   applyScheduleToGrades,
   dashboardPayload,
@@ -2416,18 +2418,23 @@ app.post("/v1/agent/chat", async (req, res) => {
   const student = await requireStudent(req, res);
   if (!student) return;
 
-  const providerId = String(req.body?.provider || student.modelProvider || "groq");
-  const provider = PROVIDERS[providerId];
-  if (!provider) {
-    return res.status(400).json({ error: "Unknown provider." });
-  }
-
   const messages = sanitizeMessages(req.body?.messages);
   if (!messages.length) {
     return res.status(400).json({ error: "Send at least one user message." });
   }
 
-  const { keys, source } = resolveApiKeys(req, providerId, student);
+  const useCursor = usesCursorAgent(student);
+  const providerId = useCursor
+    ? "cursor"
+    : String(req.body?.provider || student.modelProvider || "groq");
+  const provider = useCursor ? { id: "cursor", label: "Cursor" } : PROVIDERS[providerId];
+  if (!provider) {
+    return res.status(400).json({ error: "Unknown provider." });
+  }
+
+  const { keys, source } = useCursor
+    ? { keys: ["cursor"], source: "cursor" }
+    : resolveApiKeys(req, providerId, student);
   if (!keys.length) {
     return res.status(401).json({
       error: MISSING_KEY_ERROR,
@@ -2620,6 +2627,21 @@ app.post("/v1/agent/chat", async (req, res) => {
     const uiBlock = formatUiContextBlock(normalizeUiContext(req.body?.uiContext));
     if (uiBlock) {
       snapshot = snapshot ? `${snapshot}\n\n${uiBlock}` : uiBlock;
+    }
+
+    if (useCursor) {
+      const cursorOut = await runCursorAgentChat({
+        student,
+        messages: convo,
+        snapshot,
+        ownerId,
+        req,
+        writeEvent,
+      });
+      for (const kind of cursorOut.kinds || []) kinds.add(kind);
+      const nextNav = normalizeNavigate(cursorOut.navigate);
+      if (nextNav) navigate = nextNav;
+      return finishMutations(cursorOut.streamed ? "" : cursorOut.content || (kinds.size ? "Done" : ""));
     }
 
     for (let round = 0; round < 8; round += 1) {
