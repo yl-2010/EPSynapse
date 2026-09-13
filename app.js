@@ -430,6 +430,7 @@
       paintOnedrive();
       paintOutlook();
       paintTeams();
+      resetMcp();
       resumeMsPolls();
       await migrateLocalKey();
       await loadDashboard();
@@ -548,6 +549,7 @@
     paintOnedrive();
     paintOutlook();
     paintTeams();
+    resetMcp();
     lastHome = { courses: [], assignments: [], files: [], messages: [] };
     if (appEl) appEl.innerHTML = "";
   }
@@ -755,6 +757,8 @@
         msNeedsApproval("teams")
       );
     }
+    const mcpSum = document.getElementById("mcp-summary");
+    if (mcpSum) mcpSum.textContent = signedInViaGoogle() ? "Ready" : "Not signed in";
     document.querySelectorAll(".set-nav[data-pane]").forEach((btn) => {
       btn.classList.toggle("is-on", btn.getAttribute("data-pane") === activePane());
     });
@@ -793,6 +797,8 @@
     paintOnedrive();
     paintOutlook();
     paintTeams();
+    if (name === "mcp") loadMcp();
+    else paintMcp();
     paintNavSummaries();
     glassAfterMove();
     window.setTimeout(glassAfterMove, 320);
@@ -2581,6 +2587,196 @@
     paintOnedrive();
     paintOutlook();
     paintTeams();
+  }
+
+  /* ---------- MCP pane: connect Perplexity, Claude, or Cursor ---------- */
+
+  let mcpInfo = null;
+  let mcpLoading = null;
+  let mcpClient = "perplexity";
+  let mcpRevealed = false;
+  const mcpStatusEl = document.getElementById("mcp-status");
+
+  function mcpMask(token) {
+    const t = String(token || "");
+    if (!t) return "";
+    return t.slice(0, 4) + "\u2022".repeat(Math.max(8, Math.min(24, t.length - 4)));
+  }
+
+  function mcpJsonFor(client, info) {
+    if (!info) return "";
+    const blob =
+      client === "claude" ? info.claudeJson : client === "cursor" ? info.cursorJson : info.perplexityJson;
+    return blob ? JSON.stringify(blob, null, 2) : "";
+  }
+
+  function mcpDisplayJson() {
+    const text = mcpJsonFor(mcpClient, mcpInfo);
+    if (!text || mcpRevealed || !mcpInfo?.token) return text;
+    return text.split(mcpInfo.token).join(mcpMask(mcpInfo.token));
+  }
+
+  function paintMcp() {
+    const ready = document.getElementById("mcp-ready");
+    const summary = document.getElementById("mcp-summary");
+    const on = signedInViaGoogle();
+    if (summary) summary.textContent = on ? "Ready" : "Not signed in";
+    if (!on) {
+      mcpInfo = null;
+      mcpRevealed = false;
+      if (ready) ready.hidden = true;
+      setStatus(mcpStatusEl, NEED_GOOGLE);
+      return;
+    }
+    if (!mcpInfo) {
+      if (ready) ready.hidden = true;
+      if (!mcpLoading) setStatus(mcpStatusEl, "");
+      return;
+    }
+    if (ready) ready.hidden = false;
+    const urlEl = document.getElementById("mcp-url");
+    const tokenEl = document.getElementById("mcp-token");
+    const jsonEl = document.getElementById("mcp-json");
+    const reveal = document.getElementById("mcp-reveal");
+    if (urlEl) urlEl.textContent = mcpInfo.url || "";
+    if (tokenEl) tokenEl.textContent = mcpRevealed ? mcpInfo.token || "" : mcpMask(mcpInfo.token);
+    if (jsonEl) jsonEl.textContent = mcpDisplayJson();
+    if (reveal) reveal.textContent = mcpRevealed ? "Hide" : "Reveal";
+    document.querySelectorAll(".mcp-tab[data-client]").forEach((tab) => {
+      const isOn = tab.getAttribute("data-client") === mcpClient;
+      tab.classList.toggle("is-on", isOn);
+      tab.setAttribute("aria-selected", isOn ? "true" : "false");
+    });
+  }
+
+  async function loadMcp(force) {
+    if (!signedInViaGoogle()) {
+      paintMcp();
+      return;
+    }
+    if (mcpInfo && !force) {
+      paintMcp();
+      return;
+    }
+    if (mcpLoading) return mcpLoading;
+    setStatus(mcpStatusEl, "Loading connect token…");
+    mcpLoading = (async () => {
+      try {
+        const info = await api("/v1/me/mcp");
+        if (!info || !info.url || !info.token) throw new Error("The API did not return a connect token.");
+        mcpInfo = info;
+        setStatus(mcpStatusEl, "");
+      } catch (err) {
+        mcpInfo = null;
+        setStatus(
+          mcpStatusEl,
+          err.status === 401
+            ? NEED_GOOGLE
+            : err.status === 404
+              ? "MCP is not on the API yet. Try again in a minute."
+              : err.message || "Could not load the connect token."
+        );
+      } finally {
+        mcpLoading = null;
+        paintMcp();
+      }
+    })();
+    return mcpLoading;
+  }
+
+  function mcpCopyText(kind) {
+    if (!mcpInfo) return "";
+    if (kind === "url") return mcpInfo.url || "";
+    if (kind === "token") return mcpInfo.token || "";
+    if (kind === "json") return mcpJsonFor(mcpClient, mcpInfo);
+    return "";
+  }
+
+  function selectNodeText(el) {
+    if (!el || !window.getSelection) return;
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  async function copyText(text, fallbackEl) {
+    if (!text) return false;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch {
+      /* fall through to the selection fallback */
+    }
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand && document.execCommand("copy");
+      ta.remove();
+      if (ok) return true;
+    } catch {
+      /* nothing left but selecting the visible text */
+    }
+    selectNodeText(fallbackEl);
+    return false;
+  }
+
+  function flashCopied(btn, ok) {
+    if (!btn) return;
+    const label = btn.dataset.label || btn.textContent;
+    btn.dataset.label = label;
+    btn.textContent = ok ? "Copied" : "Select and copy";
+    btn.disabled = true;
+    window.setTimeout(() => {
+      btn.textContent = label;
+      btn.disabled = false;
+    }, 1500);
+  }
+
+  document.querySelectorAll(".mcp-copy[data-copy]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const kind = btn.getAttribute("data-copy");
+      const text = mcpCopyText(kind);
+      if (!text) {
+        setStatus(mcpStatusEl, mcpInfo ? "Nothing to copy yet." : NEED_GOOGLE);
+        return;
+      }
+      const el = document.getElementById(`mcp-${kind}`);
+      const ok = await copyText(text, el);
+      flashCopied(btn, ok);
+      if (!ok && el && !mcpRevealed && kind !== "url") {
+        mcpRevealed = true;
+        paintMcp();
+        selectNodeText(el);
+      }
+    });
+  });
+
+  document.getElementById("mcp-reveal")?.addEventListener("click", () => {
+    mcpRevealed = !mcpRevealed;
+    paintMcp();
+  });
+
+  document.querySelectorAll(".mcp-tab[data-client]").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      mcpClient = tab.getAttribute("data-client") || "perplexity";
+      paintMcp();
+    });
+  });
+
+  function resetMcp() {
+    mcpInfo = null;
+    mcpRevealed = false;
+    mcpClient = "perplexity";
+    paintMcp();
   }
 
   function paintCanvasToken() {

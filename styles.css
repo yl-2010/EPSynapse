@@ -3971,6 +3971,76 @@ html[data-auth="in"] #stage-out {
   display: none !important;
 }
 
+/* MCP pane: server URL, connect token, client JSON */
+#mcp-ready[hidden] {
+  display: none !important;
+}
+
+.mcp-block {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.7rem 0 0;
+  min-width: 0;
+}
+
+.mcp-block-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem 0.75rem;
+  min-height: 1.6rem;
+}
+
+.mcp-label {
+  font-size: var(--text-footnote);
+  font-weight: 550;
+  color: var(--muted);
+}
+
+.mcp-code {
+  max-height: 12rem;
+}
+
+.mcp-code:empty::before {
+  content: "\2026";
+  color: var(--muted);
+}
+
+.mcp-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.mcp-tab {
+  margin: 0;
+  padding: 0.22rem 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--fg) 16%, transparent);
+  border-radius: 999px;
+  background: none;
+  font: inherit;
+  font-size: var(--text-footnote);
+  font-weight: 550;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.mcp-tab:hover {
+  color: var(--fg);
+}
+
+.mcp-tab.is-on {
+  border-color: color-mix(in srgb, #eba700 55%, transparent);
+  background: color-mix(in srgb, #eba700 14%, transparent);
+  color: var(--fg);
+}
+
+.mcp-warn {
+  margin-top: 0.8rem;
+}
+
 .edu-app:not(.is-settled) .edu-col--main .edu-panel:nth-child(3) { animation-delay: 0.16s; }
 
 .edu-home-research {
