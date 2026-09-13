@@ -4425,6 +4425,7 @@
     `;
     document.body.appendChild(root);
     confirmDialog = root;
+    if (typeof window.reinitLiquidGlass === "function") window.reinitLiquidGlass();
     return root;
   }
 

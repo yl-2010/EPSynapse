@@ -354,8 +354,17 @@
         list.contains("edu-panel") ||
         list.contains("edu-file-tile") ||
         list.contains("yan-chat-panel") ||
-        list.contains("yan-chat-bubble"))
+        list.contains("yan-chat-bubble") ||
+        list.contains("edu-confirm"))
     );
+  }
+
+  function isMagneticTextBox(el) {
+    const list = el.classList;
+    if (!list) return false;
+    if (list.contains("edu-panel") || list.contains("edu-file-tile")) return true;
+    if (list.contains("edu-confirm") || list.contains("yan-chat-panel")) return true;
+    return list.contains("edu-sheet") && !list.contains("edu-sheet--set");
   }
 
   function applyTextBoxFrost(el) {
@@ -365,12 +374,7 @@
     el.style.removeProperty("--lg-spec");
     el.style.removeProperty("--lg-spec-opacity");
     el.style.setProperty("--lg-filter", "none");
-    if (
-      el.classList.contains("edu-panel") ||
-      el.classList.contains("edu-file-tile")
-    ) {
-      bindStaticBoxMagnetic(el);
-    }
+    if (isMagneticTextBox(el)) bindStaticBoxMagnetic(el);
   }
 
   function isStaticContentBox(el) {
@@ -387,7 +391,7 @@
   }
 
   const STATIC_BOX_SEL =
-    ".dash-login.lg-static, .dash-entry.lg-static, .dash-agent.lg-static, .yan-chat-widget.lg-static, .yan-chat-map-ios.lg-static, .yan-chat-bubble.lg-static, .sheet.lg-static, .edu-panel, .edu-file-tile";
+    ".dash-login.lg-static, .dash-entry.lg-static, .dash-agent.lg-static, .yan-chat-widget.lg-static, .yan-chat-map-ios.lg-static, .yan-chat-bubble.lg-static, .sheet.lg-static, .edu-panel, .edu-file-tile, .edu-sheet:not(.edu-sheet--set), .edu-confirm";
 
   const STATIC_BOX_MAG_SCALE = 0.6;
   // Hover travel / squish / press — half the original motion.
@@ -430,11 +434,15 @@
         -webkit-backdrop-filter: none !important;
       }
       html.lg-chrome .edu-panel,
-      html.lg-chrome .edu-file-tile {
+      html.lg-chrome .edu-file-tile,
+      html.lg-chrome .edu-sheet:not(.edu-sheet--set),
+      html.lg-chrome .edu-confirm {
         transition: transform 0.3s var(--ease, cubic-bezier(0.22, 1, 0.36, 1));
       }
       html.lg-chrome .edu-panel:hover,
-      html.lg-chrome .edu-file-tile:hover {
+      html.lg-chrome .edu-file-tile:hover,
+      html.lg-chrome .edu-sheet:not(.edu-sheet--set):hover,
+      html.lg-chrome .edu-confirm:hover {
         will-change: transform;
       }
     `;
@@ -1570,7 +1578,7 @@ void main() {
 
     document
       .querySelectorAll(
-        ".edu-sheet, .edu-sheet-field, .edu-sheet-btn, .edu-sheet-close, .edu-sheet-head, .edu-panel, .edu-file-tile, .yan-chat-panel"
+        ".edu-sheet, .edu-sheet-field, .edu-sheet-btn, .edu-sheet-close, .edu-sheet-head, .edu-panel, .edu-file-tile, .yan-chat-panel, .edu-confirm"
       )
       .forEach(applyTextBoxFrost);
   }
@@ -1887,9 +1895,11 @@ void main() {
     document.querySelectorAll(".yan-chat-panel").forEach((el) => {
       bindMagnetic(el, 0.28 * HOVER_ANIM * STATIC_BOX_MAG_SCALE, { clamp: true });
     });
-    document.querySelectorAll(".edu-panel, .edu-file-tile").forEach((el) => {
-      bindMagnetic(el, 0.28 * HOVER_ANIM * STATIC_BOX_MAG_SCALE, { clamp: true });
-    });
+    document
+      .querySelectorAll(".edu-panel, .edu-file-tile, .edu-sheet:not(.edu-sheet--set), .edu-confirm")
+      .forEach((el) => {
+        bindMagnetic(el, 0.28 * HOVER_ANIM * STATIC_BOX_MAG_SCALE, { clamp: true });
+      });
     if (document.documentElement.classList.contains("lg-chrome")) {
       document
         .querySelectorAll(STATIC_BOX_SEL)
