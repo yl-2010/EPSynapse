@@ -27,6 +27,8 @@
 
   const panel = root.querySelector(".yan-chat-panel");
   const messagesEl = root.querySelector(".yan-chat-messages");
+  const historyLayer = root.querySelector(".yan-chat-history-layer");
+  const historyScrim = root.querySelector(".yan-chat-history-scrim");
   const historyEl = root.querySelector(".yan-chat-history");
   const form = root.querySelector(".yan-chat-form");
   const input = root.querySelector(".yan-chat-input");
@@ -59,6 +61,7 @@
   let bubbleSeq = 0;
   let historyPointerSid = null;
   let historyFetchGen = 0;
+  let historyHideTimer = 0;
   let accountGen = 0;
 
   function apiBase() {
@@ -634,12 +637,17 @@
     const wasShowing = showingHistory;
     showingHistory = false;
     syncHistoryChrome();
-    if (messagesEl) messagesEl.hidden = false;
-    if (historyEl) {
-      historyEl.hidden = true;
-      historyEl.setAttribute("aria-hidden", "true");
-      historyEl.innerHTML = "";
-    }
+    historyPointerSid = null;
+    window.clearTimeout(historyHideTimer);
+    const finish = () => {
+      if (showingHistory) return;
+      if (historyLayer) {
+        historyLayer.hidden = true;
+        historyLayer.setAttribute("aria-hidden", "true");
+      }
+      if (historyEl) historyEl.innerHTML = "";
+    };
+    historyHideTimer = window.setTimeout(finish, reduceMotion ? 0 : 420);
     if (opts.markVisibleRead && wasShowing && sessionId && !busy) {
       markChatRead(sessionId);
     }
@@ -762,13 +770,16 @@
 
   async function showHistory() {
     if (!signedIn()) return;
+    window.clearTimeout(historyHideTimer);
     showingHistory = true;
+    if (historyLayer) {
+      historyLayer.hidden = false;
+      historyLayer.setAttribute("aria-hidden", "false");
+      historyLayer.getBoundingClientRect();
+    }
     syncHistoryChrome();
     setState("panel", { skipFocus: true });
-    if (messagesEl) messagesEl.hidden = true;
     if (historyEl) {
-      historyEl.hidden = false;
-      historyEl.setAttribute("aria-hidden", "false");
       historyEl.innerHTML = "";
       const loading = document.createElement("p");
       loading.className = "yan-chat-history-empty";
@@ -776,6 +787,7 @@
       historyEl.appendChild(loading);
     }
     await renderHistory();
+    refreshGlass();
   }
 
   function toggleHistory() {
@@ -1077,6 +1089,63 @@
     historyPointerSid = null;
     if (sid) openHistoryChat(sid);
   });
+  historyScrim?.addEventListener("click", () => {
+    hideHistory({ markVisibleRead: true });
+  });
+
+  const SWIPE_MIN = 56;
+  const swipe = {
+    active: false,
+    startX: 0,
+    startY: 0,
+    fromBg: false,
+    axis: "",
+  };
+
+  function historySwipeOpenTarget(node) {
+    if (!node || typeof node.closest !== "function") return false;
+    if (node.closest(".yan-chat-history, .yan-chat-history-btn, .yan-chat-send, .yan-chat-input, .yan-chat-close, .yan-chat-bubble, a, button, textarea, input")) {
+      return false;
+    }
+    return Boolean(messagesEl && (node === messagesEl || messagesEl.contains(node)));
+  }
+
+  function onHistorySwipeDown(event) {
+    if (event.pointerType !== "touch") return;
+    if (event.button && event.button !== 0) return;
+    swipe.active = true;
+    swipe.startX = event.clientX;
+    swipe.startY = event.clientY;
+    swipe.fromBg = historySwipeOpenTarget(event.target);
+    swipe.axis = "";
+  }
+
+  function onHistorySwipeMove(event) {
+    if (!swipe.active || event.pointerType !== "touch") return;
+    const dx = event.clientX - swipe.startX;
+    const dy = event.clientY - swipe.startY;
+    if (!swipe.axis) {
+      if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return;
+      swipe.axis = Math.abs(dx) > Math.abs(dy) * 1.2 ? "x" : "y";
+    }
+    if (swipe.axis !== "x") return;
+    if (!showingHistory && swipe.fromBg && state() === "panel" && dx > SWIPE_MIN) {
+      swipe.active = false;
+      showHistory();
+    } else if (showingHistory && dx < -SWIPE_MIN) {
+      swipe.active = false;
+      hideHistory({ markVisibleRead: true });
+    }
+  }
+
+  function onHistorySwipeUp() {
+    swipe.active = false;
+  }
+
+  root.addEventListener("pointerdown", onHistorySwipeDown);
+  window.addEventListener("pointermove", onHistorySwipeMove, { passive: true });
+  window.addEventListener("pointerup", onHistorySwipeUp);
+  window.addEventListener("pointercancel", onHistorySwipeUp);
   input?.addEventListener("focus", () => {
     if (showingHistory) hideHistory({ markVisibleRead: true });
   });
@@ -1092,7 +1161,12 @@
     sendMessage(input.value);
   });
   window.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && state() !== "closed") minimizeChat();
+    if (event.key !== "Escape" || state() === "closed") return;
+    if (showingHistory) {
+      hideHistory({ markVisibleRead: true });
+      return;
+    }
+    minimizeChat();
   });
   window.addEventListener("epsynapse-account", resetForAccount);
 

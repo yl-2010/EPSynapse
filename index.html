@@ -193,7 +193,22 @@
             </svg>
           </button>
           <div class="yan-chat-messages" aria-live="polite"></div>
-          <div class="yan-chat-history" hidden aria-hidden="true"></div>
+        </div>
+
+        <div class="yan-chat-history-layer" hidden aria-hidden="true">
+          <button
+            type="button"
+            class="yan-chat-history-scrim"
+            tabindex="-1"
+            aria-label="Dismiss past chats"
+          ></button>
+          <div
+            class="yan-chat-history"
+            data-liquid-glass="rounded"
+            data-filter-id="lg-edu-chat-history-panel"
+            role="dialog"
+            aria-label="Past chats"
+          ></div>
         </div>
 
         <div

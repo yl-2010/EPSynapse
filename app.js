@@ -79,6 +79,9 @@
   const msConsent = {};
   let classFilesInFlight = "";
   let todoFilesInFlight = "";
+  let gradesWorkInFlight = false;
+  const CANVAS_ICON_SVG =
+    '<svg viewBox="0 0 26.7 26.8" aria-hidden="true" focusable="false" draggable="false" fill="currentColor"><path d="M3.9 13.5c0-2-1.5-3.6-3.4-3.8C.2 10.9 0 12.1 0 13.5s.2 2.6.5 3.8c1.9-.2 3.4-1.9 3.4-3.8z"/><circle cx="6.2" cy="13.4" r="1.2"/><path d="M22.8 13.5c0 2 1.5 3.6 3.4 3.8.3-1.2.5-2.5.5-3.8s-.2-2.6-.5-3.8c-1.9.2-3.4 1.8-3.4 3.8z"/><circle cx="20.2" cy="13.4" r="1.2"/><path d="M13.3 23c-2 0-3.6 1.5-3.8 3.4 1.2.3 2.5.5 3.8.5 1.3 0 2.6-.2 3.8-.5-.2-1.9-1.8-3.4-3.8-3.4z"/><circle cx="13.2" cy="20.4" r="1.2"/><path d="M13.3 4c2 0 3.6-1.5 3.8-3.4-1.2-.3-2.5-.5-3.8-.5-1.3 0-2.6.2-3.8.5C9.7 2.5 11.3 4 13.3 4z"/><circle cx="13.2" cy="6.4" r="1.2"/><path d="M20 20.2c-1.4 1.4-1.5 3.6-.3 5.1 2.2-1.3 4.1-3.2 5.4-5.4-1.5-1.2-3.7-1.1-5.1.3z"/><circle cx="18.2" cy="18.4" r="1.2"/><path d="M6.6 6.8C8 5.4 8.1 3.2 6.9 1.7 4.7 3 2.8 4.9 1.5 7.1 3 8.3 5.2 8.2 6.6 6.8z"/><circle cx="8.2" cy="8.4" r="1.2"/><path d="M20 6.8c1.4 1.4 3.6 1.5 5.1.3-1.3-2.2-3.2-4.1-5.4-5.4-1.2 1.5-1.1 3.7.3 5.1z"/><circle cx="18.2" cy="8.4" r="1.2"/><path d="M6.6 20.2c-1.4-1.4-3.6-1.5-5.1-.3 1.3 2.2 3.2 4.1 5.4 5.4 1.2-1.6 1.1-3.7-.3-5.1z"/><circle cx="8.2" cy="18.4" r="1.2"/></svg>';
   let openMail = null;
   let mailBusy = false;
   let googleClientId = "";
@@ -1248,7 +1251,10 @@
     if (noteMatch) return { page: "note", id: decodeURIComponent(noteMatch[1]) };
     const todoMatch = path.match(/^\/todo\/([^/]+)$/);
     if (todoMatch) return { page: "todo", id: decodeURIComponent(todoMatch[1]) };
-    if (path === "/grades") return { page: "grades" };
+    if (path === "/grades") {
+      history.replaceState({}, "", "/");
+      return { page: "home" };
+    }
     return { page: "home" };
   }
 
@@ -1768,12 +1774,12 @@
   function formatCourseGrade(row) {
     let score = scoreNumber(row?.currentScore);
     let letter = isLetterGrade(row?.currentGrade) ? String(row.currentGrade).trim() : "";
-    // Canvas final scores treat missing work as 0. That is not the grade page.
+    // Canvas final scores treat missing work as 0. Skip that until a letter exists.
     if (score === 0 && !letter) score = null;
     if (score != null && !letter) letter = letterFromPercent(score);
     const pct = score != null ? `${trimNum(score)}%` : "";
     if (letter && pct) return `${letter} ${pct}`;
-    return letter || pct || "—";
+    return letter || pct || "";
   }
 
   function formatWorkScore(w) {
@@ -1820,35 +1826,97 @@
     );
   }
 
-  function homeGradeItems() {
-    const raw = (lastHome.grades || []).length ? lastHome.grades : lastHome.courses || [];
-    const scheduled = (lastHome.classes || []).filter((c) => !c.freePeriod && !isNonGradeCourse(c));
-    if (scheduled.length) {
-      return scheduled.map((klass) => {
-        const g = gradeForClass(klass) || {};
-        return {
-          ...g,
-          id: g.id || klass.id,
-          name: fullerClassName(klass.name, g.name),
-          period: periodLetter(klass.period),
-          currentScore: g.currentScore,
-          currentGrade: g.currentGrade,
-          work: g.work,
-        };
-      });
-    }
-    return raw
-      .filter((c) => !isNonGradeCourse(c))
-      .map((c) => ({ ...c, name: prettyCourseName(c.name), period: periodLetter(c.period) }));
+  function classScoreLabel(cls) {
+    return formatCourseGrade(gradeForClass(cls));
   }
 
-  function gradeRow(c) {
-    return `<li class="edu-row edu-class-row ${toneClass(classTone(c))}">
-      <a class="edu-row-link" data-route href="/grades">
-        <span class="edu-name">${periodTagHtml(c.period)}<span class="edu-hero-class-name">${escapeHtml(c.name)}</span></span>
-        <span class="edu-meta edu-grade">${escapeHtml(formatCourseGrade(c))}</span>
-      </a>
-    </li>`;
+  function workByAssignmentId(id) {
+    const key = String(id || "");
+    if (!key) return null;
+    for (const g of lastHome.grades || []) {
+      if (!Array.isArray(g.work)) continue;
+      const hit = g.work.find((w) => String(w.id || "") === key);
+      if (hit) return hit;
+    }
+    return null;
+  }
+
+  function todoScoreLabel(t) {
+    const w = workByAssignmentId(t?.id || t?.canvasId);
+    if (!w) return "";
+    const text = formatWorkScore(w);
+    return text && text !== "—" ? text : "";
+  }
+
+  function canvasOrbHtml(rawLink, scoreLabel) {
+    const href = normalizeCanvasLink(rawLink);
+    if (!href) return "";
+    const label = String(scoreLabel || "").trim();
+    const compact = label.length > 5 ? " edu-canvas-orb-score--compact" : "";
+    const inner = label
+      ? `<span class="edu-canvas-orb-score${compact}">${escapeHtml(label)}</span>`
+      : CANVAS_ICON_SVG;
+    const aria = label ? `Open in Canvas, ${label}` : "Open in Canvas";
+    return `<div class="edu-canvas-slot"><a class="corner circle edu-canvas-orb${
+      label ? " edu-canvas-orb--score" : ""
+    }" data-liquid-glass="circle" data-filter-id="lg-edu-canvas" href="${escapeHtml(
+      href
+    )}" target="_blank" rel="noopener noreferrer" aria-label="${escapeHtml(
+      aria
+    )}">${inner}</a></div>`;
+  }
+
+  function scoreHtml(label, canvasLink) {
+    const text = String(label || "").trim();
+    if (!text) return "";
+    const href = normalizeCanvasLink(canvasLink);
+    if (!href) return `<span class="edu-score">${escapeHtml(text)}</span>`;
+    return `<a class="edu-score" href="${escapeHtml(
+      href
+    )}" target="_blank" rel="noopener noreferrer" aria-label="${escapeHtml(
+      `Open in Canvas, ${text}`
+    )}">${escapeHtml(text)}</a>`;
+  }
+
+  function normalizeCanvasLink(raw) {
+    const href = canvasHref(raw);
+    return href && href !== "#" ? href : "";
+  }
+
+  function gradebookUrlFromCanvasLink(raw) {
+    const href = normalizeCanvasLink(raw);
+    if (!href) return "";
+    try {
+      const u = new URL(href);
+      const m = u.pathname.match(/\/courses\/(\d+)/);
+      if (!m) return "";
+      u.pathname = `/courses/${m[1]}/grades`;
+      u.search = "";
+      u.hash = "";
+      return u.href;
+    } catch {
+      return "";
+    }
+  }
+
+  function classCanvasLink(cls) {
+    const g = gradeForClass(cls);
+    const candidates = [g?.htmlUrl, cls?.htmlUrl, cls?.canvasLink];
+    for (const raw of candidates) {
+      const gb = gradebookUrlFromCanvasLink(raw);
+      if (gb) return gb;
+    }
+    const courseId = String(cls?.canvasCourseId || cls?.courseId || g?.id || "");
+    if (courseId) {
+      const gb = gradebookUrlFromCanvasLink(`/courses/${courseId}`);
+      if (gb) return gb;
+      const kid = (lastHome.assignments || []).find(
+        (t) => String(t.courseId || "") === courseId
+      );
+      const fromKid = gradebookUrlFromCanvasLink(kid?.canvasLink);
+      if (fromKid) return fromKid;
+    }
+    return "";
   }
 
   function canvasHref(link) {
@@ -1859,18 +1927,6 @@
     if (!host) return "#";
     const full = href.startsWith("/") ? `${host}${href}` : `${host}/${href}`;
     return safeExternalUrl(full) || "#";
-  }
-
-  function workRow(w, tone) {
-    const tag = w.tag || "HW";
-    const href = canvasHref(w.canvasLink);
-    const late = w.late ? " is-late" : "";
-    return `<li class="edu-row${late} ${toneClass(tone || workTone(w))}">
-      <a class="edu-row-link" href="${escapeHtml(href)}" target="_blank" rel="noopener">
-        <span class="edu-name"><span class="edu-tag edu-tag-${escapeHtml(tag)}">${escapeHtml(tag)}</span> ${escapeHtml(w.title)}</span>
-        <span class="edu-meta edu-grade">${escapeHtml(formatWorkScore(w))}</span>
-      </a>
-    </li>`;
   }
 
   function formatDue(iso) {
@@ -1969,6 +2025,7 @@
         <span class="edu-name"><span class="edu-tag edu-tag-${escapeHtml(tag)}">${escapeHtml(tag)}</span> ${escapeHtml(t.title)}</span>
         ${klass}${due}
       </a>
+      ${scoreHtml(todoScoreLabel(t), t.canvasLink)}
     </li>`;
   }
 
@@ -2002,20 +2059,15 @@
     return `<span class="edu-tag edu-period edu-period--label${hero ? " edu-period--hero" : ""}">${escapeHtml(label)}</span>`;
   }
 
-  function classMetaText(c) {
-    if (isLlmSchedule()) return [c?.teacher, c?.room].map((v) => String(v || "").trim()).filter(Boolean).join(" · ");
-    return c?.courseCode || "";
-  }
-
   function classRow(c) {
     const highlight = isCurrentClass(c);
     const href = classHref(c);
-    const meta = classMetaText(c);
     return `<li class="edu-row edu-class-row${highlight ? " is-current" : ""} ${toneClass(classTone(c))}">
       <a class="edu-row-link" data-route href="${escapeHtml(href)}">
-        <span class="edu-name">${classPeriodTagHtml(c)}<span class="edu-hero-class-name">${escapeHtml(fullerClassName(c.name, gradeForClass(c)?.name))}</span></span>
-        <span class="edu-meta">${escapeHtml(meta)}</span>
+        ${classPeriodTagHtml(c)}
+        <span class="edu-name">${escapeHtml(fullerClassName(c.name, gradeForClass(c)?.name))}</span>
       </a>
+      ${scoreHtml(classScoreLabel(c), classCanvasLink(c))}
     </li>`;
   }
 
@@ -2317,10 +2369,6 @@
         ? "Upload a term schedule PDF in settings"
         : "Upload your schedule PDF in settings";
     const todayPanel = llm ? panelHtml("Today", todayPanelBody(), "lg-edu-today", "edu-panel--today") : "";
-    const gradeItems = homeGradeItems();
-    const gradeEmpty = me?.canvasConnected
-      ? "No course grades yet"
-      : "Connect Canvas in settings";
 
     appEl.classList.add("is-settled");
     appEl.innerHTML = `
@@ -2332,7 +2380,6 @@
         <div class="edu-col edu-col--side">
           ${todayPanel}
           ${panelHtml("Classes", listOrEmpty(classItems.map(classRow).join(""), classEmpty), "lg-edu-classes")}
-          ${panelHtml("Grades", listOrEmpty(gradeItems.map(gradeRow).join(""), gradeEmpty), "lg-edu-grades")}
           ${panelHtml("Notes", notesPanelHtml(), "lg-edu-notes", "edu-panel--notes")}
         </div>
       </div>
@@ -2411,13 +2458,12 @@
         : "";
     const next = nextMeetingLine(klass);
     const courseGrade = gradeForClass(klass);
-    const gradeText = courseGrade ? formatCourseGrade(courseGrade) : "";
+    const canvas = canvasOrbHtml(classCanvasLink(klass), classScoreLabel(klass));
     const sub = [
       llm ? klass.teacher : "",
       llm ? klass.room : "",
       klass.subject,
       klass.courseCode,
-      gradeText && gradeText !== "—" ? gradeText : "",
       next,
     ]
       .map((v) => String(v || "").trim())
@@ -2427,11 +2473,12 @@
     appEl.classList.add("is-settled");
     appEl.innerHTML = `
       <p class="edu-home-mark"><a class="edu-home-research" data-route href="/">Back</a></p>
-      <header class="edu-hero edu-hero--detail edu-hero--detail-canvas edu-hero--class ${toneClass(classTone(klass))}">
+      <header class="edu-hero edu-hero--detail${canvas ? " edu-hero--detail-canvas" : ""} edu-hero--class ${toneClass(classTone(klass))}">
         <div class="edu-hero-lead">
           <h1 class="edu-hero-title edu-hero-title--class">${period}<span class="edu-hero-class-name">${escapeHtml(fullerClassName(klass.name, courseGrade?.name))}</span></h1>
           <p class="edu-hero-sub">${escapeHtml(sub)}</p>
         </div>
+        ${canvas}
       </header>
       <div class="edu-grid edu-grid--home">
         <div class="edu-col edu-col--main">
@@ -2613,83 +2660,39 @@
     }
   }
 
-  async function ensureGrades(detail) {
-    if (!me?.canvasConnected) return [];
-    if (detail) {
-      const haveWork = (lastHome.grades || []).some((g) => Array.isArray(g.work));
-      if (haveWork) return lastHome.grades;
-      try {
-        const data = await api("/v1/me/canvas/grades?work=1", { timeoutMs: 25000 });
-        lastHome.grades = data.grades || [];
-        return lastHome.grades;
-      } catch {
-        return lastHome.grades || lastHome.courses || [];
-      }
-    }
-    if ((lastHome.grades || []).length) return lastHome.grades;
-    if ((lastHome.courses || []).length) return lastHome.courses;
+  async function refreshGradesWork() {
+    if (!me?.canvasConnected || gradesWorkInFlight) return;
+    if ((lastHome.grades || []).some((g) => Array.isArray(g.work))) return;
+    gradesWorkInFlight = true;
     try {
-      const data = await api("/v1/me/canvas/grades");
-      lastHome.grades = data.grades || [];
-      return lastHome.grades;
+      const data = await api("/v1/me/canvas/grades?work=1", { timeoutMs: 25000 });
+      lastHome.grades = data.grades || lastHome.grades || [];
+      paintTodoScores();
     } catch {
-      return lastHome.courses || [];
+      /* Home already painted. Assignment scores stay off until work is present. */
+    } finally {
+      gradesWorkInFlight = false;
     }
   }
 
-  function decorateGradeRows(grades) {
-    const incoming = grades || [];
-    const haveWork = incoming.some((g) => Array.isArray(g.work));
-    const source = haveWork || !homeGradeItems().length ? incoming : homeGradeItems();
-    return source
-      .filter((c) => !isNonGradeCourse(c))
-      .map((c) => {
-        const scheduled = (lastHome.classes || []).find(
-          (k) =>
-            !k.freePeriod &&
-            !isNonGradeCourse(k) &&
-            (String(k.id) === String(c.id) || courseNamesMatch(k.name, c.name))
-        );
-        return {
-          ...c,
-          name: fullerClassName(scheduled?.name, c.name),
-          period: periodLetter(scheduled?.period || c.period),
-        };
-      });
-  }
-
-  function renderGradesView(grades) {
-    const rows = decorateGradeRows(grades);
-    const empty = me?.canvasConnected
-      ? "Canvas has not posted grades for these classes yet."
-      : "Connect Canvas in settings";
-    const panels = rows
-      .map((g) => {
-        const title = [periodLetter(g.period), g.name].filter(Boolean).join(" · ");
-        const mark = `<span class="edu-grade-mark">${escapeHtml(formatCourseGrade(g))}</span>`;
-        const body = g.work === undefined
-          ? `<p class="edu-empty">Loading graded work…</p>`
-          : listOrEmpty((g.work || []).map((w) => workRow(w, classTone(g))).join(""), "No graded work yet");
-        return panelHtml(title, body, `lg-grade-${g.id}`, "", mark);
-      })
-      .join("");
-    appEl.classList.add("is-settled");
-    appEl.innerHTML = `
-      <p class="edu-home-mark"><a class="edu-home-research" data-route href="/">Back</a></p>
-      <div class="edu-grid edu-grid--grades">
-        <div class="edu-col edu-col--main">
-          ${panels || `<p class="edu-empty">${escapeHtml(empty)}</p>`}
-        </div>
-      </div>
-    `;
-    if (typeof window.reinitLiquidGlass === "function") window.reinitLiquidGlass();
-  }
-
-  async function renderGrades() {
-    const cached = lastHome.grades || lastHome.courses || [];
-    if (cached.length) renderGradesView(cached);
-    const grades = await ensureGrades(true);
-    renderGradesView(grades);
+  function paintTodoScores() {
+    if (!appEl) return;
+    appEl.querySelectorAll(".edu-todo[data-id]").forEach((row) => {
+      const t = assignmentById(row.getAttribute("data-id"));
+      if (!t) return;
+      const html = scoreHtml(todoScoreLabel(t), t.canvasLink);
+      const existing = row.querySelector(":scope > .edu-score");
+      if (!html) {
+        existing?.remove();
+        return;
+      }
+      const box = document.createElement("template");
+      box.innerHTML = html.trim();
+      const next = box.content.firstElementChild;
+      if (!next) return;
+      if (existing) existing.replaceWith(next);
+      else row.appendChild(next);
+    });
   }
 
   async function routeAndRender() {
@@ -2711,10 +2714,6 @@
     }
     if (route.page === "todo") {
       renderTodo(route.id);
-      return;
-    }
-    if (route.page === "grades") {
-      await renderGrades();
       return;
     }
     renderHome(lastHome);
@@ -2782,6 +2781,7 @@
       todoFilesError: lastHome.todoFilesError || "",
     };
     routeAndRender();
+    refreshGradesWork();
   }
 
   async function refreshClassFiles(klass) {
