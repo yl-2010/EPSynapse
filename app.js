@@ -124,6 +124,7 @@
       todayKey: String(sched?.todayKey || ""),
       school: String(sched?.school || ""),
       termLabel: String(sched?.termLabel || ""),
+      bells: sched?.bells || null,
     };
   }
 
@@ -2338,6 +2339,296 @@
       </form>`;
   }
 
+  const SCHOOL_DAY_END_BUFFER_MINUTES = 15;
+  const CLASS_HIGHLIGHT_LEAD_MINUTES = 10;
+
+  function todayParts(now = new Date()) {
+    return {
+      y: now.getFullYear(),
+      m: now.getMonth() + 1,
+      day: now.getDate(),
+      weekday: now.getDay(),
+      minutes: now.getHours() * 60 + now.getMinutes(),
+    };
+  }
+
+  function dateKeyOf(p) {
+    return `${String(p.y).padStart(4, "0")}-${String(p.m).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
+  }
+
+  function weekdayShort(wd) {
+    return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][Math.max(0, Math.min(6, wd))];
+  }
+
+  function addDays(p, n) {
+    const dt = new Date(p.y, p.m - 1, p.day + n);
+    return {
+      y: dt.getFullYear(),
+      m: dt.getMonth() + 1,
+      day: dt.getDate(),
+      weekday: dt.getDay(),
+      minutes: p.minutes,
+    };
+  }
+
+  function bellsSlots(bells) {
+    return Array.isArray(bells?.bells) ? bells.bells : [];
+  }
+
+  function isSchoolDay(day) {
+    if (day.weekday === 0 || day.weekday === 6) return false;
+    if (isLlmSchedule()) {
+      const name = weekdayShort(day.weekday);
+      return (lastHome.classes || []).some((c) =>
+        (c.meetings || []).some((m) => m.day === name)
+      );
+    }
+    const bells = lastHome.schedule?.bells;
+    if (bells && bells.weekdayPeriods && Object.keys(bells.weekdayPeriods).length) {
+      return (bells.weekdayPeriods[String(day.weekday)] || []).length > 0;
+    }
+    return day.weekday >= 1 && day.weekday <= 5;
+  }
+
+  function nextSchoolDay(from, skipToday) {
+    let day = from;
+    const hops = skipToday ? 1 : 0;
+    for (let i = hops; i < 16; i++) {
+      if (i > 0) day = addDays(day, 1);
+      if (isSchoolDay(day)) return day;
+    }
+    return null;
+  }
+
+  function classForPeriodLetter(period, classes) {
+    const key = String(period || "").toUpperCase();
+    const matches = (classes || []).filter((c) => String(c.period || "").toUpperCase() === key);
+    if (!matches.length) return null;
+    return matches.find((c) => !c.freePeriod) || matches[0];
+  }
+
+  function llmClassesOn(day) {
+    const name = weekdayShort(day.weekday);
+    const rows = [];
+    for (const klass of lastHome.classes || []) {
+      for (const meeting of klass.meetings || []) {
+        if (meeting.day !== name) continue;
+        rows.push({
+          class: klass,
+          period: klass.period,
+          start: meeting.start || "",
+          end: meeting.end || "",
+          startMin: clockMinutes(meeting.start),
+          endMin: clockMinutes(meeting.end),
+        });
+      }
+    }
+    return rows.sort((a, b) => (a.startMin ?? 1e9) - (b.startMin ?? 1e9));
+  }
+
+  function epsClassesOn(day) {
+    const bells = lastHome.schedule?.bells;
+    if (!bells) return [];
+    const letters = bells.weekdayPeriods?.[String(day.weekday)] || [];
+    const slots = bellsSlots(bells);
+    const classes = lastHome.classes || [];
+    const rows = [];
+    letters.forEach((letterRaw, i) => {
+      if (i >= slots.length) return;
+      const period = String(letterRaw || "").toUpperCase();
+      if (!period) return;
+      const slot = slots[i];
+      const klass = classForPeriodLetter(period, classes) || {
+        id: `free-${period}`,
+        name: "Free Period",
+        period,
+        freePeriod: true,
+      };
+      rows.push({
+        class: klass,
+        period,
+        start: slot.start || "",
+        end: slot.end || "",
+        startMin: clockMinutes(slot.start),
+        endMin: clockMinutes(slot.end),
+      });
+    });
+    return rows;
+  }
+
+  function meetingsAsDayClasses() {
+    return sortMeetings(lastHome.meetings || []).map((meeting) => {
+      const klass =
+        (lastHome.classes || []).find(
+          (c) =>
+            (meeting.classId && meeting.classId === c.id) ||
+            (meeting.period && meeting.period === c.period)
+        ) || {
+          id: meeting.classId || `${meeting.title || meeting.name}-${meeting.period}`,
+          name: meeting.title || meeting.name || "Class",
+          period: meeting.period,
+          freePeriod: meeting.freePeriod,
+        };
+      return {
+        class: klass,
+        period: meeting.period || klass.period,
+        start: meeting.start || "",
+        end: meeting.end || "",
+        startMin: clockMinutes(meeting.start),
+        endMin: clockMinutes(meeting.end),
+      };
+    });
+  }
+
+  function classesForDay(day, todayKey) {
+    if (isLlmSchedule()) return llmClassesOn(day);
+    const bells = lastHome.schedule?.bells;
+    const slots = bellsSlots(bells);
+    if (bells && bells.weekdayPeriods && Object.keys(bells.weekdayPeriods).length && slots.length) {
+      return epsClassesOn(day);
+    }
+    if (dateKeyOf(day) === todayKey) return meetingsAsDayClasses();
+    return [];
+  }
+
+  function daySectionTitle(day, rows) {
+    const when = `${weekdayShort(day.weekday)} ${day.m}/${day.day}`;
+    let periods;
+    const bells = lastHome.schedule?.bells;
+    if (!isLlmSchedule() && bells) {
+      periods = (bells.weekdayPeriods?.[String(day.weekday)] || [])
+        .map((p) => String(p).toUpperCase())
+        .filter(Boolean);
+    } else {
+      const seen = new Set();
+      periods = [];
+      for (const row of rows) {
+        const p = String(row.period || "").toUpperCase();
+        if (!p || seen.has(p)) continue;
+        seen.add(p);
+        periods.push(p);
+      }
+    }
+    let type = "";
+    if (periods.length === 1) type = periods[0];
+    else if (periods.length > 1) type = `${periods[0]}${periods[periods.length - 1]}`;
+    return {
+      plain: type ? `${type} ${when}` : when,
+      html: type
+        ? `<span class="edu-day-type">${escapeHtml(type)}</span>${escapeHtml(when)}`
+        : escapeHtml(when),
+    };
+  }
+
+  function schoolDayStillInSession(now, todayKey) {
+    if (!isSchoolDay(now)) return false;
+    const rows = classesForDay(now, todayKey);
+    const ends = rows.map((r) => r.endMin).filter((n) => n != null);
+    const slotEnds = bellsSlots(lastHome.schedule?.bells)
+      .map((s) => clockMinutes(s.end))
+      .filter((n) => n != null);
+    const lastEnd = ends.length ? Math.max(...ends) : slotEnds.length ? Math.max(...slotEnds) : 15 * 60;
+    return now.minutes < lastEnd + SCHOOL_DAY_END_BUFFER_MINUTES;
+  }
+
+  function classSections() {
+    if (lastHome.schedule?.noBellTimes) return [];
+    const now = todayParts();
+    const todayKey = lastHome.schedule?.todayKey || dateKeyOf(now);
+    const showToday = schoolDayStillInSession(now, todayKey);
+    let day1;
+    let day2;
+    if (showToday) {
+      day1 = now;
+      day2 = nextSchoolDay(now, true);
+    } else {
+      day1 = nextSchoolDay(now, true);
+      day2 = day1 ? nextSchoolDay(day1, true) : null;
+    }
+    const sections = [];
+    if (day1) {
+      const rows = classesForDay(day1, todayKey);
+      if (rows.length) {
+        const title = daySectionTitle(day1, rows);
+        sections.push({
+          label: title.plain,
+          labelHtml: title.html,
+          dateKey: dateKeyOf(day1),
+          isToday: showToday && dateKeyOf(day1) === todayKey,
+          nowMinutes: now.minutes,
+          classes: rows,
+        });
+      }
+    }
+    if (day2) {
+      const rows = classesForDay(day2, todayKey);
+      if (rows.length) {
+        const title = daySectionTitle(day2, rows);
+        sections.push({
+          label: title.plain,
+          labelHtml: title.html,
+          dateKey: dateKeyOf(day2),
+          isToday: false,
+          nowMinutes: now.minutes,
+          classes: rows,
+        });
+      }
+    }
+    return sections;
+  }
+
+  function meetingHighlightStartMin(meetings, index, leadMinutes = CLASS_HIGHLIGHT_LEAD_MINUTES) {
+    const meeting = meetings?.[index];
+    if (!meeting || meeting.startMin == null) return null;
+    const prevEnd = index > 0 ? meetings[index - 1]?.endMin : null;
+    if (prevEnd == null) return meeting.startMin - leadMinutes;
+    const gap = meeting.startMin - prevEnd;
+    if (gap < leadMinutes) return prevEnd;
+    return meeting.startMin - leadMinutes;
+  }
+
+  function isMeetingHighlighted(meetings, index, nowMinutes) {
+    const meeting = meetings?.[index];
+    if (!meeting || meeting.startMin == null || meeting.endMin == null) return false;
+    const highlightStart = meetingHighlightStartMin(meetings, index);
+    if (highlightStart == null) return false;
+    return nowMinutes >= highlightStart && nowMinutes < meeting.endMin;
+  }
+
+  function dayClassRow(m, highlight) {
+    const c = m.class;
+    const href = c?.freePeriod ? "" : classHref(c);
+    const name = c?.freePeriod
+      ? "Free Period"
+      : fullerClassName(c?.name, gradeForClass(c)?.name);
+    const period = classPeriodTagHtml({ ...c, period: m.period || c?.period });
+    const inner = `${period}<span class="edu-name">${escapeHtml(name)}</span>`;
+    const score = c?.freePeriod ? "" : scoreHtml(classScoreLabel(c), classCanvasLink(c));
+    const tone = c?.freePeriod ? hashTone(c.id || name) : classTone(c);
+    const cls = `edu-row edu-class-row${highlight ? " is-current" : ""} ${toneClass(tone)}`;
+    if (href) {
+      return `<li class="${cls}"><a class="edu-row-link" data-route href="${escapeHtml(href)}">${inner}</a>${score}</li>`;
+    }
+    return `<li class="${cls}"><span class="edu-row-link">${inner}</span></li>`;
+  }
+
+  function dayPanelHtml(sec, i) {
+    const rows = (sec.classes || [])
+      .map((m, idx) => {
+        const hl = sec.isToday && isMeetingHighlighted(sec.classes, idx, sec.nowMinutes);
+        return dayClassRow(m, hl);
+      })
+      .join("");
+    return panelHtml(
+      sec.label,
+      listOrEmpty(rows, "Nothing here"),
+      `lg-edu-day-${sec.dateKey || i}`,
+      "edu-panel--day",
+      "",
+      sec.labelHtml || ""
+    );
+  }
+
   function renderHome(next = lastHome) {
     lastHome = {
       ...lastHome,
@@ -2358,7 +2649,6 @@
     const done = (lastHome.assignments || []).filter((t) => t.done);
     const todoRows = todoListItemsHtml(open);
     const classItems = homeClasses();
-    const llm = isLlmSchedule();
 
     const todoEmpty = me?.canvasConnected
       ? "No open work"
@@ -2368,7 +2658,14 @@
       : isEpsDoor()
         ? "Upload a term schedule PDF in settings"
         : "Upload your schedule PDF in settings";
-    const todayPanel = llm ? panelHtml("Today", todayPanelBody(), "lg-edu-today", "edu-panel--today") : "";
+    const sections = classSections();
+    const day1 = sections[0] ? dayPanelHtml(sections[0], 0) : "";
+    const day2 = sections[1] ? dayPanelHtml(sections[1], 1) : "";
+    const notes = panelHtml("Notes", notesPanelHtml(), "lg-edu-notes", "edu-panel--notes");
+    const rightCol =
+      day1 || day2
+        ? `${day1}${notes}${day2}`
+        : `${panelHtml("Classes", listOrEmpty(classItems.map(classRow).join(""), classEmpty), "lg-edu-classes")}${notes}`;
 
     appEl.classList.add("is-settled");
     appEl.innerHTML = `
@@ -2378,9 +2675,7 @@
           ${panelHtml("Completed", listOrEmpty(todoListItemsHtml(done), "Nothing completed yet"), "lg-edu-completed", "edu-panel--completed")}
         </div>
         <div class="edu-col edu-col--side">
-          ${todayPanel}
-          ${panelHtml("Classes", listOrEmpty(classItems.map(classRow).join(""), classEmpty), "lg-edu-classes")}
-          ${panelHtml("Notes", notesPanelHtml(), "lg-edu-notes", "edu-panel--notes")}
+          ${rightCol}
         </div>
       </div>
     `;

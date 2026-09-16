@@ -5,7 +5,7 @@ struct ClassView: View {
     var classId: String
 
     @EnvironmentObject private var dashboard: DashboardStore
-    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var homeFocus: HomeFocusStore
     @Environment(\.openURL) private var openURL
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
@@ -18,10 +18,6 @@ struct ClassView: View {
 
     private var isWide: Bool {
         AdaptiveLayout.isWideLayout(horizontal: horizontalSizeClass, vertical: verticalSizeClass)
-    }
-
-    private var pagePad: CGFloat {
-        AdaptiveLayout.pagePadding(horizontal: horizontalSizeClass, vertical: verticalSizeClass)
     }
 
     private var items: [Assignment] {
@@ -50,25 +46,21 @@ struct ClassView: View {
 
     var body: some View {
         ScrollView(.vertical) {
-            VStack(alignment: .leading, spacing: 16) {
-                backRow
+            VStack(alignment: .leading, spacing: 14) {
                 if let schoolClass {
                     hero(schoolClass)
-                    if !schoolClass.canvasLink.isEmpty {
-                        canvasButton(schoolClass.canvasLink)
-                    }
                     if isWide {
-                        HStack(alignment: .top, spacing: 16) {
-                            VStack(spacing: 16) {
+                        HStack(alignment: .top, spacing: 14) {
+                            VStack(alignment: .leading, spacing: 14) {
                                 todoPanel
                                 completedPanel
                             }
-                            .frame(maxWidth: .infinity, alignment: .top)
-                            VStack(spacing: 16) {
+                            .frame(maxWidth: .infinity, alignment: .topLeading)
+                            VStack(alignment: .leading, spacing: 14) {
                                 notesPanel
                                 filesPanel
                             }
-                            .frame(maxWidth: .infinity, alignment: .top)
+                            .frame(maxWidth: .infinity, alignment: .topLeading)
                         }
                     } else {
                         todoPanel
@@ -80,16 +72,23 @@ struct ClassView: View {
                     EmptyLine("This class is gone from the schedule.")
                 }
             }
-            .padding(.horizontal, pagePad)
-            .padding(.top, AdaptiveLayout.isPad ? 96 : 88)
-            .padding(.bottom, 108)
-            .frame(maxWidth: AdaptiveLayout.pageMaxWidth)
+            .padding(.horizontal, isWide ? 28 : 16)
+            .padding(.vertical, 12)
+            .frame(maxWidth: AdaptiveLayout.pageMaxWidth, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
         .scrollIndicators(.hidden)
         .epsVerticalScrollOnly()
-        .toolbar(.hidden, for: .navigationBar)
-        .navigationBarBackButtonHidden(true)
+        .homeTabReselectScroll(isActive: homeFocus.isShowingClass(classId))
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if let schoolClass, let url = schoolClass.canvasURL {
+                ToolbarItem(placement: .topBarTrailing) {
+                    CanvasToolbarButton(webURL: url, scoreLabel: schoolClass.scoreLabel)
+                }
+            }
+        }
         .epsPageBackground()
         .epsSwipeBackHaptics()
         .sheet(item: $htmlFile) { file in
@@ -102,109 +101,39 @@ struct ClassView: View {
         }
     }
 
-    private var backRow: some View {
-        Button {
-            EPSHaptics.tap()
-            dismiss()
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 13, weight: .bold))
-                Text("Home")
-                    .font(.subheadline.weight(.semibold))
-            }
-            .foregroundStyle(EPSTheme.fg)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-        }
-        .buttonStyle(.plain)
-        .epsGlassRounded(cornerRadius: 14, interactive: true)
-        .accessibilityLabel("Back to home")
-    }
-
     private func hero(_ schoolClass: SchoolClass) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 14) {
-            if !schoolClass.period.isEmpty {
-                Text(schoolClass.period)
-                    .font(.system(size: 44, weight: .bold))
-                    .foregroundStyle(EPSTone.forClass(schoolClass).color)
-                    .minimumScaleFactor(0.6)
-            }
-            VStack(alignment: .leading, spacing: 4) {
+        let nextWhen: String = {
+            guard let next = dashboard.nextOccurrence(for: schoolClass) else { return "" }
+            return NaturalWhen.formatNextClassWhen(
+                dateKey: next.dateKey,
+                start: next.start,
+                end: next.end
+            )
+        }()
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                if !schoolClass.period.isEmpty {
+                    Text(schoolClass.period.uppercased())
+                        .font(.largeTitle.weight(.bold))
+                        .foregroundStyle(EPSTheme.accent)
+                }
                 Text(schoolClass.name.isEmpty ? "Class" : CourseTitle.pretty(schoolClass.name))
-                    .font(.title.weight(.bold))
+                    .font(.largeTitle.weight(.bold))
                     .foregroundStyle(EPSTheme.fg)
-                HStack(spacing: 8) {
-                    if schoolClass.freePeriod {
-                        Text("Free period")
-                    }
-                    if !schoolClass.courseCode.isEmpty {
-                        Text(schoolClass.courseCode)
-                    }
-                    // Teacher and room only come from uploaded (model-parsed) schedules.
-                    if !schoolClass.teacher.isEmpty {
-                        Text(schoolClass.teacher)
-                    }
-                    if !schoolClass.room.isEmpty {
-                        Text(roomLabel(schoolClass.room))
-                    }
-                }
-                .font(.subheadline)
-                .foregroundStyle(EPSTheme.muted)
-                if !schoolClass.meetings.isEmpty {
-                    Text(meetingsLine(schoolClass.meetings))
-                        .font(.footnote.monospacedDigit())
-                        .foregroundStyle(EPSTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+            }
+            if !nextWhen.isEmpty {
+                Text(nextWhen)
+                    .font(.subheadline)
+                    .foregroundStyle(EPSTheme.muted)
             }
         }
-        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .epsGlassRounded(cornerRadius: 22, interactive: false)
-    }
-
-    /// "Room 204" unless the PDF already printed the word.
-    private func roomLabel(_ room: String) -> String {
-        let trimmed = room.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.lowercased().hasPrefix("room") || trimmed.lowercased().hasPrefix("rm") {
-            return trimmed
-        }
-        return "Room \(trimmed)"
-    }
-
-    /// Weekly meetings as one line, e.g. "Mon 09:00-09:50 · Wed 09:00-09:50".
-    private func meetingsLine(_ meetings: [ClassMeeting]) -> String {
-        let order = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-        let sorted = meetings.sorted { a, b in
-            let da = order.firstIndex(of: a.day) ?? order.count
-            let db = order.firstIndex(of: b.day) ?? order.count
-            if da != db { return da < db }
-            return a.start < b.start
-        }
-        return sorted.map(\.label).filter { !$0.isEmpty }.joined(separator: " · ")
-    }
-
-    private func canvasButton(_ raw: String) -> some View {
-        Button {
-            // Server-supplied string. Only https and mailto get through.
-            if let url = EPSMarkdown.safeURL(raw) {
-                openURL(url)
-            }
-        } label: {
-            Text("Open in Canvas")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(goldLabel)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-        }
-        .buttonStyle(.plain)
-        .epsGlassRounded(cornerRadius: 14, tint: EPSTheme.accent.opacity(0.72), interactive: true)
-        .epsHapticOnTap()
+        .padding(.bottom, 4)
+        .accessibilityElement(children: .combine)
     }
 
     private var todoPanel: some View {
-        EPSPanel(title: "TODO", expanded: todoExpanded, onToggleExpanded: { todoExpanded.toggle() }) {
+        EPSPanel(title: "TODO", filters: true, expanded: todoExpanded, onToggleExpanded: { todoExpanded.toggle() }) {
             if todoItems.isEmpty {
                 EmptyLine("No open work")
             } else {
@@ -222,7 +151,7 @@ struct ClassView: View {
     private var completedPanel: some View {
         EPSPanel(title: "Completed", dimmed: true) {
             if doneItems.isEmpty {
-                EmptyLine("Nothing completed yet")
+                EmptyLine("Nothing here")
             } else {
                 TodoRows(items: doneItems) { item in
                     TodoRow(item: item)
@@ -289,14 +218,6 @@ struct ClassView: View {
                 }
             }
         }
-    }
-
-    private var goldLabel: Color {
-        Color(uiColor: UIColor { traits in
-            traits.userInterfaceStyle == .dark
-                ? .white
-                : UIColor(red: 11 / 255, green: 31 / 255, blue: 58 / 255, alpha: 1)
-        })
     }
 }
 

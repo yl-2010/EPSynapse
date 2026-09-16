@@ -994,8 +994,7 @@ html[data-resolved-theme="dark"] .edu-back-shadow feGaussianBlur {
   min-width: 0;
 }
 
-.edu-grid--detail,
-.edu-grid--grades {
+.edu-grid--detail {
   grid-template-columns: 1fr;
 }
 

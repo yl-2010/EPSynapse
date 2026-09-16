@@ -5,7 +5,7 @@ struct TodoView: View {
 
     @EnvironmentObject private var session: SessionStore
     @EnvironmentObject private var dashboard: DashboardStore
-    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var homeFocus: HomeFocusStore
     @Environment(\.openURL) private var openURL
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
@@ -20,8 +20,8 @@ struct TodoView: View {
         pendingDone ?? item?.done ?? false
     }
 
-    private var pagePad: CGFloat {
-        AdaptiveLayout.pagePadding(horizontal: horizontalSizeClass, vertical: verticalSizeClass)
+    private var isWide: Bool {
+        AdaptiveLayout.isWideLayout(horizontal: horizontalSizeClass, vertical: verticalSizeClass)
     }
 
     private var className: String {
@@ -41,33 +41,73 @@ struct TodoView: View {
 
     var body: some View {
         ScrollView(.vertical) {
-            VStack(alignment: .leading, spacing: 16) {
-                backRow
+            VStack(alignment: .leading, spacing: 14) {
                 if let item {
-                    titleCard(item)
-                    statusRow(item)
-                    metaCard(item)
-                    if !item.description.isEmpty {
-                        descriptionCard(item.description)
+                    EducationTodoTitle(item: item, font: .largeTitle.weight(.bold), done: shownDone)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    VStack(alignment: .leading, spacing: 14) {
+                        HStack(alignment: .center, spacing: 12) {
+                            EducationTodoCheckbox(done: shownDone) {
+                                toggle(item)
+                            }
+                            Text(shownDone ? "Done" : "Open")
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(EPSTheme.fg)
+                            Spacer(minLength: 0)
+                        }
+
+                        let when = NaturalWhen.formatDetail(date: item.dueDateValue, time: item.dueTimeValue)
+                        if !when.isEmpty {
+                            Text(when)
+                                .font(.subheadline)
+                                .foregroundStyle(EPSTheme.muted)
+                        }
+
+                        if !className.isEmpty {
+                            Text(className)
+                                .font(.subheadline)
+                                .foregroundStyle(EPSTheme.muted)
+                        }
+
+                        if item.description.isEmpty {
+                            Text("No description")
+                                .font(.subheadline)
+                                .foregroundStyle(EPSTheme.muted)
+                        } else {
+                            Text(item.description)
+                                .font(.body)
+                                .foregroundStyle(EPSTheme.fg)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                     }
-                    if !item.canvasLink.isEmpty {
-                        canvasButton(item.canvasLink)
-                    }
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .epsGlassRounded(cornerRadius: 22, interactive: true)
+
                     filesPanel
                 } else {
                     EmptyLine("This todo is gone.")
                 }
             }
-            .padding(.horizontal, pagePad)
-            .padding(.top, AdaptiveLayout.isPad ? 96 : 88)
-            .padding(.bottom, 108)
-            .frame(maxWidth: AdaptiveLayout.pageMaxWidth)
+            .padding(.horizontal, isWide ? 28 : 16)
+            .padding(.vertical, 12)
+            .frame(maxWidth: AdaptiveLayout.pageMaxWidth, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
         .scrollIndicators(.hidden)
         .epsVerticalScrollOnly()
-        .toolbar(.hidden, for: .navigationBar)
-        .navigationBarBackButtonHidden(true)
+        .homeTabReselectScroll(isActive: homeFocus.isShowingTodo(todoId))
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if let item, let url = item.canvasURL {
+                ToolbarItem(placement: .topBarTrailing) {
+                    CanvasToolbarButton(webURL: url, scoreLabel: item.scoreLabel)
+                }
+            }
+        }
         .epsPageBackground()
         .epsSwipeBackHaptics()
         .sheet(item: $htmlFile) { file in
@@ -83,104 +123,6 @@ struct TodoView: View {
         .onChange(of: item?.done) { _, _ in
             if let item { dashboard.uiContext = .todo(item) }
         }
-    }
-
-    private var backRow: some View {
-        Button {
-            EPSHaptics.tap()
-            dismiss()
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 13, weight: .bold))
-                Text("Home")
-                    .font(.subheadline.weight(.semibold))
-            }
-            .foregroundStyle(EPSTheme.fg)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-        }
-        .buttonStyle(.plain)
-        .epsGlassRounded(cornerRadius: 14, interactive: true)
-        .accessibilityLabel("Back to home")
-    }
-
-    private func titleCard(_ item: Assignment) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            EPSTagChip(tag: item.tag)
-            Text(item.title.isEmpty ? "Todo" : item.title)
-                .font(.title.weight(.bold))
-                .foregroundStyle(EPSTheme.fg)
-                .strikethrough(shownDone, color: EPSTheme.fg.opacity(0.55))
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .epsGlassRounded(cornerRadius: 22, interactive: false)
-    }
-
-    private func statusRow(_ item: Assignment) -> some View {
-        HStack(spacing: 12) {
-            checkbox(item)
-            Button {
-                toggle(item)
-            } label: {
-                Text(shownDone ? "Done" : "Open")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(goldLabel)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-            }
-            .buttonStyle(.plain)
-            .epsGlassRounded(cornerRadius: 14, tint: EPSTheme.accent.opacity(0.72), interactive: true)
-        }
-    }
-
-    private func metaCard(_ item: Assignment) -> some View {
-        EPSPanel(title: "Details") {
-            VStack(alignment: .leading, spacing: 6) {
-                if !className.isEmpty {
-                    Text(className)
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(dashboard.tone(for: item))
-                }
-                if !item.due.isEmpty {
-                    Text(EPSDueFormat.due(item.due))
-                        .font(.subheadline)
-                        .foregroundStyle(EPSTheme.muted)
-                }
-                if className.isEmpty, item.due.isEmpty {
-                    EmptyLine("No class or due date")
-                }
-            }
-        }
-    }
-
-    private func descriptionCard(_ text: String) -> some View {
-        EPSPanel(title: "Description") {
-            Text(text)
-                .font(.body)
-                .foregroundStyle(EPSTheme.fg)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    private func canvasButton(_ raw: String) -> some View {
-        Button {
-            // Server-supplied string. Only https and mailto get through.
-            if let url = EPSMarkdown.safeURL(raw) {
-                openURL(url)
-            }
-        } label: {
-            Text("Open in Canvas")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(goldLabel)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-        }
-        .buttonStyle(.plain)
-        .epsGlassRounded(cornerRadius: 14, tint: EPSTheme.accent.opacity(0.72), interactive: true)
-        .epsHapticOnTap()
     }
 
     private var filesPanel: some View {
@@ -213,48 +155,16 @@ struct TodoView: View {
         }
     }
 
-    private func checkbox(_ item: Assignment) -> some View {
-        Button {
-            toggle(item)
-        } label: {
-            Color.clear
-                .epsSizedGlassCircle(side: 28, interactive: false)
-                .overlay {
-                    if shownDone {
-                        Circle()
-                            .fill(dashboard.tone(for: item))
-                            .frame(width: 12, height: 12)
-                            .transition(.scale.combined(with: .opacity))
-                    }
-                }
-        }
-        .buttonStyle(.plain)
-        .animation(.spring(duration: 0.34, bounce: 0.26), value: shownDone)
-        .accessibilityLabel(shownDone ? "Mark incomplete" : "Mark complete")
-        .epsHapticOnTap()
-    }
-
     private func toggle(_ item: Assignment) {
         guard pendingDone == nil else { return }
         Task {
+            pendingDone = !item.done
             if item.done {
-                pendingDone = false
-                try? await Task.sleep(for: .milliseconds(420))
                 await dashboard.markUndone(item, session: session)
             } else {
-                pendingDone = true
-                try? await Task.sleep(for: .milliseconds(420))
                 await dashboard.markDone(item, session: session)
             }
             pendingDone = nil
         }
-    }
-
-    private var goldLabel: Color {
-        Color(uiColor: UIColor { traits in
-            traits.userInterfaceStyle == .dark
-                ? .white
-                : UIColor(red: 11 / 255, green: 31 / 255, blue: 58 / 255, alpha: 1)
-        })
     }
 }

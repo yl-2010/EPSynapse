@@ -24,6 +24,86 @@ private extension KeyedDecodingContainer {
   func strings(_ key: Key) -> [String] {
     (try? decodeIfPresent([String].self, forKey: key)) ?? []
   }
+
+  func double(_ key: Key) -> Double? {
+    if let value = try? decodeIfPresent(Double.self, forKey: key) { return value }
+    if let value = try? decodeIfPresent(Int.self, forKey: key) { return Double(value) }
+    if let raw = try? decodeIfPresent(String.self, forKey: key) {
+      let cleaned = raw
+        .replacingOccurrences(of: "%", with: "")
+        .replacingOccurrences(of: ",", with: "")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+      if let value = Double(cleaned) { return value }
+    }
+    return nil
+  }
+}
+
+/// Letter + percent for a course, or points for assignment work. Empty when there is nothing to show.
+enum CanvasScoreFormat {
+  static func course(score: Double?, grade: String) -> String {
+    var score = score
+    var letter = isLetter(grade) ? grade.trimmingCharacters(in: .whitespacesAndNewlines) : ""
+    // Canvas final scores treat missing work as 0. That is not the grade page.
+    if score == 0, letter.isEmpty { score = nil }
+    if let score, letter.isEmpty { letter = letterFromPercent(score) }
+    let pct = score.map { "\(trimNum($0))%" } ?? ""
+    if !letter.isEmpty, !pct.isEmpty { return "\(letter) \(pct)" }
+    return letter.isEmpty ? pct : letter
+  }
+
+  static func work(
+    score: Double?,
+    grade: String,
+    pointsPossible: Double?,
+    excused: Bool,
+    missing: Bool,
+    submitted: Bool
+  ) -> String {
+    if excused { return "Excused" }
+    if missing, score == nil { return "Missing" }
+    if score == nil, submitted { return "Submitted" }
+    guard let score else { return "" }
+    let pts = pointsPossible.map { "/\(trimNum($0))" } ?? ""
+    let trimmed = grade.trimmingCharacters(in: .whitespacesAndNewlines)
+    let letter = !trimmed.isEmpty && trimmed != trimNum(score) ? " \(trimmed)" : ""
+    return "\(trimNum(score))\(pts)\(letter)"
+  }
+
+  static func preferScore(_ a: Double?, _ b: Double?) -> Double? {
+    if a == nil { return b }
+    if b == nil { return a }
+    if a == 0, b != 0 { return b }
+    if b == 0, a != 0 { return a }
+    return a
+  }
+
+  static func isLetter(_ raw: String) -> Bool {
+    raw.range(of: #"^[ABCDF][+-]?$"#, options: [.regularExpression, .caseInsensitive]) != nil
+  }
+
+  static func letterFromPercent(_ score: Double) -> String {
+    if score >= 93 { return "A" }
+    if score >= 90 { return "A-" }
+    if score >= 87 { return "B+" }
+    if score >= 83 { return "B" }
+    if score >= 80 { return "B-" }
+    if score >= 77 { return "C+" }
+    if score >= 73 { return "C" }
+    if score >= 70 { return "C-" }
+    if score >= 67 { return "D+" }
+    if score >= 63 { return "D" }
+    if score >= 60 { return "D-" }
+    return "F"
+  }
+
+  static func trimNum(_ n: Double) -> String {
+    let rounded = (n * 10).rounded() / 10
+    if rounded.rounded() == rounded {
+      return String(Int(rounded))
+    }
+    return String(format: "%.1f", rounded)
+  }
 }
 
 struct Profile: Codable, Equatable {
@@ -450,12 +530,26 @@ struct Course: Codable, Identifiable, Equatable {
   var name: String
   var courseCode: String
   var period: String
+  var currentScore: Double?
+  var currentGrade: String
+  var htmlUrl: String
 
-  init(id: String = "", name: String = "", courseCode: String = "", period: String = "") {
+  init(
+    id: String = "",
+    name: String = "",
+    courseCode: String = "",
+    period: String = "",
+    currentScore: Double? = nil,
+    currentGrade: String = "",
+    htmlUrl: String = ""
+  ) {
     self.id = id
     self.name = name
     self.courseCode = courseCode
     self.period = period
+    self.currentScore = currentScore
+    self.currentGrade = currentGrade
+    self.htmlUrl = htmlUrl
   }
 
   init(from decoder: Decoder) throws {
@@ -464,7 +558,16 @@ struct Course: Codable, Identifiable, Equatable {
     name = c.string(.name)
     courseCode = c.string(.courseCode)
     period = c.string(.period)
+    currentScore = c.double(.currentScore)
+    currentGrade = c.string(.currentGrade)
+    htmlUrl = c.string(.htmlUrl)
   }
+
+  var scoreLabel: String {
+    CanvasScoreFormat.course(score: currentScore, grade: currentGrade)
+  }
+
+  var canvasURL: URL? { CanvasLMS.webURL(from: htmlUrl) }
 }
 
 struct Assignment: Codable, Identifiable, Equatable {
@@ -481,6 +584,12 @@ struct Assignment: Codable, Identifiable, Equatable {
   var plannableType: String
   var description: String
   var classId: String
+  var score: Double?
+  var grade: String
+  var pointsPossible: Double?
+  var excused: Bool
+  var missing: Bool
+  var submitted: Bool
 
   init(
     id: String = "",
@@ -495,7 +604,13 @@ struct Assignment: Codable, Identifiable, Equatable {
     plannerOverrideId: String = "",
     plannableType: String = "assignment",
     description: String = "",
-    classId: String = ""
+    classId: String = "",
+    score: Double? = nil,
+    grade: String = "",
+    pointsPossible: Double? = nil,
+    excused: Bool = false,
+    missing: Bool = false,
+    submitted: Bool = false
   ) {
     self.id = id
     self.canvasId = canvasId
@@ -510,6 +625,12 @@ struct Assignment: Codable, Identifiable, Equatable {
     self.plannableType = plannableType
     self.description = description
     self.classId = classId
+    self.score = score
+    self.grade = grade
+    self.pointsPossible = pointsPossible
+    self.excused = excused
+    self.missing = missing
+    self.submitted = submitted
   }
 
   init(from decoder: Decoder) throws {
@@ -531,6 +652,42 @@ struct Assignment: Codable, Identifiable, Equatable {
     description = c.string(.description)
     let decodedClass = c.string(.classId)
     classId = decodedClass.isEmpty ? courseId : decodedClass
+    score = c.double(.score)
+    grade = c.string(.grade)
+    pointsPossible = c.double(.pointsPossible)
+    excused = c.bool(.excused)
+    missing = c.bool(.missing)
+    submitted = c.bool(.submitted)
+  }
+
+  var displayTag: String? {
+    let raw = tag.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+    switch raw {
+    case "CW", "HW", "QA", "MA": return raw
+    default: return nil
+    }
+  }
+
+  var canvasURL: URL? { CanvasLMS.webURL(from: canvasLink) }
+
+  var scoreLabel: String {
+    CanvasScoreFormat.work(
+      score: score,
+      grade: grade,
+      pointsPossible: pointsPossible,
+      excused: excused,
+      missing: missing,
+      submitted: submitted
+    )
+  }
+
+  var dueDateValue: String? {
+    let key = EPSDueFormat.dayKey(due)
+    return key.isEmpty ? nil : key
+  }
+
+  var dueTimeValue: String? {
+    EPSDueFormat.timeHM(due)
   }
 }
 
@@ -984,6 +1141,63 @@ struct CoursesResponse: Codable {
   }
 }
 
+struct CanvasWork: Codable, Identifiable, Equatable {
+  var id: String
+  var title: String
+  var score: Double?
+  var grade: String
+  var pointsPossible: Double?
+  var excused: Bool
+  var missing: Bool
+  var submitted: Bool
+  var canvasLink: String
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    id = c.string(.id)
+    title = c.string(.title)
+    score = c.double(.score)
+    grade = c.string(.grade)
+    pointsPossible = c.double(.pointsPossible)
+    excused = c.bool(.excused)
+    missing = c.bool(.missing)
+    submitted = c.bool(.submitted)
+    canvasLink = c.string(.canvasLink)
+  }
+}
+
+struct CanvasGrade: Codable, Identifiable, Equatable {
+  var id: String
+  var name: String
+  var currentScore: Double?
+  var currentGrade: String
+  var htmlUrl: String
+  var work: [CanvasWork]
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    id = c.string(.id)
+    name = c.string(.name)
+    currentScore = c.double(.currentScore)
+    currentGrade = c.string(.currentGrade)
+    htmlUrl = c.string(.htmlUrl)
+    work = (try? c.decodeIfPresent([CanvasWork].self, forKey: .work)) ?? []
+  }
+}
+
+struct GradesResponse: Codable {
+  var grades: [CanvasGrade]
+
+  init(grades: [CanvasGrade] = []) {
+    self.grades = grades
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    grades = (try? c.decodeIfPresent([CanvasGrade].self, forKey: .grades)) ?? []
+  }
+}
+
 struct AssignmentsResponse: Codable {
   var assignments: [Assignment]
 
@@ -1348,6 +1562,9 @@ struct SchoolClass: Codable, Identifiable, Hashable, Equatable {
   var teacher: String
   var room: String
   var meetings: [ClassMeeting]
+  var currentScore: Double?
+  var currentGrade: String
+  var htmlUrl: String
 
   init(
     id: String = "",
@@ -1360,7 +1577,10 @@ struct SchoolClass: Codable, Identifiable, Hashable, Equatable {
     subject: String = "",
     teacher: String = "",
     room: String = "",
-    meetings: [ClassMeeting] = []
+    meetings: [ClassMeeting] = [],
+    currentScore: Double? = nil,
+    currentGrade: String = "",
+    htmlUrl: String = ""
   ) {
     self.id = id
     self.name = name
@@ -1373,6 +1593,9 @@ struct SchoolClass: Codable, Identifiable, Hashable, Equatable {
     self.teacher = teacher
     self.room = room
     self.meetings = meetings
+    self.currentScore = currentScore
+    self.currentGrade = currentGrade
+    self.htmlUrl = htmlUrl
   }
 
   init(course: Course) {
@@ -1383,8 +1606,11 @@ struct SchoolClass: Codable, Identifiable, Hashable, Equatable {
       period: course.period,
       trimester: "",
       freePeriod: false,
-      canvasLink: "",
-      courseCode: course.courseCode
+      canvasLink: course.htmlUrl,
+      courseCode: course.courseCode,
+      currentScore: course.currentScore,
+      currentGrade: course.currentGrade,
+      htmlUrl: course.htmlUrl
     )
   }
 
@@ -1402,6 +1628,9 @@ struct SchoolClass: Codable, Identifiable, Hashable, Equatable {
     teacher = c.string(.teacher)
     room = c.string(.room)
     meetings = (try? c.decodeIfPresent([ClassMeeting].self, forKey: .meetings)) ?? []
+    currentScore = c.double(.currentScore)
+    currentGrade = c.string(.currentGrade)
+    htmlUrl = c.string(.htmlUrl)
     id = rawId.isEmpty ? name : rawId
   }
 
@@ -1418,11 +1647,22 @@ struct SchoolClass: Codable, Identifiable, Hashable, Equatable {
     try c.encode(teacher, forKey: .teacher)
     try c.encode(room, forKey: .room)
     try c.encode(meetings, forKey: .meetings)
+    try c.encodeIfPresent(currentScore, forKey: .currentScore)
+    try c.encode(currentGrade, forKey: .currentGrade)
+    try c.encode(htmlUrl, forKey: .htmlUrl)
+  }
+
+  var scoreLabel: String {
+    CanvasScoreFormat.course(score: currentScore, grade: currentGrade)
+  }
+
+  var canvasURL: URL? {
+    CanvasLMS.webURL(from: htmlUrl) ?? CanvasLMS.webURL(from: canvasLink)
   }
 
   private enum CodingKeys: String, CodingKey {
     case id, name, period, trimester, term, freePeriod, canvasLink, courseCode, subject
-    case teacher, room, meetings
+    case teacher, room, meetings, currentScore, currentGrade, htmlUrl
   }
 }
 

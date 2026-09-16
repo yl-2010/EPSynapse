@@ -177,6 +177,11 @@ struct APIClient {
     try await request("/v1/me/schedule", sessionId: sessionId)
   }
 
+  func fetchGrades(work: Bool, sessionId: String) async throws -> GradesResponse {
+    let path = work ? "/v1/me/canvas/grades?work=1" : "/v1/me/canvas/grades"
+    return try await request(path, sessionId: sessionId, timeout: work ? 25 : 20)
+  }
+
   func uploadSchedulePDF(fileURL: URL, sessionId: String) async throws -> ScheduleResponse {
     try await uploadMultipart(
       "/v1/me/schedule/pdf",

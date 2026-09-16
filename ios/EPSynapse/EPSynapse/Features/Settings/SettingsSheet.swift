@@ -33,10 +33,10 @@ private enum SettingsPane: String, Hashable {
     }
 }
 
-struct SettingsSheet: View {
-    @Binding var isPresented: Bool
+struct SettingsView: View {
     @EnvironmentObject private var session: SessionStore
     @EnvironmentObject private var dashboard: DashboardStore
+    @EnvironmentObject private var theme: ThemeStore
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openURL) private var openURL
 
@@ -60,29 +60,28 @@ struct SettingsSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            header
-            NavigationStack(path: $path) {
-                rootList
-                    .toolbar(.hidden, for: .navigationBar)
-                    .navigationDestination(for: SettingsPane.self) { pane in
-                        paneScroll {
-                            switch pane {
-                            case .schedule: schedulePane
-                            case .chat: chatPane
-                            case .canvas: canvasPane
-                            case .onedrive: microsoftPane(.onedrive)
-                            case .onenote: microsoftPane(.onenote)
-                            case .outlook: microsoftPane(.outlook)
-                            case .teams: microsoftPane(.teams)
-                            }
+        NavigationStack(path: $path) {
+            rootList
+                .navigationTitle(path.last?.title ?? "Account")
+                .navigationBarTitleDisplayMode(path.isEmpty ? .large : .inline)
+                .navigationDestination(for: SettingsPane.self) { pane in
+                    paneScroll {
+                        switch pane {
+                        case .schedule: schedulePane
+                        case .chat: chatPane
+                        case .canvas: canvasPane
+                        case .onedrive: microsoftPane(.onedrive)
+                        case .onenote: microsoftPane(.onenote)
+                        case .outlook: microsoftPane(.outlook)
+                        case .teams: microsoftPane(.teams)
                         }
-                        .toolbar(.hidden, for: .navigationBar)
                     }
-            }
+                    .navigationTitle(pane.title)
+                    .navigationBarTitleDisplayMode(.inline)
+                    .epsSwipeBackHaptics()
+                }
         }
-        .presentationDetents([.large])
-        .presentationBackground(.ultraThinMaterial)
+        .epsPageBackground()
         .onAppear { hydrate() }
         .onChange(of: session.profile) { _, _ in hydrate() }
         .onChange(of: session.isSignedIn) { _, signedIn in
@@ -119,74 +118,150 @@ struct SettingsSheet: View {
         }
     }
 
-    private var header: some View {
-        HStack(spacing: 8) {
-            if !path.isEmpty {
-                Button {
-                    path.removeLast()
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(EPSTheme.fg)
-                        .frame(width: 28, height: 28)
-                }
-                .buttonStyle(.plain)
-                .epsSizedGlassCircle(side: 28)
-                .accessibilityLabel("Back")
-            }
-            Text(path.last?.title ?? "Settings")
-                .font(.title3.weight(.bold))
-                .foregroundStyle(EPSTheme.fg)
-                .padding(.leading, 10)
-                .overlay(alignment: .leading) {
-                    Capsule()
-                        .fill(EPSTheme.accent)
-                        .frame(width: 3)
-                }
-            Spacer()
-            Button {
-                isPresented = false
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(EPSTheme.fg)
-                    .frame(width: 28, height: 28)
-            }
-            .buttonStyle(.plain)
-            .epsSizedGlassCircle(side: 28)
-            .accessibilityLabel("Close settings")
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 18)
-        .padding(.bottom, 12)
-    }
-
     private var rootList: some View {
         ScrollView(.vertical) {
-            VStack(alignment: .leading, spacing: 16) {
-                googleAccountBlock
-                Text(statusCopy)
-                    .font(.footnote)
-                    .foregroundStyle(EPSTheme.muted)
-                if session.isSignedIn {
-                    VStack(spacing: 8) {
-                        navRow(.schedule, meta: scheduleMeta)
-                        navRow(.chat, meta: chatMeta)
-                        navRow(.canvas, meta: canvasMeta)
-                        navRow(.onedrive, meta: onedriveMeta)
-                        navRow(.onenote, meta: onenoteMeta)
-                        navRow(.outlook, meta: outlookMeta)
-                        navRow(.teams, meta: teamsMeta)
-                    }
+            VStack(alignment: .leading, spacing: 20) {
+                statusCard
+                if !session.isSignedIn {
+                    signInCard
                 }
+                appearanceCard
+                if session.isSignedIn {
+                    connectionsCard
+                    signedInCard
+                }
+                linksCard
             }
-            .padding(20)
+            .padding(AdaptiveLayout.isPad ? 28 : 16)
             .frame(maxWidth: AdaptiveLayout.formMaxWidth)
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .tabReselectScrollToTop(for: .account)
         .scrollIndicators(.hidden)
         .scrollDismissesKeyboard(.interactively)
         .epsVerticalScrollOnly()
+    }
+
+    private var statusCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if session.isSignedIn, let profile = session.profile {
+                HStack(alignment: .center, spacing: 12) {
+                    googlePicture(profile.picture)
+                    VStack(alignment: .leading, spacing: 2) {
+                        if !profile.email.isEmpty {
+                            Text(profile.email)
+                                .font(.headline)
+                                .foregroundStyle(EPSTheme.fg)
+                        }
+                        if !profile.signedInName.isEmpty, profile.signedInName != profile.email {
+                            Text(profile.signedInName)
+                                .foregroundStyle(EPSTheme.muted)
+                        }
+                    }
+                }
+            } else {
+                Text("Not signed in")
+                    .font(.headline)
+                    .foregroundStyle(EPSTheme.fg)
+            }
+            if !session.settingsStatus.isEmpty, !session.isSignedIn {
+                Text(session.settingsStatus)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .epsGlassRounded(cornerRadius: 18, interactive: true)
+    }
+
+    private var signInCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            goldButton("Sign in with Google") {
+                Task { await session.signInWithGoogle() }
+            }
+            Text(SessionStore.googleFirst)
+                .font(.footnote)
+                .foregroundStyle(EPSTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .epsGlassRounded(cornerRadius: 18, interactive: true)
+    }
+
+    private var appearanceCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Appearance")
+                .font(.headline)
+            Picker("Theme", selection: $theme.preference) {
+                ForEach(ThemePreference.allCases) { pref in
+                    Text(pref.title).tag(pref)
+                }
+            }
+            .pickerStyle(.segmented)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .epsGlassRounded(cornerRadius: 18, interactive: true)
+    }
+
+    private var connectionsCard: some View {
+        VStack(spacing: 8) {
+            navRow(.schedule, meta: scheduleMeta)
+            navRow(.chat, meta: chatMeta)
+            navRow(.canvas, meta: canvasMeta)
+            navRow(.onedrive, meta: onedriveMeta)
+            navRow(.onenote, meta: onenoteMeta)
+            navRow(.outlook, meta: outlookMeta)
+            navRow(.teams, meta: teamsMeta)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .epsGlassRounded(cornerRadius: 18, interactive: true)
+    }
+
+    private var signedInCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Button("Sign out") {
+                Task { await session.logout() }
+            }
+            .epsGlassButton()
+
+            Button("Delete account data…", role: .destructive) {
+                confirmDelete = true
+            }
+            .alert("Delete your account?", isPresented: $confirmDelete) {
+                Button("Delete", role: .destructive) {
+                    Task { await session.deleteAccount() }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text(SessionStore.deleteWarning)
+            }
+            if !session.deleteStatus.isEmpty {
+                Text(session.deleteStatus)
+                    .font(.footnote)
+                    .foregroundStyle(EPSTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .epsGlassRounded(cornerRadius: 18, interactive: true)
+    }
+
+    private var linksCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Link("Privacy Policy", destination: URL(string: "https://epsynapse.com/privacy")!)
+            Link("Website", destination: URL(string: "https://epsynapse.com")!)
+            Link("Research", destination: EPSLinks.research)
+        }
+        .font(.body.weight(.medium))
+        .foregroundStyle(EPSTheme.accent)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .epsGlassRounded(cornerRadius: 18, interactive: true)
     }
 
     private func paneScroll<Content: View>(@ViewBuilder content: () -> Content) -> some View {
@@ -580,9 +655,7 @@ struct SettingsSheet: View {
             .alert("Delete your account?", isPresented: $confirmDelete) {
                 Button("Delete", role: .destructive) {
                     Task {
-                        if await session.deleteAccount() {
-                            isPresented = false
-                        }
+                        _ = await session.deleteAccount()
                     }
                 }
                 Button("Cancel", role: .cancel) {}
@@ -794,7 +867,7 @@ struct SettingsSheet: View {
         "Paste it in the API key field below. Leave Model on Groq.",
         "Tap Save key. Enter also saves. Do not use the Canvas Save button for this.",
         "You can save more than one key. Chat switches if a key hits its free limit.",
-        "Chat key on the settings list must say Groq. Then close settings and ask in the chat pill. Do not paste the key in chat.",
+        "Chat key on the account list must say Groq. Then open the Chat tab and ask. Do not paste the key in chat.",
     ]
 
     private static let canvasSteps = [
@@ -803,7 +876,7 @@ struct SettingsSheet: View {
         "In Canvas, click Account (your picture, left side), then Settings. Scroll to Approved Integrations. Click Add New Access Token.",
         "Purpose: EPSynapse. Students must pick an expiration date. There is no permissions list. Click Generate Token and copy it now. Canvas shows it once.",
         "Leave Canvas URL as https://eastsideprep.instructure.com unless you use another school. Paste the token below. Tap Save.",
-        "Canvas on the settings list must say Connected. Then close settings.",
+        "Canvas on the account list must say Connected.",
     ]
 
     /// Other-door Canvas steps. No school name, no fixed host.
@@ -813,7 +886,7 @@ struct SettingsSheet: View {
         "Open that Canvas site and sign in. Click Account (your picture, left side), then Settings. Scroll to Approved Integrations. Click Add New Access Token.",
         "Purpose: EPSynapse. Pick an expiration date if Canvas asks. Click Generate Token and copy it now. Canvas shows it once.",
         "Paste the token below. Tap Save.",
-        "Canvas on the settings list must say Connected. Then close settings.",
+        "Canvas on the account list must say Connected.",
     ]
 
     private static let microsoftOffCopy =

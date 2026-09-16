@@ -29,6 +29,23 @@ enum EPSDueFormat {
         return ""
     }
 
+    static func timeHM(_ iso: String) -> String? {
+        if let date = parse(iso) {
+            let parts = Calendar.current.dateComponents([.hour, .minute], from: date)
+            guard let hour = parts.hour, let minute = parts.minute else { return nil }
+            if hour == 0, minute == 0, !iso.contains("T"), !iso.contains(":") {
+                return nil
+            }
+            return String(format: "%02d:%02d", hour, minute)
+        }
+        let trimmed = iso.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.count >= 16 {
+            let slice = String(trimmed.dropFirst(11).prefix(5))
+            if slice.contains(":") { return slice }
+        }
+        return nil
+    }
+
     private static func parse(_ iso: String) -> Date? {
         let trimmed = iso.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
@@ -44,6 +61,7 @@ enum EPSDueFormat {
 
 struct EPSPanel<Content: View>: View {
     var title: String
+    var accentPrefix: String? = nil
     var filters: Bool = false
     var dimmed: Bool = false
     var expanded: Bool? = nil
@@ -58,10 +76,10 @@ struct EPSPanel<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .center, spacing: 10) {
+            HStack(alignment: .center, spacing: 8) {
                 titleView
-                Spacer(minLength: 8)
                 if showFilters {
+                    Spacer(minLength: 8)
                     FilterOrbBar()
                 }
             }
@@ -70,20 +88,21 @@ struct EPSPanel<Content: View>: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .epsGlassRounded(cornerRadius: 22, interactive: false)
-        .opacity(dimmed ? 0.78 : 1)
+        .epsGlassRounded(cornerRadius: 22, interactive: true)
+        .opacity(dimmed ? 0.55 : 1)
     }
 
     private var titleLabel: some View {
-        Text(title)
-            .font(.title3.weight(.bold))
-            .foregroundStyle(EPSTheme.fg)
-            .padding(.leading, 10)
-            .overlay(alignment: .leading) {
-                Capsule()
-                    .fill(EPSTheme.accent)
-                    .frame(width: 3)
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            if let accentPrefix, !accentPrefix.isEmpty {
+                Text(accentPrefix)
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(EPSTheme.accent)
             }
+            Text(title)
+                .font(.title3.weight(.bold))
+                .foregroundStyle(EPSTheme.fg)
+        }
     }
 
     @ViewBuilder
@@ -114,7 +133,7 @@ struct FilterOrbBar: View {
                     tag: tag,
                     isOn: dashboard.typeFilter.contains(tag)
                 ) {
-                    withAnimation(.easeInOut(duration: 0.28)) {
+                    withAnimation(.easeInOut(duration: 0.22)) {
                         dashboard.toggleFilter(tag)
                     }
                 }
@@ -132,18 +151,23 @@ struct FilterOrb: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            EPSHaptics.tap()
+            action()
+        } label: {
             Text(tag)
-                .font(.system(size: 9, weight: .bold))
+                .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(isOn ? Color.white : EPSTheme.muted)
-                .frame(width: 33, height: 33)
+                .frame(width: 32, height: 32)
+                .glassCircle(
+                    interactive: true,
+                    tint: isOn ? EPSTheme.filterOnTint(colorScheme) : nil
+                )
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .epsSizedGlassCircle(side: 33, tint: isOn ? EPSTheme.filterOnTint(colorScheme) : nil, interactive: false)
-        .animation(.easeInOut(duration: 0.22), value: isOn)
         .accessibilityLabel(tag)
         .accessibilityAddTraits(isOn ? [.isSelected] : [])
-        .epsHapticOnTap()
     }
 }
 
@@ -173,10 +197,6 @@ struct TodoPanel: View {
             } else {
                 TodoRows(items: visible) { item in
                     TodoRow(item: item)
-                        .transition(.asymmetric(
-                            insertion: .opacity.combined(with: .move(edge: .top)),
-                            removal: .opacity.combined(with: .move(edge: .bottom))
-                        ))
                 }
             }
         }
@@ -197,14 +217,10 @@ struct CompletedPanel: View {
     var body: some View {
         EPSPanel(title: "Completed", dimmed: true) {
             if items.isEmpty {
-                EmptyLine("Nothing completed yet")
+                EmptyLine("Nothing here")
             } else {
                 TodoRows(items: items) { item in
                     TodoRow(item: item)
-                        .transition(.asymmetric(
-                            insertion: .opacity.combined(with: .move(edge: .top)),
-                            removal: .opacity.combined(with: .move(edge: .bottom))
-                        ))
                 }
             }
         }
@@ -227,102 +243,182 @@ struct TodoRows<Row: View>: View {
     @ViewBuilder var row: (Assignment) -> Row
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        LazyVStack(alignment: .leading, spacing: 0) {
             ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                if index > 0 {
-                    if EPSDueFormat.dayKey(items[index - 1].due) != EPSDueFormat.dayKey(item.due) {
+                VStack(alignment: .leading, spacing: 0) {
+                    if index > 0, EPSDueFormat.dayKey(items[index - 1].due) != EPSDueFormat.dayKey(item.due) {
                         TodoDaySeparator()
-                    } else {
-                        Color.clear.frame(height: 4)
                     }
+                    row(item)
                 }
-                row(item)
             }
+            .animation(.spring(response: 0.42, dampingFraction: 0.86), value: items.map(\.id))
         }
     }
 }
 
 struct TodoRow: View {
     var item: Assignment
+    var showClass: Bool = true
     @EnvironmentObject private var session: SessionStore
     @EnvironmentObject private var dashboard: DashboardStore
-    @State private var hovering = false
     @State private var pendingDone: Bool?
 
     private var shownDone: Bool { pendingDone ?? item.done }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 10) {
-            checkbox
+        let when = NaturalWhen.format(date: item.dueDateValue, time: item.dueTimeValue)
+        let className = showClass ? CourseTitle.pretty(item.courseName) : ""
+        let hasMeta = !className.isEmpty || !when.isEmpty
+
+        HStack(alignment: .top, spacing: 12) {
+            EducationTodoCheckbox(done: shownDone) {
+                toggle()
+            }
+            .padding(.top, 2)
+
             NavigationLink(value: HomeDestination.todo(item.id)) {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        EPSTagChip(tag: item.tag)
-                        Text(item.title)
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(EPSTheme.fg)
-                            .strikethrough(shownDone, color: EPSTheme.fg.opacity(0.55))
-                            .multilineTextAlignment(.leading)
-                    }
-                    HStack(spacing: 8) {
-                        if !item.courseName.isEmpty {
-                            Text(CourseTitle.pretty(item.courseName))
-                                .foregroundStyle(dashboard.tone(for: item))
+                VStack(alignment: .leading, spacing: 4) {
+                    EducationTodoTitle(item: item, font: .body.weight(.semibold), done: shownDone)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if hasMeta {
+                        HStack(spacing: 8) {
+                            if !className.isEmpty {
+                                Text(className)
+                                    .font(.caption)
+                                    .foregroundStyle(EPSTheme.muted)
+                            }
+                            if !when.isEmpty {
+                                Text(when)
+                                    .font(.caption)
+                                    .foregroundStyle(EPSTheme.muted)
+                            }
                         }
-                        if !item.due.isEmpty {
-                            Text(EPSDueFormat.due(item.due))
-                                .foregroundStyle(EPSTheme.muted)
-                        }
                     }
-                    .font(.caption)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.plain)
             .epsHapticNavigation()
+
+            EducationCanvasScoreButton(
+                label: item.scoreLabel,
+                url: item.canvasURL,
+                topPadding: 3
+            )
+        }
+        .padding(.vertical, 8)
+    }
+
+    private func toggle() {
+        guard pendingDone == nil else { return }
+        Task {
+            pendingDone = !item.done
+            if item.done {
+                await dashboard.markUndone(item, session: session)
+            } else {
+                await dashboard.markDone(item, session: session)
+            }
+            pendingDone = nil
+        }
+    }
+}
+
+/// Title with CW/HW/QA/MA in accent at the same size as the name.
+struct EducationTodoTitle: View {
+    var item: Assignment
+    var font: Font
+    var done: Bool = false
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            if let tag = item.displayTag {
+                Text(tag)
+                    .font(font)
+                    .foregroundStyle(done ? EPSTheme.muted : EPSTheme.accent)
+            }
+            Text(item.title)
+                .font(font)
+                .foregroundStyle(EPSTheme.fg)
+                .strikethrough(done, color: EPSTheme.muted)
+        }
+    }
+}
+
+/// Checkbox locked to the title row so class / due meta never vertically shifts it.
+struct EducationTodoCheckbox: View {
+    var done: Bool
+    var action: () -> Void
+
+    static let size: CGFloat = 22
+
+    var body: some View {
+        Button {
+            if !done {
+                EPSHaptics.tap()
+            }
+            action()
+        } label: {
+            Image(systemName: done ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: Self.size, weight: .medium))
+                .foregroundStyle(done ? EPSTheme.accent : EPSTheme.muted)
+                .frame(width: Self.size, height: Self.size)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+        .accessibilityLabel(done ? "Mark not done" : "Mark done")
+    }
+}
+
+struct DayPanel: View {
+    var section: DaySection
+
+    var body: some View {
+        EPSPanel(title: section.whenLabel, accentPrefix: section.typeCode) {
+            if section.classes.isEmpty {
+                EmptyLine("Nothing here")
+            } else {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(section.classes) { dayClass in
+                        classRow(dayClass, isCurrent: section.isCurrent(dayClass))
+                    }
+                }
+            }
+        }
+    }
+
+    private func classRow(_ dayClass: DayClass, isCurrent: Bool) -> some View {
+        HStack(spacing: 10) {
+            NavigationLink(value: HomeDestination.schoolClass(dayClass.klass.id)) {
+                HStack(spacing: 10) {
+                    Text(dayClass.period)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(EPSTheme.accent)
+                        .frame(width: 22, alignment: .leading)
+                    Text(dayClass.klass.freePeriod ? "Free Period" : CourseTitle.pretty(dayClass.klass.name))
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(EPSTheme.fg)
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .epsHapticNavigation()
+
+            EducationCanvasScoreButton(
+                label: dayClass.klass.scoreLabel,
+                url: dayClass.klass.canvasURL
+            )
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 8)
         .background {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(dashboard.tone(for: item).opacity(hovering ? 0.14 : 0))
-        }
-        .opacity(shownDone ? (hovering ? 0.9 : 0.55) : 1)
-        .animation(.easeOut(duration: 0.2), value: hovering)
-        .onHover { hovering = $0 }
-    }
-
-    private var checkbox: some View {
-        Button {
-            guard pendingDone == nil else { return }
-            Task {
-                if item.done {
-                    pendingDone = false
-                    try? await Task.sleep(for: .milliseconds(420))
-                    await dashboard.markUndone(item, session: session)
-                } else {
-                    pendingDone = true
-                    try? await Task.sleep(for: .milliseconds(420))
-                    await dashboard.markDone(item, session: session)
-                }
-                pendingDone = nil
+            if isCurrent {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(EPSTheme.accent.opacity(0.12))
             }
-        } label: {
-            Color.clear
-                .epsSizedGlassCircle(side: 20, interactive: false)
-                .overlay {
-                    if shownDone {
-                        Circle()
-                            .fill(dashboard.tone(for: item))
-                            .frame(width: 8, height: 8)
-                            .transition(.scale.combined(with: .opacity))
-                    }
-                }
         }
-        .buttonStyle(.plain)
-        .animation(.spring(duration: 0.34, bounce: 0.26), value: shownDone)
-        .accessibilityLabel(shownDone ? "Mark incomplete" : "Mark complete")
-        .epsHapticOnTap()
     }
 }
 
@@ -337,7 +433,7 @@ struct ClassesPanel: View {
             if rows.isEmpty {
                 EmptyLine(emptyCopy)
             } else {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 0) {
                     ForEach(rows) { course in
                         NavigationLink(value: HomeDestination.schoolClass(course.id)) {
                             ClassRow(course: course)
@@ -358,183 +454,45 @@ struct ClassesPanel: View {
     }
 }
 
-/// Today's classes for a model-parsed schedule. Rows come from the server's
-/// `meetings` list in start-time order with the `current` flag already set.
-/// EPS schedules do not use this panel; their bells drive `ClassRow` instead.
-struct TodayPanel: View {
-    @EnvironmentObject private var dashboard: DashboardStore
-
-    private var rows: [ScheduleMeeting] { dashboard.todayMeetings }
-
-    private var classesWithoutTimes: [SchoolClass] {
-        dashboard.displayedClasses.filter { !$0.freePeriod }
-    }
-
-    var body: some View {
-        EPSPanel(title: "Today") {
-            if dashboard.scheduleNoBellTimes {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(classesWithoutTimes) { course in
-                        NavigationLink(value: HomeDestination.schoolClass(course.id)) {
-                            TodayRow(
-                                time: "",
-                                name: course.name,
-                                period: course.period,
-                                tone: dashboard.tone(for: course),
-                                isCurrent: false
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .epsHapticNavigation()
-                    }
-                    EmptyLine("Your PDF had no class times. Upload one with times to see today's order.")
-                }
-            } else if rows.isEmpty {
-                EmptyLine("No classes today")
-            } else {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(rows) { meeting in
-                        todayLink(meeting)
-                    }
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func todayLink(_ meeting: ScheduleMeeting) -> some View {
-        let klass = dashboard.schoolClass(id: meeting.classId)
-        let row = TodayRow(
-            time: meeting.timeLabel,
-            name: meeting.title,
-            period: meeting.period,
-            tone: klass.map { dashboard.tone(for: $0) } ?? EPSTheme.accent,
-            isCurrent: meeting.current
-        )
-        if let klass, !meeting.freePeriod {
-            NavigationLink(value: HomeDestination.schoolClass(klass.id)) { row }
-                .buttonStyle(.plain)
-                .epsHapticNavigation()
-        } else {
-            row
-        }
-    }
-}
-
-struct TodayRow: View {
-    var time: String
-    var name: String
-    var period: String
-    var tone: Color
-    var isCurrent: Bool
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 10) {
-            if !time.isEmpty {
-                Text(time)
-                    .font(.caption.weight(.semibold).monospacedDigit())
-                    .foregroundStyle(isCurrent ? tone : EPSTheme.muted)
-                    .fixedSize()
-            }
-            Text(CourseTitle.pretty(name))
-                .font(.body.weight(isCurrent ? .bold : .semibold))
-                .foregroundStyle(EPSTheme.fg)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            if !period.isEmpty {
-                Text(period)
-                    .font(.caption)
-                    .foregroundStyle(EPSTheme.muted)
-                    .fixedSize()
-            }
-            if isCurrent {
-                Text("Now")
-                    .font(.system(size: 11, weight: .bold))
-                    .tracking(0.4)
-                    .foregroundStyle(tone)
-            }
-        }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 8)
-        .background {
-            if isCurrent {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(tone.opacity(0.12))
-            }
-        }
-        .contentShape(Rectangle())
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityText)
-    }
-
-    private var accessibilityText: String {
-        var parts: [String] = []
-        if !time.isEmpty { parts.append(time) }
-        parts.append(CourseTitle.pretty(name))
-        if isCurrent { parts.append("now") }
-        return parts.joined(separator: ", ")
-    }
-}
-
 struct ClassRow: View {
     var course: SchoolClass
     @EnvironmentObject private var dashboard: DashboardStore
 
     private var isCurrent: Bool {
-        dashboard.isCurrent(course)
-    }
-
-    private var trailing: String {
-        course.courseCode
+        dashboard.daySections.contains { section in
+            section.classes.contains { $0.klass.id == course.id && section.isCurrent($0) }
+        }
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 10) {
-            if !course.period.isEmpty {
-                // EPS letters sit in a fixed column. Printed labels from an uploaded
-                // schedule ("P1", "3rd", "Block B") get whatever width they need.
-                Text(course.period)
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(EPSTone.forClass(course).color)
-                    .lineLimit(1)
-                    .frame(minWidth: 22, alignment: .center)
+        HStack(spacing: 10) {
+            HStack(spacing: 10) {
+                if !course.period.isEmpty {
+                    Text(course.period)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(EPSTheme.accent)
+                        .frame(width: 22, alignment: .leading)
+                }
+                Text(CourseTitle.pretty(course.name))
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(EPSTheme.fg)
+                Spacer(minLength: 0)
             }
-            Text(CourseTitle.pretty(course.name))
-                .font(.body.weight(.semibold))
-                .foregroundStyle(EPSTheme.fg)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            if !trailing.isEmpty {
-                Text(trailing)
-                    .font(.caption)
-                    .foregroundStyle(EPSTheme.muted)
-            }
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(EPSTheme.muted)
+
+            EducationCanvasScoreButton(
+                label: course.scoreLabel,
+                url: course.canvasURL
+            )
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 8)
         .background {
             if isCurrent {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(EPSTone.forClass(course).color.opacity(0.12))
+                    .fill(EPSTheme.accent.opacity(0.12))
             }
         }
         .contentShape(Rectangle())
-    }
-}
-
-struct EPSTagChip: View {
-    var tag: String
-
-    private var resolved: String {
-        tag.isEmpty ? "HW" : tag.uppercased()
-    }
-
-    var body: some View {
-        Text(resolved)
-            .font(.system(size: 11, weight: .bold))
-            .tracking(0.4)
-            .foregroundStyle(EPSTheme.accent)
     }
 }
 
@@ -550,6 +508,5 @@ struct EmptyLine: View {
             .font(.subheadline)
             .foregroundStyle(EPSTheme.muted)
             .padding(.vertical, 6)
-            .padding(.horizontal, 8)
     }
 }

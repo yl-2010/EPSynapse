@@ -1,10 +1,12 @@
 import SwiftUI
+import UIKit
 
 struct NoteView: View {
     var noteId: String
 
     @EnvironmentObject private var session: SessionStore
     @EnvironmentObject private var dashboard: DashboardStore
+    @EnvironmentObject private var homeFocus: HomeFocusStore
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -31,7 +33,6 @@ struct NoteView: View {
     var body: some View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: 16) {
-                backRow
                 if let note {
                     textCard(note.text)
                     votesCard(note)
@@ -44,15 +45,15 @@ struct NoteView: View {
                 }
             }
             .padding(.horizontal, pagePad)
-            .padding(.top, AdaptiveLayout.isPad ? 96 : 88)
-            .padding(.bottom, 108)
+            .padding(.vertical, 12)
             .frame(maxWidth: AdaptiveLayout.pageMaxWidth)
             .frame(maxWidth: .infinity)
         }
         .scrollIndicators(.hidden)
         .epsVerticalScrollOnly()
-        .toolbar(.hidden, for: .navigationBar)
-        .navigationBarBackButtonHidden(true)
+        .homeTabReselectScroll(isActive: homeFocus.isShowingNote(noteId))
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
         .epsPageBackground()
         .epsSwipeBackHaptics()
         .task {
@@ -69,26 +70,6 @@ struct NoteView: View {
             guard let note, !next.isEmpty, next != note.subject else { return }
             Task { await dashboard.updateNoteSubject(id: note.id, subject: next, session: session) }
         }
-    }
-
-    private var backRow: some View {
-        Button {
-            EPSHaptics.tap()
-            dismiss()
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 13, weight: .bold))
-                Text("Back")
-                    .font(.subheadline.weight(.semibold))
-            }
-            .foregroundStyle(EPSTheme.fg)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-        }
-        .buttonStyle(.plain)
-        .epsGlassRounded(cornerRadius: 14, interactive: true)
-        .accessibilityLabel("Back")
     }
 
     private func textCard(_ text: String) -> some View {

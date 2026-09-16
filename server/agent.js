@@ -407,7 +407,7 @@ export function formatUiContextBlock(ui) {
   lines.push(`- client: ${client}`);
   if (ui.path) lines.push(`- path: ${ui.path}`);
   if (view === "home") {
-    lines.push("- Viewing Home (TODO, Classes, Grades, Notes).");
+    lines.push("- Viewing Home (TODO, day schedule, Notes).");
   } else if (view === "class") {
     lines.push(
       `- Viewing CLASS: ${ui.className || ui.classId || "?"}` +
@@ -427,8 +427,6 @@ export function formatUiContextBlock(ui) {
     }
     if (ui.noteText) lines.push(`- Note text:\n${ui.noteText}`);
     lines.push("- Prefer this note for edits or delete unless they name another.");
-  } else if (view === "grades") {
-    lines.push("- Viewing Grades.");
   } else if (view) {
     lines.push(`- Viewing ${view}.`);
   }

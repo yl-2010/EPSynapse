@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct NotesPanel: View {
-    @Binding var path: NavigationPath
+    @Binding var path: [HomeDestination]
     @EnvironmentObject private var session: SessionStore
     @EnvironmentObject private var dashboard: DashboardStore
     @Environment(\.openURL) private var openURL
@@ -12,6 +12,8 @@ struct NotesPanel: View {
     var body: some View {
         EPSPanel(title: "Notes") {
             VStack(alignment: .leading, spacing: 10) {
+                notesList
+
                 TextField("Paste class notes", text: $draft, axis: .vertical)
                     .lineLimit(5 ... 12)
                     .font(.body)
@@ -65,6 +67,24 @@ struct NotesPanel: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .epsDismissKeyboard)) { _ in
             fieldFocused = false
+        }
+    }
+
+    @ViewBuilder
+    private var notesList: some View {
+        let rows = Array(dashboard.notes.prefix(8))
+        if rows.isEmpty {
+            EmptyLine("Paste a note and save it")
+        } else {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(rows) { note in
+                    NavigationLink(value: HomeDestination.note(note.id)) {
+                        ClassNoteRow(note: note, tone: EPSTheme.accent)
+                    }
+                    .buttonStyle(.plain)
+                    .epsHapticNavigation()
+                }
+            }
         }
     }
 

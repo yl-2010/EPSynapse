@@ -15,6 +15,8 @@ final class DashboardStore: ObservableObject {
   @Published var scheduleTermLabel = ""
   /// llm schedule whose PDF listed classes but no meeting times.
   @Published var scheduleNoBellTimes = false
+  @Published var scheduleBells: ScheduleBells?
+  @Published var scheduleTodayKey = ""
   @Published var assignments: [Assignment] = []
   @Published var files: [DriveFile] = []
   @Published var classFiles: [DriveFile] = []
@@ -51,6 +53,29 @@ final class DashboardStore: ObservableObject {
   /// rows come in bell order, which is the same thing.
   var todayMeetings: [ScheduleMeeting] {
     meetings.sorted { $0.startMinutes < $1.startMinutes }
+  }
+
+  var daySections: [DaySection] {
+    EPSDaySchedule.sections(
+      classes: displayedClasses,
+      meetings: meetings,
+      bells: scheduleBells,
+      isLLM: isLLMSchedule,
+      noBellTimes: scheduleNoBellTimes,
+      todayKey: scheduleTodayKey
+    )
+  }
+
+  func nextOccurrence(for schoolClass: SchoolClass) -> NextClassOccurrence? {
+    EPSDaySchedule.nextOccurrence(
+      for: schoolClass,
+      classes: displayedClasses,
+      meetings: meetings,
+      bells: scheduleBells,
+      isLLM: isLLMSchedule,
+      noBellTimes: scheduleNoBellTimes,
+      todayKey: scheduleTodayKey
+    )
   }
 
   /// Whether this class is meeting right now. llm schedules trust the server's
@@ -102,6 +127,8 @@ final class DashboardStore: ObservableObject {
     scheduleSchool = ""
     scheduleTermLabel = ""
     scheduleNoBellTimes = false
+    scheduleBells = nil
+    scheduleTodayKey = ""
     assignments = []
     files = []
     classFiles = []
@@ -134,6 +161,10 @@ final class DashboardStore: ObservableObject {
       guard me.canvasConnected else { return [] }
       return await self.loadCourses(sessionId: sid)
     }()
+    async let fetchedGrades: [CanvasGrade] = {
+      guard me.canvasConnected else { return [] }
+      return await self.loadGrades(sessionId: sid)
+    }()
     async let fetchedAssignments: [Assignment] = self.loadAssignments(sessionId: sid)
     async let fetchedClassFiles: [DriveFile] = self.loadClassFiles(sessionId: sid)
     async let fetchedTodoFiles: [DriveFile] = self.loadTodoFiles(sessionId: sid)
@@ -150,6 +181,7 @@ final class DashboardStore: ObservableObject {
     mailError = ""
     applySchedule(await fetchedSchedule)
     notes = await fetchedNotes
+    mergeCanvasGrades(await fetchedGrades)
   }
 
   private func applySchedule(_ schedule: ScheduleResponse) {
@@ -159,6 +191,8 @@ final class DashboardStore: ObservableObject {
     scheduleSchool = schedule.school
     scheduleTermLabel = schedule.termLabel
     scheduleNoBellTimes = schedule.isLLM && schedule.noBellTimes
+    scheduleBells = schedule.bells
+    scheduleTodayKey = schedule.todayKey
   }
 
   func schoolClass(id: String) -> SchoolClass? {
@@ -469,21 +503,7 @@ final class DashboardStore: ObservableObject {
   }
 
   static func currentPeriod(now: Date = Date(), calendar: Calendar = .current) -> (num: String, letter: String)? {
-    let weekday = calendar.component(.weekday, from: now)
-    if weekday == 1 || weekday == 7 { return nil }
-    let minutes = calendar.component(.hour, from: now) * 60 + calendar.component(.minute, from: now)
-    let bells: [(Int, Int, String, String)] = [
-      (8 * 60, 8 * 60 + 50, "1", "A"),
-      (8 * 60 + 55, 9 * 60 + 45, "2", "B"),
-      (9 * 60 + 50, 10 * 60 + 40, "3", "C"),
-      (10 * 60 + 45, 11 * 60 + 35, "4", "D"),
-      (12 * 60 + 15, 13 * 60 + 5, "5", "E"),
-      (13 * 60 + 10, 14 * 60, "6", "F"),
-      (14 * 60 + 5, 14 * 60 + 55, "7", "G"),
-      (15 * 60, 15 * 60 + 50, "8", "H"),
-    ]
-    guard let hit = bells.first(where: { minutes >= $0.0 && minutes < $0.1 }) else { return nil }
-    return (hit.2, hit.3)
+    EPSDaySchedule.currentPeriod(now: now, calendar: calendar)
   }
 
   private func loadSchedule(sessionId: String) async -> ScheduleResponse {
@@ -519,6 +539,82 @@ final class DashboardStore: ObservableObject {
   private func loadCourses(sessionId: String) async -> [Course] {
     let wrapped: CoursesResponse? = try? await api.request("/v1/me/canvas/courses", sessionId: sessionId)
     return wrapped?.courses ?? []
+  }
+
+  private func loadGrades(sessionId: String) async -> [CanvasGrade] {
+    do {
+      let wrapped = try await api.fetchGrades(work: true, sessionId: sessionId)
+      return wrapped.grades
+    } catch {
+      return []
+    }
+  }
+
+  private func mergeCanvasGrades(_ grades: [CanvasGrade]) {
+    if !grades.isEmpty {
+      let byId = Dictionary(grades.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
+      courses = courses.map { course in
+        guard let grade = byId[course.id] ?? grades.first(where: { Self.namesOverlap($0.name, course.name) }) else {
+          return course
+        }
+        var next = course
+        next.currentScore = CanvasScoreFormat.preferScore(course.currentScore, grade.currentScore)
+        if next.currentGrade.isEmpty { next.currentGrade = grade.currentGrade }
+        if next.htmlUrl.isEmpty { next.htmlUrl = grade.htmlUrl }
+        return next
+      }
+    }
+
+    scheduleClasses = scheduleClasses.map { klass in
+      var next = klass
+      if let hit = gradeRow(for: klass, grades: grades) {
+        next.currentScore = CanvasScoreFormat.preferScore(klass.currentScore, hit.score)
+        if next.currentGrade.isEmpty { next.currentGrade = hit.grade }
+        if next.htmlUrl.isEmpty { next.htmlUrl = hit.htmlUrl }
+        if next.canvasLink.isEmpty { next.canvasLink = hit.htmlUrl }
+      }
+      return next
+    }
+
+    var workById: [String: CanvasWork] = [:]
+    for grade in grades {
+      for item in grade.work {
+        if !item.id.isEmpty { workById[item.id] = item }
+      }
+    }
+    guard !workById.isEmpty else { return }
+    assignments = assignments.map { item in
+      let key = item.canvasId.isEmpty ? item.id : item.canvasId
+      guard let work = workById[key] ?? workById[item.id] else { return item }
+      var next = item
+      next.score = work.score
+      next.grade = work.grade
+      next.pointsPossible = work.pointsPossible
+      next.excused = work.excused
+      next.missing = work.missing
+      next.submitted = work.submitted
+      if next.canvasLink.isEmpty { next.canvasLink = work.canvasLink }
+      return next
+    }
+  }
+
+  private func gradeRow(
+    for klass: SchoolClass,
+    grades: [CanvasGrade]
+  ) -> (score: Double?, grade: String, htmlUrl: String)? {
+    if let course = courses.first(where: { matchesGrade($0.id, $0.name, $0.courseCode, klass) }) {
+      return (course.currentScore, course.currentGrade, course.htmlUrl)
+    }
+    if let grade = grades.first(where: { matchesGrade($0.id, $0.name, "", klass) }) {
+      return (grade.currentScore, grade.currentGrade, grade.htmlUrl)
+    }
+    return nil
+  }
+
+  private func matchesGrade(_ id: String, _ name: String, _ code: String, _ klass: SchoolClass) -> Bool {
+    if !id.isEmpty, id == klass.id { return true }
+    if !code.isEmpty, !klass.courseCode.isEmpty, code == klass.courseCode { return true }
+    return Self.namesOverlap(name, klass.name)
   }
 
   private func loadAssignments(sessionId: String) async -> [Assignment] {

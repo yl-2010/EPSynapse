@@ -95,6 +95,11 @@ enum EPSTheme {
         Color(red: 235 / 255, green: 167 / 255, blue: 0)
     }
 
+    /// Chat send, history dots, and user-bubble tint. Same gold as the site accent.
+    static func chatSend(_ scheme: ColorScheme) -> Color {
+        accent(scheme)
+    }
+
     static func filterOnTint(_ scheme: ColorScheme) -> Color {
         accent.opacity(scheme == .dark ? 0.55 : 0.72)
     }
@@ -111,8 +116,8 @@ enum EPSTheme {
     static var pageFill: LinearGradient {
         LinearGradient(
             colors: [bg0, bg1],
-            startPoint: UnitPoint(x: 0.37, y: 0.02),
-            endPoint: UnitPoint(x: 0.63, y: 0.98)
+            startPoint: UnitPoint(x: 0.15, y: 0),
+            endPoint: UnitPoint(x: 0.85, y: 1)
         )
     }
 

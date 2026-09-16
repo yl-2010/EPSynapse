@@ -4,13 +4,12 @@ import UIKit
 struct HomeView: View {
     @EnvironmentObject private var session: SessionStore
     @EnvironmentObject private var dashboard: DashboardStore
+    @EnvironmentObject private var nav: AppNavigationStore
+    @EnvironmentObject private var homeFocus: HomeFocusStore
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @Environment(\.openURL) private var openURL
 
-    @State private var showSettings = false
-    @State private var scrollToTopTick = 0
-    @State private var path = NavigationPath()
     /// Which front door is open on the logged-out screen. nil shows both buttons.
     @State private var openDoor: SessionStore.Door?
     @State private var confirmDelete = false
@@ -19,20 +18,10 @@ struct HomeView: View {
         AdaptiveLayout.isWideLayout(horizontal: horizontalSizeClass, vertical: verticalSizeClass)
     }
 
-    private var pagePad: CGFloat {
-        AdaptiveLayout.pagePadding(horizontal: horizontalSizeClass, vertical: verticalSizeClass)
-    }
-
     var body: some View {
-        NavigationStack(path: $path) {
+        NavigationStack(path: $homeFocus.path) {
             ScrollView(.vertical) {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("EPSynapse")
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundStyle(EPSTheme.accent)
-                        .tracking(0.8)
-                        .padding(.bottom, 2)
-
+                Group {
                     if session.isPaused {
                         pausedContent
                     } else if session.isSignedIn {
@@ -41,20 +30,16 @@ struct HomeView: View {
                         signedOutContent
                     }
                 }
-                .padding(.horizontal, pagePad)
-                .padding(.top, AdaptiveLayout.isPad ? 96 : 88)
-                .padding(.bottom, 108)
-                .frame(maxWidth: AdaptiveLayout.pageMaxWidth)
+                .padding(.horizontal, isWide ? 24 : 16)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: AdaptiveLayout.pageMaxWidth, alignment: .leading)
                 .frame(maxWidth: .infinity)
-                .background {
-                    ScrollToTopBridge(tick: scrollToTopTick)
-                        .frame(width: 0, height: 0)
-                        .accessibilityHidden(true)
-                }
             }
             .scrollIndicators(.hidden)
             .scrollDismissesKeyboard(.never)
             .epsVerticalScrollOnly()
+            .homeTabReselectScroll(isActive: homeFocus.isShowingDashboard)
             .refreshable {
                 if session.isPaused {
                     await session.reloadMe()
@@ -63,7 +48,8 @@ struct HomeView: View {
                 guard session.isSignedIn else { return }
                 await dashboard.load(from: session)
             }
-            .toolbar(.hidden, for: .navigationBar)
+            .navigationTitle("Home")
+            .navigationBarTitleDisplayMode(.large)
             .epsPageBackground()
             .navigationDestination(for: HomeDestination.self) { destination in
                 switch destination {
@@ -77,29 +63,29 @@ struct HomeView: View {
             }
         }
         .onAppear {
-            dashboard.stackDepth = path.count
+            dashboard.stackDepth = homeFocus.path.count
         }
-        .onChange(of: path.count) { _, count in
+        .onChange(of: homeFocus.path.count) { _, count in
             dashboard.stackDepth = count
             if count == 0 { dashboard.uiContext = .home() }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .epsScrollHomeToTop)) { _ in
-            if !path.isEmpty {
-                path = NavigationPath()
-            }
-            scrollToTopTick += 1
+        .onChange(of: nav.tabReselectGeneration) { _, _ in
+            guard nav.selectedTab == .home else { return }
+            homeFocus.handleTabReselect()
         }
         .onReceive(NotificationCenter.default.publisher(for: .epsAgentNavigate)) { note in
             guard let info = note.object as? [String: Any] else { return }
             let view = (info["view"] as? String ?? "").lowercased()
             if view == "class", let id = info["classId"] as? String, !id.isEmpty {
-                path.append(HomeDestination.schoolClass(id))
+                homeFocus.path.append(HomeDestination.schoolClass(id))
             } else if view == "note", let id = info["noteId"] as? String, !id.isEmpty {
-                path.append(HomeDestination.note(id))
+                homeFocus.path.append(HomeDestination.note(id))
             } else if view == "todo", let id = info["todoId"] as? String, !id.isEmpty {
-                path.append(HomeDestination.todo(id))
+                homeFocus.path.append(HomeDestination.todo(id))
             } else if view == "home" {
-                path = NavigationPath()
+                homeFocus.path = []
+            } else if view == "grades" {
+                homeFocus.path = []
             }
         }
         .task {
@@ -119,7 +105,7 @@ struct HomeView: View {
             if ready {
                 Task { await dashboard.load(from: session) }
             } else {
-                path = NavigationPath()
+                homeFocus.path = []
                 ChatStore.shared.resetForSignOut()
                 // Signed out or paused. Clear every list so the next account,
                 // or this one once the hold lifts, does not see stale data.
@@ -135,46 +121,43 @@ struct HomeView: View {
             // Account delete forgets the door so the two-door screen comes back.
             if door == nil { openDoor = nil }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .epsOpenSettings)) { _ in
-            showSettings = true
-        }
-        .sheet(isPresented: $showSettings) {
-            SettingsSheet(isPresented: $showSettings)
-                .environmentObject(session)
-                .environmentObject(dashboard)
-        }
     }
 
     @ViewBuilder
     private var dashboardContent: some View {
         if isWide {
-            HStack(alignment: .top, spacing: 16) {
-                VStack(spacing: 16) {
+            HStack(alignment: .top, spacing: 14) {
+                VStack(alignment: .leading, spacing: 14) {
                     TodoPanel()
                     CompletedPanel()
                 }
-                .frame(maxWidth: .infinity, alignment: .top)
-                VStack(spacing: 16) {
-                    // Uploaded (model-parsed) schedules carry their own times, so
-                    // Today comes from the server rows. EPS rows use the bells.
-                    if dashboard.isLLMSchedule {
-                        TodayPanel()
-                    }
-                    ClassesPanel()
-                    NotesPanel(path: $path)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+
+                VStack(alignment: .leading, spacing: 14) {
+                    scheduleAndNotesPanels
                 }
-                .frame(maxWidth: .infinity, alignment: .top)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
         } else {
-            VStack(spacing: 16) {
-                if dashboard.isLLMSchedule {
-                    TodayPanel()
-                }
+            VStack(alignment: .leading, spacing: 14) {
                 TodoPanel()
-                ClassesPanel()
-                NotesPanel(path: $path)
+                scheduleAndNotesPanels
                 CompletedPanel()
             }
+        }
+    }
+
+    @ViewBuilder
+    private var scheduleAndNotesPanels: some View {
+        let sections = dashboard.daySections
+        if let day1 = sections.first {
+            DayPanel(section: day1)
+        } else {
+            ClassesPanel()
+        }
+        NotesPanel(path: $homeFocus.path)
+        if sections.count > 1 {
+            DayPanel(section: sections[1])
         }
     }
 
@@ -201,7 +184,7 @@ struct HomeView: View {
                     .padding(.vertical, 10)
             }
             .buttonStyle(.plain)
-            .epsGlassRounded(cornerRadius: 14, tint: EPSTheme.accent.opacity(0.72), interactive: true)
+            .epsGlassRounded(cornerRadius: 22, tint: EPSTheme.accent.opacity(0.72), interactive: true)
             .accessibilityHint("Opens the public research page in Safari")
         }
         .animation(.spring(response: 0.34, dampingFraction: 0.86), value: openDoor)
@@ -249,7 +232,7 @@ struct HomeView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .epsGlassRounded(cornerRadius: 14, interactive: true)
+        .epsGlassRounded(cornerRadius: 22, interactive: true)
         .epsHapticNavigation()
         .accessibilityHint(meta)
     }
@@ -267,7 +250,7 @@ struct HomeView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .epsGlassRounded(cornerRadius: 16, interactive: false)
+        .epsGlassRounded(cornerRadius: 22, interactive: false)
     }
 
     private var otherSchoolSignIn: some View {
@@ -282,7 +265,7 @@ struct HomeView: View {
                     .padding(.vertical, 10)
             }
             .buttonStyle(.plain)
-            .epsGlassRounded(cornerRadius: 14, tint: EPSTheme.accent.opacity(0.72), interactive: true)
+            .epsGlassRounded(cornerRadius: 22, tint: EPSTheme.accent.opacity(0.72), interactive: true)
             .epsHapticOnTap()
 
             Text("Sign in with Google. You'll upload your schedule and add your own API keys in Settings.")
@@ -362,7 +345,7 @@ struct HomeView: View {
                     .padding(.vertical, 10)
             }
             .buttonStyle(.plain)
-            .epsGlassRounded(cornerRadius: 14, tint: EPSTheme.accent.opacity(0.72), interactive: true)
+            .epsGlassRounded(cornerRadius: 22, tint: EPSTheme.accent.opacity(0.72), interactive: true)
             .epsHapticOnTap()
 
             // Delete still works while paused. Same confirmation as Settings.
@@ -394,7 +377,7 @@ struct HomeView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .epsGlassRounded(cornerRadius: 16, interactive: false)
+        .epsGlassRounded(cornerRadius: 22, interactive: false)
     }
 
     @ViewBuilder
@@ -424,45 +407,3 @@ struct HomeView: View {
     }
 }
 
-/// Walks up to the real UIScrollView and sets contentOffset to the finger-rest top.
-private struct ScrollToTopBridge: UIViewRepresentable {
-    var tick: Int
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
-    }
-
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView()
-        view.isUserInteractionEnabled = false
-        view.backgroundColor = .clear
-        return view
-    }
-
-    func updateUIView(_ uiView: UIView, context: Context) {
-        guard tick > 0, context.coordinator.lastTick != tick else { return }
-        context.coordinator.lastTick = tick
-        DispatchQueue.main.async {
-            var node: UIView? = uiView
-            while let current = node {
-                if let scroll = current as? UIScrollView {
-                    EPSScrollAxis.lockVertical(scroll)
-                    let top = CGPoint(x: 0, y: -scroll.adjustedContentInset.top)
-                    UIView.animate(
-                        withDuration: 0.35,
-                        delay: 0,
-                        options: [.curveEaseOut, .allowUserInteraction]
-                    ) {
-                        scroll.contentOffset = top
-                    }
-                    return
-                }
-                node = current.superview
-            }
-        }
-    }
-
-    final class Coordinator {
-        var lastTick = 0
-    }
-}

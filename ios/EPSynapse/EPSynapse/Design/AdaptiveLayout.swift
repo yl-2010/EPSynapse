@@ -27,6 +27,10 @@ enum AdaptiveLayout {
         return UIEdgeInsets(top: 59, left: 0, bottom: 34, right: 0)
     }
 
+    static func isRegularWidth(_ sizeClass: UserInterfaceSizeClass?) -> Bool {
+        sizeClass == .regular
+    }
+
     static func isWideLayout(
         horizontal: UserInterfaceSizeClass?,
         vertical: UserInterfaceSizeClass?
@@ -39,6 +43,11 @@ enum AdaptiveLayout {
         verticalSizeClass: UserInterfaceSizeClass?
     ) -> Bool {
         isWideLayout(horizontal: horizontalSizeClass, vertical: verticalSizeClass)
+    }
+
+    /// iPhone landscape (compact height). Do not use size-class width alone — Plus/Max are `.regular`.
+    static func isPhoneLandscape(verticalSizeClass: UserInterfaceSizeClass?) -> Bool {
+        isPhone && verticalSizeClass == .compact
     }
 
     static func pagePadding(

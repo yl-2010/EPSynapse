@@ -29,15 +29,20 @@ struct ChatHistoryOverlay: View {
                     }
 
                 if mountPanel {
-                    ChatHistoryPanel()
-                        .frame(width: width)
-                        .frame(height: height)
-                        .epsGlassRounded(cornerRadius: 22, interactive: false)
-                        .padding(.top, top)
-                        .padding(.leading, leading)
-                        .offset(x: (chat.historyReveal - 1) * travel)
-                        .accessibilityHidden(!showPanel)
-                        .transition(.identity)
+                    ChatHistoryPanel(
+                        sections: ChatHistoryGrouping.sections(from: chat.chats),
+                        isLoading: chat.historyLoading,
+                        width: width,
+                        onSelect: { item in
+                            Task { await chat.resume(sessionId: item.sessionId) }
+                        }
+                    )
+                    .frame(height: height)
+                    .padding(.top, top)
+                    .padding(.leading, leading)
+                    .offset(x: (chat.historyReveal - 1) * travel)
+                    .accessibilityHidden(!showPanel)
+                    .transition(.identity)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -272,7 +277,7 @@ final class ChatHistoryPanInstaller: UIView, UIGestureRecognizerDelegate {
                 startReveal = chat.historyReveal
                 chat.historyDragging = true
                 hapticGate.reset()
-                EPSHaptics.swipeBegin()
+                EPSHaptics.swipeBackBegan()
                 hapticGate.handle(startReveal)
                 Task { await chat.loadList() }
             }

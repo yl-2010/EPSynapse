@@ -9,34 +9,46 @@
 /* Begin PBXBuildFile section */
 		003DB71BAC37924600968D15 /* CourseTitle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99B5D6EFD5EA5C91F03602C1 /* CourseTitle.swift */; };
 		03338F0771A5563BAD3CBBE2 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBA3E1253E1D0707195E2512 /* Models.swift */; };
+		03F95D6CD5ED7E6717C64696 /* PadTabBarPin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 192B76622877BEBF3BF8DBE2 /* PadTabBarPin.swift */; };
 		05642A90FD11A2862159B962 /* TodoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8241F59CE8C237974E9E4D12 /* TodoView.swift */; };
-		10297A70CB3CFA1F8E1E00F3 /* CornerChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = B771AFED5734D5E80A1F3FEB /* CornerChrome.swift */; };
+		164A9A29B6BABFCD7E7873EC /* RootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 343EE373296EBA5895997D07 /* RootTabView.swift */; };
+		1C715FFA7E5DCEB9E603125F /* DaySchedule.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECDCED3E64A938BCA2D5F21B /* DaySchedule.swift */; };
 		290BE63D1F07FEC80832F140 /* GlassChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 659F015C8C3FE9B4918ABB1F /* GlassChrome.swift */; };
 		2AC783F142D1D2552AA83D6B /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A89D748793FD8AECBFD1275E /* APIClient.swift */; };
+		2CE31E36F19B0BE83532071A /* NaturalWhen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BDDE62715C276592DA8A32C /* NaturalWhen.swift */; };
 		2EC762A67857140A2D9736AA /* EPSynapseApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D3C406C38500C0E4C7C942B /* EPSynapseApp.swift */; };
 		2FD2BEBA7807F3CF62CDED66 /* DashboardStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00789498338B32818C6282FE /* DashboardStore.swift */; };
 		3C176BFF92A534BCBA60D682 /* NotesPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D49D863B71A593DE3C0AA9F /* NotesPanel.swift */; };
 		3C24598F668F9F4086FA69AA /* AdaptiveLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65EF08C412BCF8D97A0D1C1A /* AdaptiveLayout.swift */; };
 		3CF96F444AD31275A99DE0F1 /* ClassView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28FED0FE7D3B4CD1D4A773DC /* ClassView.swift */; };
+		4547F080D39D570BBCD6AC69 /* KeyboardScrub.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15493F114FC0BA71A3D41DC7 /* KeyboardScrub.swift */; };
+		4D0A243C35B6C7BC912DA92C /* HostedFocus.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9AAEF1B1C396EDA8988DDEC /* HostedFocus.swift */; };
 		4F019090CA1C2B3C4F4336F2 /* AppLoadingScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1F03974FD1C8B336D0073D8 /* AppLoadingScreen.swift */; };
 		53593F906AF6799A94D256A3 /* NoteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98FFD2BA92EAF72474A93719 /* NoteView.swift */; };
+		60A3D596C208C65718275AF5 /* TabReselectObserver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BA8992F98C4027530951D97 /* TabReselectObserver.swift */; };
+		6348F4DDF9664FE2342613B1 /* CanvasChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7972D66E759DFD18E78690F8 /* CanvasChrome.swift */; };
 		639923CB8E0C1E23F596B1C5 /* HomeDestination.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3510B483F129606F547B9C6B /* HomeDestination.swift */; };
 		66043B500B482D908E9704F9 /* ChatHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA51BAECBAEAC04BE7BB1C76 /* ChatHistory.swift */; };
 		6751619D753BB9D8F3AEA426 /* Markdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3AF0A19753DC997EE55CAA3 /* Markdown.swift */; };
-		6BBF05D2B8EAABF7C905058A /* ChatOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 083CC9E2B8BA48AEA4876689 /* ChatOverlay.swift */; };
 		6C762DD9E56A51EF4582C368 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82CB60AFD1DE31EF2043ACAF /* KeychainStore.swift */; };
 		7EA85D7AFE3D8CE315294C1D /* SettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38378331DA95509DDF83EA11 /* SettingsSheet.swift */; };
+		80765491C58A9AE2B892C237 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B435BA62A4052434F60D21F8 /* ChatView.swift */; };
 		82034A6D465FAE115757D44E /* ChatStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B8C2538723B2F0C9785D1D8 /* ChatStore.swift */; };
 		A0596F306476110AD51BAA71 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 29B721DF81564BD885DDC63C /* LaunchScreen.storyboard */; };
 		A99A08DB40E235E1245F8150 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FE3FA4CABABD9581D9D60A3 /* HomeView.swift */; };
 		AB155A99C431C77E575913FF /* KeyboardDismiss.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D8EA86A99899D8FB4FC8FDA /* KeyboardDismiss.swift */; };
+		AF53AB01DD5012CE3E084BC0 /* Keyboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1462F3F1499500F59FD7B0DB /* Keyboard.swift */; };
+		B7D1A42E5AE44583499EF5D5 /* Motion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DC417562E410729B5DD65B7 /* Motion.swift */; };
 		B867302471945E2A703774E7 /* Mark.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26437E9A27791C15BDCBCABF /* Mark.swift */; };
 		C88B394A86285350CF8C2D1E /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = F34BB0DB83964EF98A568E2D /* Theme.swift */; };
+		C88BFFD89EDA367E87CF5685 /* HomeFocus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85BCD7510B1527C8CA144149 /* HomeFocus.swift */; };
+		D0079E56C13A74443A96EBF0 /* ChatSendFlight.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EB21B63B13F2F06AA6E17F3 /* ChatSendFlight.swift */; };
 		D3D30776A5DB5C63992823C0 /* ChatHistoryOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BD05068815821D26AC8B738 /* ChatHistoryOverlay.swift */; };
 		D41EF186DAC050B047A1A3EB /* SessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4130A4ED23C8BF8A9677E84A /* SessionStore.swift */; };
 		D717A15E876855079B62FBE5 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F11548AEFE616C278BCE0826 /* Assets.xcassets */; };
 		DA7CFF3120B71B599F451341 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 2C5D40BDA4E60405BFEEF1FE /* GoogleSignIn */; };
 		E842FB99C4EA4655145E3C69 /* Panels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8388796443CE474081A8311E /* Panels.swift */; };
+		EAD6B62EDCE09BFC84C29305 /* Notifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = 361B4E1BC79DCAE6F84C8678 /* Notifications.swift */; };
 		F5AF63727273D49042BF02D7 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C870AD9003B84236B411ED /* RootView.swift */; };
 		F6DA90447A6FA14804EFA435 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 846F436F8704C17F29AF6748 /* GoogleSignInSwift */; };
 		F75323FF82CFBD2DAECBDD58 /* Haptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1047250444DFCD9F54D0AA95 /* Haptics.swift */; };
@@ -44,33 +56,45 @@
 
 /* Begin PBXFileReference section */
 		00789498338B32818C6282FE /* DashboardStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardStore.swift; sourceTree = "<group>"; };
-		083CC9E2B8BA48AEA4876689 /* ChatOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatOverlay.swift; sourceTree = "<group>"; };
 		0D8EA86A99899D8FB4FC8FDA /* KeyboardDismiss.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardDismiss.swift; sourceTree = "<group>"; };
 		1047250444DFCD9F54D0AA95 /* Haptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Haptics.swift; sourceTree = "<group>"; };
+		1462F3F1499500F59FD7B0DB /* Keyboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keyboard.swift; sourceTree = "<group>"; };
+		15493F114FC0BA71A3D41DC7 /* KeyboardScrub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardScrub.swift; sourceTree = "<group>"; };
+		192B76622877BEBF3BF8DBE2 /* PadTabBarPin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PadTabBarPin.swift; sourceTree = "<group>"; };
 		1B8C2538723B2F0C9785D1D8 /* ChatStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatStore.swift; sourceTree = "<group>"; };
 		1D49D863B71A593DE3C0AA9F /* NotesPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesPanel.swift; sourceTree = "<group>"; };
 		26437E9A27791C15BDCBCABF /* Mark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Mark.swift; sourceTree = "<group>"; };
 		28FED0FE7D3B4CD1D4A773DC /* ClassView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClassView.swift; sourceTree = "<group>"; };
 		29B721DF81564BD885DDC63C /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
+		2BA8992F98C4027530951D97 /* TabReselectObserver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabReselectObserver.swift; sourceTree = "<group>"; };
+		343EE373296EBA5895997D07 /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
 		3510B483F129606F547B9C6B /* HomeDestination.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeDestination.swift; sourceTree = "<group>"; };
+		361B4E1BC79DCAE6F84C8678 /* Notifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Notifications.swift; sourceTree = "<group>"; };
 		38378331DA95509DDF83EA11 /* SettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsSheet.swift; sourceTree = "<group>"; };
+		3BDDE62715C276592DA8A32C /* NaturalWhen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NaturalWhen.swift; sourceTree = "<group>"; };
 		3D3C406C38500C0E4C7C942B /* EPSynapseApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPSynapseApp.swift; sourceTree = "<group>"; };
 		3FE3FA4CABABD9581D9D60A3 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		4130A4ED23C8BF8A9677E84A /* SessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionStore.swift; sourceTree = "<group>"; };
+		5EB21B63B13F2F06AA6E17F3 /* ChatSendFlight.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatSendFlight.swift; sourceTree = "<group>"; };
 		659F015C8C3FE9B4918ABB1F /* GlassChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassChrome.swift; sourceTree = "<group>"; };
 		65EF08C412BCF8D97A0D1C1A /* AdaptiveLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdaptiveLayout.swift; sourceTree = "<group>"; };
 		6BD05068815821D26AC8B738 /* ChatHistoryOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatHistoryOverlay.swift; sourceTree = "<group>"; };
 		6FB0D0B241ED5574211F4138 /* EPSynapse.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = EPSynapse.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7972D66E759DFD18E78690F8 /* CanvasChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasChrome.swift; sourceTree = "<group>"; };
 		8241F59CE8C237974E9E4D12 /* TodoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoView.swift; sourceTree = "<group>"; };
 		82CB60AFD1DE31EF2043ACAF /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
 		8388796443CE474081A8311E /* Panels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels.swift; sourceTree = "<group>"; };
+		85BCD7510B1527C8CA144149 /* HomeFocus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeFocus.swift; sourceTree = "<group>"; };
 		98FFD2BA92EAF72474A93719 /* NoteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteView.swift; sourceTree = "<group>"; };
 		99B5D6EFD5EA5C91F03602C1 /* CourseTitle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CourseTitle.swift; sourceTree = "<group>"; };
+		9DC417562E410729B5DD65B7 /* Motion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Motion.swift; sourceTree = "<group>"; };
 		A89D748793FD8AECBFD1275E /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		B2C870AD9003B84236B411ED /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		B3AF0A19753DC997EE55CAA3 /* Markdown.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Markdown.swift; sourceTree = "<group>"; };
-		B771AFED5734D5E80A1F3FEB /* CornerChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CornerChrome.swift; sourceTree = "<group>"; };
+		B435BA62A4052434F60D21F8 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
+		B9AAEF1B1C396EDA8988DDEC /* HostedFocus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostedFocus.swift; sourceTree = "<group>"; };
 		CA51BAECBAEAC04BE7BB1C76 /* ChatHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatHistory.swift; sourceTree = "<group>"; };
+		ECDCED3E64A938BCA2D5F21B /* DaySchedule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DaySchedule.swift; sourceTree = "<group>"; };
 		F11548AEFE616C278BCE0826 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		F1F03974FD1C8B336D0073D8 /* AppLoadingScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLoadingScreen.swift; sourceTree = "<group>"; };
 		F34BB0DB83964EF98A568E2D /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
@@ -103,8 +127,9 @@
 			children = (
 				CA51BAECBAEAC04BE7BB1C76 /* ChatHistory.swift */,
 				6BD05068815821D26AC8B738 /* ChatHistoryOverlay.swift */,
-				083CC9E2B8BA48AEA4876689 /* ChatOverlay.swift */,
+				5EB21B63B13F2F06AA6E17F3 /* ChatSendFlight.swift */,
 				1B8C2538723B2F0C9785D1D8 /* ChatStore.swift */,
+				B435BA62A4052434F60D21F8 /* ChatView.swift */,
 			);
 			path = Chat;
 			sourceTree = "<group>";
@@ -113,7 +138,6 @@
 			isa = PBXGroup;
 			children = (
 				09DBA250AFBE8BE1EA56ACB9 /* Chat */,
-				4E827BA4F8893DCB9BB8FE7C /* Chrome */,
 				0355FF35DBD20459BD0631E6 /* Class */,
 				42E7C40EA3A98CA610D39FFB /* Home */,
 				B6FAEAC31A04417FF92513B1 /* Notes */,
@@ -126,19 +150,12 @@
 			isa = PBXGroup;
 			children = (
 				3510B483F129606F547B9C6B /* HomeDestination.swift */,
+				85BCD7510B1527C8CA144149 /* HomeFocus.swift */,
 				3FE3FA4CABABD9581D9D60A3 /* HomeView.swift */,
 				8388796443CE474081A8311E /* Panels.swift */,
 				8241F59CE8C237974E9E4D12 /* TodoView.swift */,
 			);
 			path = Home;
-			sourceTree = "<group>";
-		};
-		4E827BA4F8893DCB9BB8FE7C /* Chrome */ = {
-			isa = PBXGroup;
-			children = (
-				B771AFED5734D5E80A1F3FEB /* CornerChrome.swift */,
-			);
-			path = Chrome;
 			sourceTree = "<group>";
 		};
 		50ECA8C17BBE23D77948E24D /* EPSynapse */ = {
@@ -167,11 +184,17 @@
 			children = (
 				65EF08C412BCF8D97A0D1C1A /* AdaptiveLayout.swift */,
 				F1F03974FD1C8B336D0073D8 /* AppLoadingScreen.swift */,
+				7972D66E759DFD18E78690F8 /* CanvasChrome.swift */,
 				659F015C8C3FE9B4918ABB1F /* GlassChrome.swift */,
 				1047250444DFCD9F54D0AA95 /* Haptics.swift */,
+				B9AAEF1B1C396EDA8988DDEC /* HostedFocus.swift */,
+				1462F3F1499500F59FD7B0DB /* Keyboard.swift */,
 				0D8EA86A99899D8FB4FC8FDA /* KeyboardDismiss.swift */,
+				15493F114FC0BA71A3D41DC7 /* KeyboardScrub.swift */,
 				26437E9A27791C15BDCBCABF /* Mark.swift */,
 				B3AF0A19753DC997EE55CAA3 /* Markdown.swift */,
+				9DC417562E410729B5DD65B7 /* Motion.swift */,
+				3BDDE62715C276592DA8A32C /* NaturalWhen.swift */,
 				F34BB0DB83964EF98A568E2D /* Theme.swift */,
 			);
 			path = Design;
@@ -181,7 +204,11 @@
 			isa = PBXGroup;
 			children = (
 				3D3C406C38500C0E4C7C942B /* EPSynapseApp.swift */,
+				361B4E1BC79DCAE6F84C8678 /* Notifications.swift */,
+				192B76622877BEBF3BF8DBE2 /* PadTabBarPin.swift */,
+				343EE373296EBA5895997D07 /* RootTabView.swift */,
 				B2C870AD9003B84236B411ED /* RootView.swift */,
+				2BA8992F98C4027530951D97 /* TabReselectObserver.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -192,6 +219,7 @@
 				A89D748793FD8AECBFD1275E /* APIClient.swift */,
 				99B5D6EFD5EA5C91F03602C1 /* CourseTitle.swift */,
 				00789498338B32818C6282FE /* DashboardStore.swift */,
+				ECDCED3E64A938BCA2D5F21B /* DaySchedule.swift */,
 				82CB60AFD1DE31EF2043ACAF /* KeychainStore.swift */,
 				FBA3E1253E1D0707195E2512 /* Models.swift */,
 				4130A4ED23C8BF8A9677E84A /* SessionStore.swift */,
@@ -328,30 +356,42 @@
 				2AC783F142D1D2552AA83D6B /* APIClient.swift in Sources */,
 				3C24598F668F9F4086FA69AA /* AdaptiveLayout.swift in Sources */,
 				4F019090CA1C2B3C4F4336F2 /* AppLoadingScreen.swift in Sources */,
+				6348F4DDF9664FE2342613B1 /* CanvasChrome.swift in Sources */,
 				66043B500B482D908E9704F9 /* ChatHistory.swift in Sources */,
 				D3D30776A5DB5C63992823C0 /* ChatHistoryOverlay.swift in Sources */,
-				6BBF05D2B8EAABF7C905058A /* ChatOverlay.swift in Sources */,
+				D0079E56C13A74443A96EBF0 /* ChatSendFlight.swift in Sources */,
 				82034A6D465FAE115757D44E /* ChatStore.swift in Sources */,
+				80765491C58A9AE2B892C237 /* ChatView.swift in Sources */,
 				3CF96F444AD31275A99DE0F1 /* ClassView.swift in Sources */,
-				10297A70CB3CFA1F8E1E00F3 /* CornerChrome.swift in Sources */,
 				003DB71BAC37924600968D15 /* CourseTitle.swift in Sources */,
 				2FD2BEBA7807F3CF62CDED66 /* DashboardStore.swift in Sources */,
+				1C715FFA7E5DCEB9E603125F /* DaySchedule.swift in Sources */,
 				2EC762A67857140A2D9736AA /* EPSynapseApp.swift in Sources */,
 				290BE63D1F07FEC80832F140 /* GlassChrome.swift in Sources */,
 				F75323FF82CFBD2DAECBDD58 /* Haptics.swift in Sources */,
 				639923CB8E0C1E23F596B1C5 /* HomeDestination.swift in Sources */,
+				C88BFFD89EDA367E87CF5685 /* HomeFocus.swift in Sources */,
 				A99A08DB40E235E1245F8150 /* HomeView.swift in Sources */,
+				4D0A243C35B6C7BC912DA92C /* HostedFocus.swift in Sources */,
+				AF53AB01DD5012CE3E084BC0 /* Keyboard.swift in Sources */,
 				AB155A99C431C77E575913FF /* KeyboardDismiss.swift in Sources */,
+				4547F080D39D570BBCD6AC69 /* KeyboardScrub.swift in Sources */,
 				6C762DD9E56A51EF4582C368 /* KeychainStore.swift in Sources */,
 				B867302471945E2A703774E7 /* Mark.swift in Sources */,
 				6751619D753BB9D8F3AEA426 /* Markdown.swift in Sources */,
 				03338F0771A5563BAD3CBBE2 /* Models.swift in Sources */,
+				B7D1A42E5AE44583499EF5D5 /* Motion.swift in Sources */,
+				2CE31E36F19B0BE83532071A /* NaturalWhen.swift in Sources */,
 				53593F906AF6799A94D256A3 /* NoteView.swift in Sources */,
 				3C176BFF92A534BCBA60D682 /* NotesPanel.swift in Sources */,
+				EAD6B62EDCE09BFC84C29305 /* Notifications.swift in Sources */,
+				03F95D6CD5ED7E6717C64696 /* PadTabBarPin.swift in Sources */,
 				E842FB99C4EA4655145E3C69 /* Panels.swift in Sources */,
+				164A9A29B6BABFCD7E7873EC /* RootTabView.swift in Sources */,
 				F5AF63727273D49042BF02D7 /* RootView.swift in Sources */,
 				D41EF186DAC050B047A1A3EB /* SessionStore.swift in Sources */,
 				7EA85D7AFE3D8CE315294C1D /* SettingsSheet.swift in Sources */,
+				60A3D596C208C65718275AF5 /* TabReselectObserver.swift in Sources */,
 				C88B394A86285350CF8C2D1E /* Theme.swift in Sources */,
 				05642A90FD11A2862159B962 /* TodoView.swift in Sources */,
 			);

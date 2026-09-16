@@ -11,6 +11,13 @@ struct ChatListItem: Identifiable, Equatable, Hashable {
     var isUnread: Bool { unread && !working }
     var isWorking: Bool { working }
 
+    var displayTitle: String {
+        let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !t.isEmpty { return t }
+        let p = preview.trimmingCharacters(in: .whitespacesAndNewlines)
+        return p.isEmpty ? "Chat" : p
+    }
+
     init(
         sessionId: String,
         title: String,
@@ -38,29 +45,49 @@ struct ChatListItem: Identifiable, Equatable, Hashable {
 }
 
 struct ChatHistorySection: Identifiable, Equatable {
-    var id: String { title }
-    var title: String
-    var showAge: Bool
-    var items: [ChatListItem]
+    let id: String
+    let title: String
+    let showAge: Bool
+    let chats: [ChatListItem]
 }
 
 enum ChatISODate {
     private static let fractional: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
     }()
 
     private static let plain: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
     }()
+
+    /// Grouping + relative ages re-run on every history-drag frame; formatter
+    /// parsing is far too slow for that, so memoize by raw string.
+    private static let cacheLock = NSLock()
+    private static var cache: [String: Date] = [:]
+
+    static func parse(_ raw: String) -> Date? {
+        cacheLock.lock()
+        let hit = cache[raw]
+        cacheLock.unlock()
+        if let hit { return hit }
+        guard let parsed = fractional.date(from: raw) ?? plain.date(from: raw) else {
+            return nil
+        }
+        cacheLock.lock()
+        if cache.count > 512 { cache.removeAll(keepingCapacity: true) }
+        cache[raw] = parsed
+        cacheLock.unlock()
+        return parsed
+    }
 
     static func date(from raw: String) -> Date {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return Date() }
-        return fractional.date(from: trimmed) ?? plain.date(from: trimmed) ?? Date()
+        return parse(trimmed) ?? Date()
     }
 
     static func string(from date: Date) -> String {
@@ -69,180 +96,224 @@ enum ChatISODate {
 }
 
 enum ChatHistoryGrouping {
+    /// History buckets are Seattle calendar days, not the phone's zone.
+    private static let seattleCalendar: Calendar = {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "America/Los_Angeles") ?? .current
+        cal.locale = Locale(identifier: "en_US")
+        return cal
+    }()
+
     static func relativeAge(from date: Date, now: Date = Date()) -> String {
-        let seconds = max(0, now.timeIntervalSince(date))
-        if seconds < 60 { return "now" }
-        if seconds < 3600 { return "\(Int(seconds / 60))m" }
-        return "\(Int(seconds / 3600))h"
+        let secs = now.timeIntervalSince(date)
+        if secs < 60 { return "now" }
+        let mins = Int(secs / 60)
+        if mins < 60 { return "\(mins)m" }
+        let hours = Int(mins / 60)
+        if hours < 48 { return "\(hours)h" }
+        return ""
     }
 
-    static func sections(from chats: [ChatListItem], now: Date = Date(), calendar: Calendar = .current) -> [ChatHistorySection] {
+    static func sections(
+        from chats: [ChatListItem],
+        now: Date = Date(),
+        calendar: Calendar = seattleCalendar
+    ) -> [ChatHistorySection] {
         let ordered = chats.sorted { $0.updated > $1.updated }
-        var today: [ChatListItem] = []
-        var yesterday: [ChatListItem] = []
-        var weekdays: [(String, [ChatListItem])] = []
-        var weekdayIndex: [String: Int] = [:]
-        var older: [ChatListItem] = []
-
-        for item in ordered {
-            if calendar.isDateInToday(item.updated) {
-                today.append(item)
-                continue
+        var order: [String] = []
+        var buckets: [String: (title: String, showAge: Bool, chats: [ChatListItem])] = [:]
+        for chat in ordered {
+            let g = group(for: chat.updated, now: now, calendar: calendar)
+            if buckets[g.id] == nil {
+                order.append(g.id)
+                buckets[g.id] = (g.title, g.showAge, [])
             }
-            if calendar.isDateInYesterday(item.updated) {
-                yesterday.append(item)
-                continue
-            }
-            let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: item.updated), to: calendar.startOfDay(for: now)).day ?? 99
-            if days >= 0 && days < 7 {
-                let name = weekdayName(item.updated, calendar: calendar)
-                if let index = weekdayIndex[name] {
-                    weekdays[index].1.append(item)
-                } else {
-                    weekdayIndex[name] = weekdays.count
-                    weekdays.append((name, [item]))
-                }
-                continue
-            }
-            older.append(item)
+            buckets[g.id]?.chats.append(chat)
         }
-
-        var result: [ChatHistorySection] = []
-        if !today.isEmpty {
-            result.append(ChatHistorySection(title: "Today", showAge: true, items: today))
+        return order.compactMap { key in
+            guard let row = buckets[key] else { return nil }
+            return ChatHistorySection(
+                id: key,
+                title: row.title,
+                showAge: row.showAge,
+                chats: row.chats
+            )
         }
-        if !yesterday.isEmpty {
-            result.append(ChatHistorySection(title: "Yesterday", showAge: false, items: yesterday))
-        }
-        for (title, items) in weekdays where !items.isEmpty {
-            result.append(ChatHistorySection(title: title, showAge: false, items: items))
-        }
-        if !older.isEmpty {
-            result.append(ChatHistorySection(title: "Older", showAge: false, items: older))
-        }
-        return result
     }
+
+    private static func group(
+        for date: Date,
+        now: Date,
+        calendar: Calendar
+    ) -> (id: String, title: String, showAge: Bool) {
+        let startToday = calendar.startOfDay(for: now)
+        let startThat = calendar.startOfDay(for: date)
+        let days = calendar.dateComponents([.day], from: startThat, to: startToday).day ?? 999
+        if days <= 0 {
+            return ("today", "Today", true)
+        }
+        if days == 1 {
+            return ("yesterday", "Yesterday", false)
+        }
+        if days < 7 {
+            let key = dayKey(startThat, calendar: calendar)
+            return (key, weekdayName(date, calendar: calendar), false)
+        }
+        return ("older", "Older", false)
+    }
+
+    private static let weekdayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "EEEE"
+        f.calendar = seattleCalendar
+        f.locale = seattleCalendar.locale
+        f.timeZone = seattleCalendar.timeZone
+        return f
+    }()
 
     private static func weekdayName(_ date: Date, calendar: Calendar) -> String {
-        let formatter = DateFormatter()
-        formatter.calendar = calendar
-        formatter.locale = .current
-        formatter.dateFormat = "EEEE"
-        return formatter.string(from: date)
+        let f = weekdayFormatter
+        let locale = calendar.locale ?? Locale.current
+        if f.calendar != calendar {
+            f.calendar = calendar
+        }
+        if f.locale != locale {
+            f.locale = locale
+        }
+        if f.timeZone != calendar.timeZone {
+            f.timeZone = calendar.timeZone
+        }
+        return f.string(from: date)
+    }
+
+    private static func dayKey(_ date: Date, calendar: Calendar) -> String {
+        let c = calendar.dateComponents([.year, .month, .day], from: date)
+        return String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
     }
 }
 
 struct ChatHistoryPanel: View {
-    @EnvironmentObject private var chat: ChatStore
+    @Environment(\.colorScheme) private var colorScheme
+    let sections: [ChatHistorySection]
+    let isLoading: Bool
+    let width: CGFloat
+    var onSelect: (ChatListItem) -> Void
 
     var body: some View {
-        ScrollView(.vertical) {
+        ScrollView {
             LazyVStack(alignment: .leading, spacing: 16) {
-                if chat.chats.isEmpty, chat.historyLoading {
+                if isLoading && sections.isEmpty {
                     ProgressView()
                         .frame(maxWidth: .infinity)
-                        .padding(.top, 20)
-                } else if chat.chats.isEmpty {
+                        .padding(.top, 28)
+                } else if sections.isEmpty {
                     Text("No past chats yet.")
                         .font(.subheadline)
-                        .foregroundStyle(EPSTheme.muted)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .foregroundStyle(EPSTheme.muted(colorScheme))
                         .padding(.top, 20)
-                } else {
-                    ForEach(ChatHistoryGrouping.sections(from: chat.chats)) { section in
+                }
+                ForEach(sections) { section in
+                    VStack(alignment: .leading, spacing: 8) {
                         Text(section.title)
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(EPSTheme.muted)
+                            .foregroundStyle(EPSTheme.muted(colorScheme))
                             .padding(.horizontal, 4)
                             .padding(.bottom, 2)
-
-                        ForEach(section.items) { item in
+                        ForEach(section.chats) { chat in
                             Button {
-                                Task { await chat.resume(sessionId: item.sessionId) }
+                                onSelect(chat)
                             } label: {
-                                ChatHistoryRowLabel(item: item, showAge: section.showAge)
+                                ChatHistoryRowLabel(
+                                    chat: chat,
+                                    showAge: section.showAge
+                                )
                             }
                             .buttonStyle(ChatHistoryRowButtonStyle())
-                            .accessibilityLabel(item.title)
+                            .accessibilityLabel(chat.displayTitle)
                             .accessibilityValue(
-                                item.isWorking ? "Working" : item.isUnread ? "Unread" : ""
+                                chat.isWorking ? "Working" : chat.isUnread ? "Unread" : ""
                             )
                         }
                     }
                 }
             }
             .padding(.horizontal, 12)
-            .padding(.top, 16)
-            .padding(.bottom, 28)
+            .padding(.vertical, 12)
         }
-        .scrollIndicators(.hidden)
-        .epsVerticalScrollOnly()
+        .frame(width: width)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .epsGlassRounded(cornerRadius: 22, interactive: true, clear: true)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Past chats")
     }
 }
 
-struct ChatHistoryRowLabel: View {
-    var item: ChatListItem
-    var showAge: Bool
+private struct ChatHistoryRowLabel: View {
+    @Environment(\.colorScheme) private var colorScheme
+    let chat: ChatListItem
+    let showAge: Bool
 
     var body: some View {
-        Group {
-            if item.isWorking || item.isUnread {
-                HStack(alignment: .center, spacing: 8) {
-                    ChatHistoryStatusDot(working: item.isWorking)
-                    titleAndAge
-                }
-            } else {
+        if chat.isWorking || chat.isUnread {
+            HStack(alignment: .center, spacing: 8) {
+                ChatHistoryStatusDot(working: chat.isWorking)
                 titleAndAge
             }
+        } else {
+            titleAndAge
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .epsGlassRounded(cornerRadius: 14, interactive: true)
     }
 
     private var titleAndAge: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(item.title)
+            Text(chat.displayTitle)
                 .font(.body)
-                .foregroundStyle(EPSTheme.fg)
+                .foregroundStyle(EPSTheme.fg(colorScheme))
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if showAge {
-                Text(ChatHistoryGrouping.relativeAge(from: item.updated))
+                Text(ChatHistoryGrouping.relativeAge(from: chat.updated))
                     .font(.caption)
-                    .foregroundStyle(EPSTheme.muted)
+                    .foregroundStyle(EPSTheme.muted(colorScheme))
                     .monospacedDigit()
             }
         }
     }
 }
 
-struct ChatHistoryRowButtonStyle: ButtonStyle {
+/// Own Liquid Glass chip per past chat. Press shine comes from interactive glass only.
+private struct ChatHistoryRowButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .opacity(configuration.isPressed ? 0.7 : 1)
-            .scaleEffect(configuration.isPressed ? 0.985 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .epsGlassRounded(cornerRadius: 14, interactive: true)
     }
 }
 
-struct ChatHistoryStatusDot: View {
-    var working: Bool
+private struct ChatHistoryStatusDot: View {
+    let working: Bool
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var dimmed = false
 
     var body: some View {
         Circle()
-            .fill(EPSTheme.accent)
+            .fill(EPSTheme.chatSend(colorScheme))
             .frame(width: 8, height: 8)
             .opacity(working && !reduceMotion && dimmed ? 0.25 : 1)
-            .task(id: "\(working)-\(reduceMotion)") {
-                await syncPulse()
+            .onAppear(perform: syncPulse)
+            .onChange(of: working) { _, _ in
+                syncPulse()
+            }
+            .onChange(of: reduceMotion) { _, _ in
+                syncPulse()
             }
     }
 
-    @MainActor
-    private func syncPulse() async {
+    private func syncPulse() {
         dimmed = false
         guard working, !reduceMotion else { return }
         withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
