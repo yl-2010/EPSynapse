@@ -77,7 +77,7 @@ A browser change is not done until `npm run deploy:web` lands and https://epsyna
 
 Run it after commit + push if Vercel serves the file. That includes:
 
-- Pages: `index.html`, `agent.html`, `canvas.html`, `groq.html`, `research.html`, `privacy.html`, `404.html`
+- Pages: `index.html`, `agent.html`, `canvas.html`, `groq.html`, `research.html`, `privacy.html`, `about.html`, `404.html`
 - Browser JS/CSS: `app.js`, `chatbot.js`, `liquid-glass.js`, `theme-orb.js`, `markdown.js`, `research.js`, `styles.css`
 - `favicon.svg`, `manifest.webmanifest`, `runtime-config.json`, `vercel.json`, `logos/`
 - any other root static file Vercel serves
@@ -126,7 +126,7 @@ BERT is off (`BERT_ENABLED` unset). Notes are classified by the student's model.
 | Path | What |
 |------|------|
 | `index.html`, `styles.css`, `favicon.svg` | Public site. |
-| `agent.html`, `canvas.html`, `groq.html`, `research.html`, `privacy.html` | Other pages. |
+| `agent.html`, `canvas.html`, `groq.html`, `research.html`, `privacy.html`, `about.html` | Other pages. |
 | `runtime-config.json` | Browser config. `apiBase` is `https://api.epsynapse.com`. |
 | `vercel.json` | Vercel project config. Git auto-deploy is off. |
 | `ios/` | Native iPhone and iPad app. See `docs/IOS.md`. Not shipped to Vercel. |

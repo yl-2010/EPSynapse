@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <script src="/theme-boot.js?v=sec1"></script>
+    <title>About · EPSynapse</title>
+    <meta
+      name="description"
+      content="EPSynapse is a web app and an iOS app built with a team of 3 other students at the Frontier Cascadia Hackathon."
+    />
+    <link rel="icon" href="/favicon.svg?v=logo5" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-32.png?v=logo4" type="image/png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="stylesheet" href="/styles.css?v=sec2" />
+    <style>
+      a.corner {
+        text-decoration: none;
+      }
+      .page-wrap {
+        display: flex;
+        justify-content: center;
+        box-sizing: border-box;
+        min-height: 100dvh;
+        padding: 8.25rem 1rem 2rem;
+      }
+      .page-sheet {
+        max-height: min(52rem, calc(100dvh - 8rem));
+      }
+      .page-sheet .edu-sheet-body .edu-sheet-title {
+        margin: 0 0 0.75rem;
+      }
+      .page-sheet .edu-sheet-body p {
+        margin: 0 0 0.75rem;
+        font-size: var(--text-subhead);
+        line-height: 1.45;
+        color: var(--fg);
+      }
+      .page-sheet .edu-sheet-body a {
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <a
+      href="/"
+      class="corner c-tl squircle"
+      data-liquid-glass="squircle"
+      data-filter-id="lg-tl"
+      aria-label="Home"
+    >
+      <span class="brand-mark" aria-hidden="true">
+        <img class="brand-mark-img brand-mark-img--light" src="/logos/mark.png?v=logo2" alt="" />
+        <img class="brand-mark-img brand-mark-img--dark" src="/logos/mark-dark.png?v=logo3" alt="" />
+      </span>
+    </a>
+
+    <button
+      type="button"
+      class="corner c-tr circle"
+      data-liquid-glass="circle"
+      data-filter-id="lg-tr"
+      aria-label="Toggle theme"
+      draggable="false"
+    ></button>
+
+    <div class="brand-wordmark" aria-hidden="true">
+      <img class="brand-wordmark-img brand-wordmark-img--light" src="/logos/wordmark.png?v=logo2" alt="" />
+      <img class="brand-wordmark-img brand-wordmark-img--dark" src="/logos/wordmark-dark.png?v=logo3" alt="" />
+    </div>
+
+    <div class="page-wrap">
+      <main class="edu-sheet page-sheet">
+        <div class="edu-sheet-body">
+          <h1 class="edu-sheet-title">About</h1>
+          <p>
+            EPSynapse is a web app and an iOS app that I built with a team of 3 other students at
+            the Frontier Cascadia Hackathon. It is a synthesized dashboard for students, combining
+            Canvas, Microsoft Outlook, OneNote, OneDrive, and many other common apps that students
+            use.
+          </p>
+          <p>
+            Students' learning materials are often fragmented between all of those different apps,
+            so EPSynapse puts everything into one unified dashboard for students to see, with an
+            agentic layer built into the backend. Students can use the built-in agent to help study
+            for tests, learn material, get feedback on their work, and anything else they ask the
+            agent to do.
+          </p>
+          <p>
+            The agent has direct access to Canvas through the students' API keys, and access to all
+            Microsoft apps through Microsoft Entra ID, while still having built-in safeguards
+            preventing students from using it to directly cheat.
+          </p>
+          <p>
+            We built the first version in under 12 hours at the Frontier Cascadia Hackathon,
+            winning third place and $1,000. Now we're working with my school to get it integrated
+            directly into the school's Microsoft and class scheduling systems.
+          </p>
+          <p>
+            I'm the leading member of the team, with the most development experience, so I do most
+            of the actual technical development myself, with the rest of the team helping with
+            graphic design, UX design, and finding and fixing bugs.
+          </p>
+          <p><a href="/">Back to EPSynapse</a></p>
+        </div>
+      </main>
+    </div>
+
+    <svg
+      class="liquid-glass-svg"
+      xmlns="http://www.w3.org/2000/svg"
+      width="0"
+      height="0"
+      aria-hidden="true"
+      focusable="false"
+      color-interpolation-filters="sRGB"
+      style="position: absolute; width: 0; height: 0; overflow: hidden; pointer-events: none"
+    >
+      <defs id="liquid-glass-defs"></defs>
+    </svg>
+
+    <script src="/liquid-glass.js?v=glass15"></script>
+    <script src="/theme-orb.js?v=moon6"></script>
+  </body>
+</html>
